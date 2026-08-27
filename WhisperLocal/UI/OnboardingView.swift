@@ -46,7 +46,7 @@ struct OnboardingView: View {
                     Label("Hold mode: press while speaking, release to finish", systemImage: "hand.raised")
                     Label("Tap mode: press once to start, again to stop", systemImage: "hand.tap")
                     Label("Esc cancels an in-progress dictation", systemImage: "escape")
-                    Label("On-device Apple Intelligence polish is optional; if it fails, text is still pasted", systemImage: "checkmark.circle")
+                    Label("On-device polish is optional (Apple Intelligence or Gemma 4); if it fails, text is still pasted", systemImage: "checkmark.circle")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(4)

@@ -64,14 +64,31 @@ enum CloudPolishProvider: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+enum LocalPolishEngine: String, CaseIterable, Identifiable, Codable {
+    case none
+    case appleIntelligence
+    case gemma4_e2b
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none: return "Off"
+        case .appleIntelligence: return "Apple Intelligence (~3B)"
+        case .gemma4_e2b: return "Gemma 4 E2B IT (MLX)"
+        }
+    }
+}
+
 @MainActor
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
     @Published var asrModelRaw: String { didSet { persist(asrModelRaw, key: "asrModel") } }
     @Published var cloudPolishProviderRaw: String { didSet { persist(cloudPolishProviderRaw, key: "cloudPolishProvider") } }
-    @Published var useLocalLLMPolish: Bool { didSet { persist(useLocalLLMPolish, key: "useAppleIntelligencePolish") } }
+    @Published var localPolishEngineRaw: String { didSet { persist(localPolishEngineRaw, key: "localPolishEngine") } }
     @Published var enableTextCleanup: Bool { didSet { persist(enableTextCleanup, key: "enableTextCleanup") } }
+    @Published var enableHeuristicCleanup: Bool { didSet { persist(enableHeuristicCleanup, key: "enableHeuristicCleanup") } }
     @Published var hasCompletedOnboarding: Bool { didSet { persist(hasCompletedOnboarding, key: "hasCompletedOnboarding") } }
     @Published var dictionaryWordsRaw: String { didSet { persist(dictionaryWordsRaw, key: "dictionaryWords") } }
     @Published var dictionaryFullyEditable: Bool { didSet { persist(dictionaryFullyEditable, key: "dictionaryFullyEditable") } }
@@ -91,7 +108,12 @@ final class SettingsStore: ObservableObject {
         set { cloudPolishProviderRaw = newValue.rawValue }
     }
 
-    /// Cloud picker is OpenAI or Anthropic. Apple Intelligence is skipped in this mode.
+    var localPolishEngine: LocalPolishEngine {
+        get { LocalPolishEngine(rawValue: localPolishEngineRaw) ?? .appleIntelligence }
+        set { localPolishEngineRaw = newValue.rawValue }
+    }
+
+    /// Cloud picker is OpenAI or Anthropic. On-device LLM polish is skipped in this mode.
     var isCloudPolishSelected: Bool {
         cloudPolishProvider != .none
     }
@@ -104,9 +126,21 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    /// Stored Apple Intelligence preference, ignored while cloud polish is selected.
+    /// Stored on-device polish preference, ignored while cloud polish is selected.
     var shouldUseLocalLLMPolish: Bool {
-        useLocalLLMPolish && !isCloudPolishSelected
+        localPolishEngine != .none && !isCloudPolishSelected
+    }
+
+    var shouldRunOnDevicePolish: Bool {
+        guard shouldUseLocalLLMPolish else { return false }
+        switch localPolishEngine {
+        case .none:
+            return false
+        case .appleIntelligence:
+            return LocalLLMPolisher.isAvailable
+        case .gemma4_e2b:
+            return true
+        }
     }
 
     var cleanupPersonalContext: String {
@@ -127,8 +161,9 @@ final class SettingsStore: ObservableObject {
         let defaults = UserDefaults.standard
         asrModelRaw = defaults.string(forKey: "asrModel") ?? ASRModelOption.smallEn.rawValue
         cloudPolishProviderRaw = defaults.string(forKey: "cloudPolishProvider") ?? CloudPolishProvider.none.rawValue
-        useLocalLLMPolish = defaults.object(forKey: "useAppleIntelligencePolish") as? Bool ?? true
+        localPolishEngineRaw = Self.migratedLocalPolishEngine(from: defaults)
         enableTextCleanup = defaults.object(forKey: "enableTextCleanup") as? Bool ?? true
+        enableHeuristicCleanup = defaults.object(forKey: "enableHeuristicCleanup") as? Bool ?? true
         hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
         dictionaryWordsRaw = defaults.string(forKey: "dictionaryWords") ?? ""
         dictionaryFullyEditable = defaults.bool(forKey: "dictionaryFullyEditable")
@@ -137,12 +172,29 @@ final class SettingsStore: ObservableObject {
         openAIModel = defaults.string(forKey: "openAIModel") ?? CloudModelCatalog.openAIDefault
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
+        if defaults.string(forKey: "localPolishEngine") != localPolishEngineRaw {
+            UserDefaults.standard.set(localPolishEngineRaw, forKey: "localPolishEngine")
+        }
         migrateDictionaryStorage()
         migratePersonalContext()
     }
 
     private func persist(_ value: Any, key: String) {
         UserDefaults.standard.set(value, forKey: key)
+    }
+
+    /// One-time: map the old Apple Intelligence toggle onto the engine picker.
+    private static func migratedLocalPolishEngine(from defaults: UserDefaults) -> String {
+        if let stored = defaults.string(forKey: "localPolishEngine") {
+            if stored == "gemma3_4b" {
+                return LocalPolishEngine.gemma4_e2b.rawValue
+            }
+            if LocalPolishEngine(rawValue: stored) != nil {
+                return stored
+            }
+        }
+        let legacyApple = defaults.object(forKey: "useAppleIntelligencePolish") as? Bool ?? true
+        return (legacyApple ? LocalPolishEngine.appleIntelligence : .none).rawValue
     }
 
     func addDictionaryWord(_ raw: String) {

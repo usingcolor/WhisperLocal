@@ -79,12 +79,7 @@ final class DictationController: ObservableObject {
 
         Task {
             await transcription.ensureModel(named: settings.asrModel)
-            if settings.shouldUseLocalLLMPolish {
-                LocalLLMPolisher.shared.prewarm(
-                    personalContext: settings.cleanupPersonalContext,
-                    dictionary: settings.dictionaryWords
-                )
-            }
+            prewarmOnDevicePolish()
         }
     }
 
@@ -211,7 +206,7 @@ final class DictationController: ObservableObject {
 
             hud.update(phase: .processing)
             if settings.enableTextCleanup && (
-                (settings.shouldUseLocalLLMPolish && LocalLLMPolisher.isAvailable)
+                settings.shouldRunOnDevicePolish
                     || settings.hasUsableCloudPolish
             ) {
                 phase = .polishing
@@ -315,13 +310,40 @@ final class DictationController: ObservableObject {
 
         return PolishPipeline(
             heuristic: HeuristicPolisher(),
-            localLLM: LocalLLMPolisher.shared,
+            localLLM: onDevicePolisher(),
             cloud: cloud,
-            useLocalLLM: settings.shouldUseLocalLLMPolish && LocalLLMPolisher.isAvailable,
+            useLocalLLM: settings.shouldRunOnDevicePolish,
             enableTextCleanup: settings.enableTextCleanup,
+            enableHeuristicCleanup: settings.enableHeuristicCleanup,
             dictionary: CleanupPrompt.mergedDictionary(settings.dictionaryWords),
             personalContext: settings.cleanupPersonalContext
         )
+    }
+
+    func prewarmOnDevicePolish() {
+        guard settings.shouldUseLocalLLMPolish else { return }
+        switch settings.localPolishEngine {
+        case .none:
+            break
+        case .appleIntelligence:
+            LocalLLMPolisher.shared.prewarm(
+                personalContext: settings.cleanupPersonalContext,
+                dictionary: settings.dictionaryWords
+            )
+        case .gemma4_e2b:
+            GemmaMLXPolisher.shared.prewarm()
+        }
+    }
+
+    private func onDevicePolisher() -> (any TextPolisher)? {
+        switch settings.localPolishEngine {
+        case .none:
+            return nil
+        case .appleIntelligence:
+            return LocalLLMPolisher.shared
+        case .gemma4_e2b:
+            return GemmaMLXPolisher.shared
+        }
     }
 
     private var isErrorPhase: Bool {

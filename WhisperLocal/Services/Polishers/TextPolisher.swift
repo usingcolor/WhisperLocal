@@ -42,6 +42,39 @@ enum PolisherError: LocalizedError {
     }
 }
 
+enum PolishOutput {
+    /// Strip markdown fences and wrapping quotes some models add around a clean transcript.
+    static func sanitize(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("```") {
+            if let firstNewline = text.firstIndex(of: "\n") {
+                text = String(text[text.index(after: firstNewline)...])
+            }
+            if let fence = text.range(of: "```", options: .backwards) {
+                text = String(text[..<fence.lowerBound])
+            }
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if text.count >= 2, let first = text.first, let last = text.last {
+            let quoted = (first == "\"" && last == "\"")
+                || (first == "'" && last == "'")
+                || (first == "“" && last == "”")
+            if quoted {
+                let inner = String(text.dropFirst().dropLast())
+                let hasInnerQuotes = inner.contains("\"") || inner.contains("'")
+                    || inner.contains("“") || inner.contains("”")
+                if !hasInnerQuotes {
+                    text = inner.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+        }
+        if let eos = text.range(of: "<end_of_turn>") {
+            text = String(text[..<eos.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text
+    }
+}
+
 struct PolishResult: Sendable {
     let text: String
     let stages: [String]
@@ -50,8 +83,8 @@ struct PolishResult: Sendable {
     let cleanupNote: String?
 }
 
-/// Chains polishers: heuristic first, then either on-device Apple Intelligence or cloud polish.
-/// Cloud replaces Apple Intelligence so dictation is not delayed by both.
+/// Chains polishers: optional heuristic first, then either one on-device LLM or cloud polish.
+/// Cloud replaces the on-device LLM so dictation is not delayed by both.
 /// Failures never drop the transcript — OpenWhispr-style paste-on-cleanup-failure.
 struct PolishPipeline: Sendable {
     let heuristic: HeuristicPolisher
@@ -59,6 +92,7 @@ struct PolishPipeline: Sendable {
     let cloud: (any TextPolisher)?
     let useLocalLLM: Bool
     let enableTextCleanup: Bool
+    var enableHeuristicCleanup: Bool = true
     let dictionary: [String]
     var personalContext: String = ""
 
@@ -77,14 +111,15 @@ struct PolishPipeline: Sendable {
         var cleanupFailed = false
         var cleanupNote: String?
 
-        if let polished = try? await heuristic.polish(text, dictionary: dictionary, personalContext: personalContext) {
+        if enableHeuristicCleanup,
+           let polished = try? await heuristic.polish(text, dictionary: dictionary, personalContext: personalContext) {
             text = polished
             stages.append(heuristic.name)
         }
 
         var llmAttempted = false
 
-        // Cloud polish replaces Apple Intelligence so we do not wait for both.
+        // Cloud polish replaces the on-device LLM so we do not wait for both.
         if useLocalLLM, let localLLM, cloud == nil {
             llmAttempted = true
             do {
@@ -116,6 +151,10 @@ struct PolishPipeline: Sendable {
         if !llmAttempted {
             cleanupFailed = false
             cleanupNote = nil
+        }
+
+        if stages.isEmpty {
+            stages = ["Raw"]
         }
 
         return PolishResult(

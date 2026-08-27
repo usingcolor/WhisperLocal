@@ -147,7 +147,7 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
                 )
                 return response.content.text
             }
-            let sanitized = sanitize(cleaned)
+            let sanitized = PolishOutput.sanitize(cleaned)
             guard !sanitized.isEmpty else { throw PolisherError.emptyResponse }
             return sanitized
         } catch is CancellationError {
@@ -182,33 +182,6 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
 
     private func fingerprint(dictionary: [String], personalContext: String) -> String {
         personalContext + "\u{1e}" + dictionary.joined(separator: "\u{1f}")
-    }
-
-    private func sanitize(_ raw: String) -> String {
-        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.hasPrefix("```") {
-            if let firstNewline = text.firstIndex(of: "\n") {
-                text = String(text[text.index(after: firstNewline)...])
-            }
-            if let fence = text.range(of: "```", options: .backwards) {
-                text = String(text[..<fence.lowerBound])
-            }
-            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if text.count >= 2, let first = text.first, let last = text.last {
-            let quoted = (first == "\"" && last == "\"")
-                || (first == "'" && last == "'")
-                || (first == "“" && last == "”")
-            if quoted {
-                let inner = String(text.dropFirst().dropLast())
-                let hasInnerQuotes = inner.contains("\"") || inner.contains("'")
-                    || inner.contains("“") || inner.contains("”")
-                if !hasInnerQuotes {
-                    text = inner.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-            }
-        }
-        return text
     }
 
     private func withTimeout<T: Sendable>(

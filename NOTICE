@@ -21,3 +21,22 @@ NVIDIA Parakeet TDT 0.6B v2
 FluidAudio
   https://github.com/FluidInference/FluidAudio
   Apache License 2.0
+
+MLX / mlx-swift / mlx-swift-lm
+  https://github.com/ml-explore/mlx-swift
+  https://github.com/ml-explore/mlx-swift-lm
+  MIT License
+  Used for optional on-device Gemma polish.
+
+Gemma 4 E2B IT (text-only MLX weights)
+  Base model: Google Gemma 4 (Apache License 2.0)
+  https://huggingface.co/google/gemma-4-E2B-it
+  MLX text-only 4-bit conversion:
+  https://huggingface.co/mlx-community/Gemma4-E2B-IT-Text-int4
+  Downloaded at runtime only if you select Gemma 4 E2B IT in Settings.
+  Vision and audio towers are not included in this conversion.
+
+Hugging Face Swift packages
+  swift-huggingface, swift-transformers
+  Apache License 2.0
+  Used to download and tokenize Gemma weights.

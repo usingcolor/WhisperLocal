@@ -135,6 +135,40 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertEqual(result.stages, ["Raw"])
     }
 
+    func testPipelineCanSkipHeuristicAndStillUseLLM() async {
+        let local = ProbePolisher(name: "Gemma 4 E2B")
+        let pipeline = PolishPipeline(
+            heuristic: HeuristicPolisher(),
+            localLLM: local,
+            cloud: nil,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            enableHeuristicCleanup: false,
+            dictionary: []
+        )
+        let result = await pipeline.run("um hello there")
+        XCTAssertEqual(local.callCount, 1)
+        XCTAssertEqual(result.text, "um hello there")
+        XCTAssertEqual(result.stages, ["Gemma 4 E2B"])
+        XCTAssertFalse(result.cleanupFailed)
+    }
+
+    func testPipelineHeuristicOffWithoutLLMPastesRaw() async {
+        let pipeline = PolishPipeline(
+            heuristic: HeuristicPolisher(),
+            localLLM: nil,
+            cloud: nil,
+            useLocalLLM: false,
+            enableTextCleanup: true,
+            enableHeuristicCleanup: false,
+            dictionary: []
+        )
+        let result = await pipeline.run("um hello there")
+        XCTAssertEqual(result.text, "um hello there")
+        XCTAssertFalse(result.cleanupFailed)
+        XCTAssertEqual(result.stages, ["Raw"])
+    }
+
     func testPipelineSkipsAppleIntelligenceWhenCloudIsOn() async {
         let local = ProbePolisher(name: "Apple Intelligence")
         let cloud = ProbePolisher(name: "OpenAI")
@@ -202,12 +236,14 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertFalse(system.contains("{{agentName}}"))
         XCTAssertFalse(system.contains("CUSTOM INSTRUCTIONS"))
         XCTAssertFalse(system.contains("@gmail.com"))
+        XCTAssertFalse(system.contains("Changho Choi"))
     }
 
     func testPersonalContextIsInjected() {
         XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("SPEAKER"))
         XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("WhisperKit follow-up for the next release."))
         XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("@gmail.com"))
+        XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("Changho Choi"))
         let personalized = CleanupPrompt.system(personalContext: CleanupPrompt.defaultPersonalContext)
         XCTAssertTrue(personalized.contains("CUSTOM INSTRUCTIONS"))
         XCTAssertTrue(personalized.contains("WhisperKit follow-up for the next release."))
@@ -225,6 +261,18 @@ final class CleanupPromptTests: XCTestCase {
     func testDictionaryDoesNotForceStarterTerms() {
         XCTAssertEqual(CleanupPrompt.mergedDictionary(["WhisperKit", " whisperkit ", ""]), ["WhisperKit"])
         XCTAssertEqual(CleanupPrompt.mergedDictionary([]), [])
+    }
+
+    func testCompactSystemIsShorterButStillACleanupEngine() {
+        let compact = CleanupPrompt.compactSystem()
+        let full = CleanupPrompt.system()
+        XCTAssertTrue(compact.count < full.count / 2)
+        XCTAssertTrue(compact.lowercased().contains("never talking to you"))
+        XCTAssertTrue(compact.contains("What's the capital of France?"))
+        XCTAssertFalse(compact.contains("Changho Choi"))
+        let personalized = CleanupPrompt.compactSystem(personalContext: "Keep UTC.")
+        XCTAssertTrue(personalized.contains("CUSTOM INSTRUCTIONS"))
+        XCTAssertTrue(personalized.contains("Keep UTC."))
     }
 }
 
@@ -282,5 +330,25 @@ final class CloudModelCatalogTests: XCTestCase {
         XCTAssertEqual(merged.map(\.id).prefix(2), ["gpt-4o-mini", "gpt-4o"])
         XCTAssertTrue(merged.contains(where: { $0.id == "gpt-special" }))
         XCTAssertFalse(merged.contains(where: { $0.id == "gpt-5.6-luna" }))
+    }
+}
+
+final class PolishOutputTests: XCTestCase {
+    func testStripsMarkdownFence() {
+        XCTAssertEqual(PolishOutput.sanitize("```\nHello there.\n```"), "Hello there.")
+        XCTAssertEqual(PolishOutput.sanitize("```text\nHello there.\n```"), "Hello there.")
+    }
+
+    func testStripsWrappingQuotesWithoutInnerQuotes() {
+        XCTAssertEqual(PolishOutput.sanitize("\"Hello there.\""), "Hello there.")
+        XCTAssertEqual(PolishOutput.sanitize("“Hello there.”"), "Hello there.")
+    }
+
+    func testKeepsQuotesWhenTheyBelongToTheTranscript() {
+        XCTAssertEqual(PolishOutput.sanitize("\"He said \"hi\".\""), "\"He said \"hi\".\"")
+    }
+
+    func testStripsGemmaEndOfTurn() {
+        XCTAssertEqual(PolishOutput.sanitize("Hello there.<end_of_turn>"), "Hello there.")
     }
 }

@@ -6,6 +6,7 @@ struct SettingsView: View {
     @ObservedObject private var permissions = PermissionManager.shared
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var models = CloudModelCatalog.shared
+    @ObservedObject private var gemma = GemmaMLXPolisher.shared
 
     @State private var openAIKeyDraft = ""
     @State private var anthropicKeyDraft = ""
@@ -69,35 +70,67 @@ struct SettingsView: View {
 
             Section("Polish") {
                 Toggle("Enable text cleanup", isOn: $settings.enableTextCleanup)
-                Text("Heuristic cleanup always runs locally, then Apple Intelligence or cloud polish — not both. If AI cleanup fails, text is still pasted.")
+                Text("One on-device model or cloud polish — not both. If AI cleanup fails, text is still pasted.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle("On-device Apple Intelligence polish", isOn: Binding(
-                    get: { settings.shouldUseLocalLLMPolish },
-                    set: { settings.useLocalLLMPolish = $0 }
-                ))
-                .disabled(!settings.enableTextCleanup || settings.isCloudPolishSelected)
-                .onChange(of: settings.useLocalLLMPolish) { _, enabled in
-                    if enabled, settings.shouldUseLocalLLMPolish {
-                        LocalLLMPolisher.shared.prewarm(
-                            personalContext: settings.cleanupPersonalContext,
-                            dictionary: settings.dictionaryWords
-                        )
+                Toggle("Heuristic cleanup", isOn: $settings.enableHeuristicCleanup)
+                    .disabled(!settings.enableTextCleanup)
+                Text("Local fillers, spoken punctuation, and dictionary replacements before the model. Turn off to send raw ASR to Gemma, Apple Intelligence, or cloud.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("On-device polish", selection: Binding(
+                    get: { settings.localPolishEngine },
+                    set: { settings.localPolishEngine = $0 }
+                )) {
+                    ForEach(LocalPolishEngine.allCases) { engine in
+                        Text(engine.displayName).tag(engine)
                     }
                 }
+                .disabled(!settings.enableTextCleanup || settings.isCloudPolishSelected)
+                .onChange(of: settings.localPolishEngine) { _, engine in
+                    switch engine {
+                    case .gemma4_e2b:
+                        if settings.shouldUseLocalLLMPolish {
+                            GemmaMLXPolisher.shared.prewarm()
+                        }
+                    case .appleIntelligence:
+                        GemmaMLXPolisher.shared.unload()
+                        if settings.shouldUseLocalLLMPolish {
+                            LocalLLMPolisher.shared.prewarm(
+                                personalContext: settings.cleanupPersonalContext,
+                                dictionary: settings.dictionaryWords
+                            )
+                        }
+                    case .none:
+                        GemmaMLXPolisher.shared.unload()
+                    }
+                }
+
                 if settings.isCloudPolishSelected {
-                    Text("Cloud polish replaces Apple Intelligence. Turn cloud off to use the on-device model again.")
+                    Text("Cloud polish replaces the on-device model. Turn cloud off to use Apple Intelligence or Gemma again.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text(LocalLLMPolisher.statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(LocalLLMPolisher.isAvailable ? Color.secondary : Color.orange)
-                }
-                if LocalLLMPolisher.needsSystemSettings, !settings.isCloudPolishSelected {
-                    Button("Open Apple Intelligence Settings") {
-                        LocalLLMPolisher.openAppleIntelligenceSettings()
+                    switch settings.localPolishEngine {
+                    case .none:
+                        Text(settings.enableHeuristicCleanup
+                             ? "On-device LLM polish is off. Heuristic cleanup still runs."
+                             : "On-device LLM and heuristic cleanup are off. Raw ASR is pasted unless cloud polish is on.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    case .appleIntelligence:
+                        Text(LocalLLMPolisher.statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(LocalLLMPolisher.isAvailable ? Color.secondary : Color.orange)
+                        if LocalLLMPolisher.needsSystemSettings {
+                            Button("Open Apple Intelligence Settings") {
+                                LocalLLMPolisher.openAppleIntelligenceSettings()
+                            }
+                        }
+                    case .gemma4_e2b:
+                        gemmaStatusRow
                     }
                 }
 
@@ -110,6 +143,13 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(!settings.enableTextCleanup)
+                .onChange(of: settings.cloudPolishProvider) { _, provider in
+                    if provider == .none {
+                        controller.prewarmOnDevicePolish()
+                    } else {
+                        GemmaMLXPolisher.shared.unload()
+                    }
+                }
 
                 Text("Audio never leaves your Mac. Cloud polish sends transcript text only when enabled and a key is saved.")
                     .font(.caption)
@@ -127,7 +167,7 @@ struct SettingsView: View {
                             set: { settings.cleanupPersonalContext = $0 }
                         )
                     )
-                    Text("Added to the polish prompt for Apple Intelligence and cloud cleanup. Built-in rules still apply: clean the transcript, never answer it. Changes apply to the next dictation.")
+                    Text("Added to the polish prompt for Apple Intelligence, Gemma, and cloud cleanup. Built-in rules still apply: clean the transcript, never answer it. Changes apply to the next dictation.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack {
@@ -308,6 +348,33 @@ struct SettingsView: View {
         .padding()
         .frame(minWidth: 520, minHeight: 680)
         .navigationTitle("WhisperLocal Settings")
+    }
+
+    @ViewBuilder
+    private var gemmaStatusRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if case .downloading(let fraction) = gemma.status {
+                    ProgressView(value: fraction)
+                        .frame(width: 80)
+                } else if gemma.status == .loading {
+                    ProgressView().controlSize(.small)
+                }
+                Text(gemma.statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(gemma.isReady ? Color.secondary : Color.orange)
+                    .textSelection(.enabled)
+            }
+            Text("Text-only 4-bit MLX weights from Hugging Face (`mlx-community/Gemma4-E2B-IT-Text-int4`). Vision and audio towers are omitted. First load downloads ~2.7 GB and compiles Metal kernels; after that polish should take a few seconds. Gemma is released under Google’s license.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if !gemma.isReady {
+                Button(gemma.status.isFailed ? "Retry download" : "Download / Load Gemma") {
+                    GemmaMLXPolisher.shared.prewarm()
+                }
+                .disabled(gemma.status.isWorking)
+            }
+        }
     }
 
     private func addDictionaryTerm() {

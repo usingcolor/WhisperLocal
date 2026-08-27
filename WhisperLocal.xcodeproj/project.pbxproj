@@ -11,18 +11,23 @@
 		2492640D252CC0BB949F2270 /* WindowFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5763CB6E982097551A2347A /* WindowFocus.swift */; };
 		257AE55C48A885FAEF6FADFC /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A7E52EF80A958922373895 /* OnboardingView.swift */; };
 		2DE43BEE1ABCCCDE4B8FEB29 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44C4928A4E716CB8E7823B2 /* HotKeyManager.swift */; };
+		2F1717D4C171D98E7CB9F02A /* MLXHuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 07733DD05D803280B3B375D4 /* MLXHuggingFace */; };
 		2FF5D8B56F80FE4E08146279 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFF3498DCEDC9A6C7A5A13A6 /* TranscriptionService.swift */; };
 		32BAE91519BD9E26D3678EDE /* HeuristicPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C674C2FF65B13EF3ACBA113 /* HeuristicPolisher.swift */; };
 		3602BFC7FCCDE16F91B95D0E /* DictationLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C627BF10D2B7C3284F755F0 /* DictationLogStore.swift */; };
 		3652AD33B51E663C9EF4B337 /* LocalLLMPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952854698DE0B29BA5C9B04D /* LocalLLMPolisher.swift */; };
 		3734CB93A0CCF86BB2613CEC /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01AB713D392D16F27F752ED0 /* SettingsStore.swift */; };
 		390F2B285D4D8AC4D4C0F701 /* DictationLogExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAE522E456080B082DC0DABF /* DictationLogExport.swift */; };
+		3FB6C82544D4158E809278BE /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 990F8351E51D2E2961AF2CE4 /* MLXLMCommon */; };
 		3FDBFD6B24BF76442776DEE2 /* TextInserter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D1E69A1A5E6E68B60D9D97 /* TextInserter.swift */; };
 		40D1512B4165FAA3F8FB2FF2 /* DictationLogExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAE522E456080B082DC0DABF /* DictationLogExport.swift */; };
+		476BA72EBF0492CCC55DF26C /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 85AA4A641FF9EABF44C46867 /* MLXLLM */; };
 		4C69688248E40969DCF7AD85 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8CE719A87227A909E499E466 /* WhisperKit */; };
 		55508417CAC3686AF9D7212F /* RecordingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22AEB3874E72F1200F202546 /* RecordingHUD.swift */; };
 		59C0B52FB06EF6786BA03CE5 /* DictationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 094325BD00C73626F5A7D8BF /* DictationController.swift */; };
+		5C1D1E7AC805E51D84AD54C5 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = CAFAF41E8683133E12EEB1FE /* HuggingFace */; };
 		68484A6EFE8E4A48F43AE7BE /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83D3461601CD53D69C8AE0F /* AudioRecorder.swift */; };
+		6EA5DB88FB4467EF92F57E28 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = FFC84E10821749934C2E6D9B /* Tokenizers */; };
 		71D93DE7E9B354768A78903C /* AnthropicPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FCC628C5CD310EC5C6F34E0 /* AnthropicPolisher.swift */; };
 		72AE2E57624415B1FECFEDF3 /* HeuristicPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C674C2FF65B13EF3ACBA113 /* HeuristicPolisher.swift */; };
 		74B63A76DB2EADA597458D6B /* CleanupPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */; };
@@ -37,6 +42,7 @@
 		B1D64CFE2C0FABC6720B622F /* DictationLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C627BF10D2B7C3284F755F0 /* DictationLogStore.swift */; };
 		B916FB2C7469C02FC54B3A0F /* TextInserter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D1E69A1A5E6E68B60D9D97 /* TextInserter.swift */; };
 		C0D2F80461008C6015974BDA /* TextPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C75C3C8A0CD848C604E695 /* TextPolisher.swift */; };
+		CBA348D127EC79309CBBFEA0 /* GemmaMLXPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */; };
 		E5B382402026A0EA34458CA6 /* DictationLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B2368773CE8F483F2B05DC9 /* DictationLogView.swift */; };
 		F4C3CE0FA33D73AC4444CF46 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A99161BEE11539679C79444C /* FluidAudio */; };
 		FA8A33D7AD3D3AAC906F95F6 /* WhisperLocalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748E974DF04BD7DC99D7796A /* WhisperLocalApp.swift */; };
@@ -52,6 +58,7 @@
 		3711BFF5E9F6F19E30941906 /* WhisperLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WhisperLocal.entitlements; sourceTree = "<group>"; };
 		38ADAC703311FF92E61C5EF2 /* DictationLogExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationLogExportTests.swift; sourceTree = "<group>"; };
 		48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupPrompt.swift; sourceTree = "<group>"; };
+		4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemmaMLXPolisher.swift; sourceTree = "<group>"; };
 		4C674C2FF65B13EF3ACBA113 /* HeuristicPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeuristicPolisher.swift; sourceTree = "<group>"; };
 		68A7E52EF80A958922373895 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		6FCC628C5CD310EC5C6F34E0 /* AnthropicPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicPolisher.swift; sourceTree = "<group>"; };
@@ -82,6 +89,11 @@
 			files = (
 				4C69688248E40969DCF7AD85 /* WhisperKit in Frameworks */,
 				F4C3CE0FA33D73AC4444CF46 /* FluidAudio in Frameworks */,
+				476BA72EBF0492CCC55DF26C /* MLXLLM in Frameworks */,
+				3FB6C82544D4158E809278BE /* MLXLMCommon in Frameworks */,
+				2F1717D4C171D98E7CB9F02A /* MLXHuggingFace in Frameworks */,
+				5C1D1E7AC805E51D84AD54C5 /* HuggingFace in Frameworks */,
+				6EA5DB88FB4467EF92F57E28 /* Tokenizers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -187,6 +199,7 @@
 				6FCC628C5CD310EC5C6F34E0 /* AnthropicPolisher.swift */,
 				48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */,
 				285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */,
+				4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */,
 				4C674C2FF65B13EF3ACBA113 /* HeuristicPolisher.swift */,
 				952854698DE0B29BA5C9B04D /* LocalLLMPolisher.swift */,
 				005FD23F400A298F93508D18 /* OpenAIPolisher.swift */,
@@ -214,6 +227,11 @@
 			packageProductDependencies = (
 				8CE719A87227A909E499E466 /* WhisperKit */,
 				A99161BEE11539679C79444C /* FluidAudio */,
+				85AA4A641FF9EABF44C46867 /* MLXLLM */,
+				990F8351E51D2E2961AF2CE4 /* MLXLMCommon */,
+				07733DD05D803280B3B375D4 /* MLXHuggingFace */,
+				CAFAF41E8683133E12EEB1FE /* HuggingFace */,
+				FFC84E10821749934C2E6D9B /* Tokenizers */,
 			);
 			productName = WhisperLocal;
 			productReference = D036D4D666946E1E4C5A30F9 /* WhisperLocal.app */;
@@ -265,6 +283,9 @@
 			packageReferences = (
 				32EA04F18C506FD8179D7911 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				B80C21C6E0B97E8FDAEBC56A /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
+				2CBF6F27E19EFB8236BF6362 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				F66139AC7C3F12A98E84B06C /* XCRemoteSwiftPackageReference "swift-huggingface" */,
+				A9DE12CE3577251D6843F4A1 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 983FF10581582ABA28517D2B /* Products */;
@@ -317,6 +338,7 @@
 				390F2B285D4D8AC4D4C0F701 /* DictationLogExport.swift in Sources */,
 				3602BFC7FCCDE16F91B95D0E /* DictationLogStore.swift in Sources */,
 				E5B382402026A0EA34458CA6 /* DictationLogView.swift in Sources */,
+				CBA348D127EC79309CBBFEA0 /* GemmaMLXPolisher.swift in Sources */,
 				32BAE91519BD9E26D3678EDE /* HeuristicPolisher.swift in Sources */,
 				2DE43BEE1ABCCCDE4B8FEB29 /* HotKeyManager.swift in Sources */,
 				3652AD33B51E663C9EF4B337 /* LocalLLMPolisher.swift in Sources */,
@@ -606,12 +628,28 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2CBF6F27E19EFB8236BF6362 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.31.4;
+			};
+		};
 		32EA04F18C506FD8179D7911 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.15.6;
+			};
+		};
+		A9DE12CE3577251D6843F4A1 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.1.6;
 			};
 		};
 		B80C21C6E0B97E8FDAEBC56A /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
@@ -622,18 +660,51 @@
 				minimumVersion = 0.9.0;
 			};
 		};
+		F66139AC7C3F12A98E84B06C /* XCRemoteSwiftPackageReference "swift-huggingface" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-huggingface.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		07733DD05D803280B3B375D4 /* MLXHuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2CBF6F27E19EFB8236BF6362 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXHuggingFace;
+		};
+		85AA4A641FF9EABF44C46867 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2CBF6F27E19EFB8236BF6362 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
 		8CE719A87227A909E499E466 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B80C21C6E0B97E8FDAEBC56A /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
 		};
+		990F8351E51D2E2961AF2CE4 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2CBF6F27E19EFB8236BF6362 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
+		};
 		A99161BEE11539679C79444C /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 32EA04F18C506FD8179D7911 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		CAFAF41E8683133E12EEB1FE /* HuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F66139AC7C3F12A98E84B06C /* XCRemoteSwiftPackageReference "swift-huggingface" */;
+			productName = HuggingFace;
+		};
+		FFC84E10821749934C2E6D9B /* Tokenizers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A9DE12CE3577251D6843F4A1 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Tokenizers;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

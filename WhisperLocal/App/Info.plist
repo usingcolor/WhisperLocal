@@ -26,6 +26,8 @@
 	<string>Copyright © 2026. Local-first dictation.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>WhisperLocal needs the microphone to transcribe your speech into text. Audio stays on your Mac unless you enable optional cloud polish (which sends transcript text only, never audio).</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>WhisperLocal can use Apple’s on-device speech recognizer to turn what you say into text. Audio stays on this Mac.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

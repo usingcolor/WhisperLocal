@@ -3,6 +3,7 @@ import Security
 import SwiftUI
 
 enum ASRModelOption: String, CaseIterable, Identifiable, Codable {
+    case appleSpeech = "apple-speech"
     case tinyEn = "tiny.en"
     case smallEn = "small.en"
     case baseEn = "base.en"
@@ -11,12 +12,18 @@ enum ASRModelOption: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
+    /// Apple Speech when the Mac supports it; otherwise Whisper Small.
+    static var defaultModel: ASRModelOption {
+        AppleSpeechASR.isAvailable ? .appleSpeech : .smallEn
+    }
+
     var displayName: String {
         switch self {
+        case .appleSpeech: return "Apple Speech (macOS) — default"
         case .tinyEn: return "Whisper Tiny (English) — fastest"
         case .baseEn: return "Whisper Base (English)"
-        case .smallEn: return "Whisper Small (English) — recommended"
-        case .largeV3Turbo: return "Whisper Large v3 Turbo — best quality"
+        case .smallEn: return "Whisper Small (English)"
+        case .largeV3Turbo: return "Whisper Large v3 Turbo — best Whisper quality"
         case .parakeetTDT06bV2: return "Parakeet TDT 0.6B v2 — NVIDIA English"
         }
     }
@@ -24,6 +31,7 @@ enum ASRModelOption: String, CaseIterable, Identifiable, Codable {
     var engine: ASREngine {
         switch self {
         case .parakeetTDT06bV2: return .parakeet
+        case .appleSpeech: return .appleSpeech
         default: return .whisper
         }
     }
@@ -32,12 +40,13 @@ enum ASRModelOption: String, CaseIterable, Identifiable, Codable {
         switch engine {
         case .whisper: return "Whisper"
         case .parakeet: return "Parakeet"
+        case .appleSpeech: return "Apple Speech"
         }
     }
 
     var whisperKitName: String? {
         switch self {
-        case .parakeetTDT06bV2: return nil
+        case .parakeetTDT06bV2, .appleSpeech: return nil
         default: return rawValue
         }
     }
@@ -46,6 +55,7 @@ enum ASRModelOption: String, CaseIterable, Identifiable, Codable {
 enum ASREngine: String {
     case whisper
     case parakeet
+    case appleSpeech
 }
 
 enum CloudPolishProvider: String, CaseIterable, Identifiable, Codable {
@@ -74,7 +84,7 @@ enum LocalPolishEngine: String, CaseIterable, Identifiable, Codable {
     var displayName: String {
         switch self {
         case .none: return "Off"
-        case .appleIntelligence: return "Apple Intelligence (~3B)"
+        case .appleIntelligence: return "Apple Intelligence (~3B) — default"
         case .gemma4_e2b: return "Gemma 4 E2B IT (MLX)"
         }
     }
@@ -99,7 +109,7 @@ final class SettingsStore: ObservableObject {
     @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
 
     var asrModel: ASRModelOption {
-        get { ASRModelOption(rawValue: asrModelRaw) ?? .smallEn }
+        get { ASRModelOption(rawValue: asrModelRaw) ?? .defaultModel }
         set { asrModelRaw = newValue.rawValue }
     }
 
@@ -159,7 +169,7 @@ final class SettingsStore: ObservableObject {
 
     private init() {
         let defaults = UserDefaults.standard
-        asrModelRaw = defaults.string(forKey: "asrModel") ?? ASRModelOption.smallEn.rawValue
+        asrModelRaw = defaults.string(forKey: "asrModel") ?? ASRModelOption.defaultModel.rawValue
         cloudPolishProviderRaw = defaults.string(forKey: "cloudPolishProvider") ?? CloudPolishProvider.none.rawValue
         localPolishEngineRaw = Self.migratedLocalPolishEngine(from: defaults)
         enableTextCleanup = defaults.object(forKey: "enableTextCleanup") as? Bool ?? true
@@ -175,8 +185,20 @@ final class SettingsStore: ObservableObject {
         if defaults.string(forKey: "localPolishEngine") != localPolishEngineRaw {
             UserDefaults.standard.set(localPolishEngineRaw, forKey: "localPolishEngine")
         }
+        migrateFactoryASRDefault()
         migrateDictionaryStorage()
         migratePersonalContext()
+    }
+
+    /// One-time: the old factory ASR was Whisper Small. Move that default to Apple Speech.
+    /// Explicit Tiny / Base / Large / Parakeet choices are left alone.
+    private func migrateFactoryASRDefault() {
+        let key = "asrDefaultMigratedToAppleSpeech"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        if asrModelRaw == ASRModelOption.smallEn.rawValue, AppleSpeechASR.isAvailable {
+            asrModelRaw = ASRModelOption.appleSpeech.rawValue
+        }
     }
 
     private func persist(_ value: Any, key: String) {

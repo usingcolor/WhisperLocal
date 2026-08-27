@@ -8,7 +8,7 @@ Local-first dictation for Apple Silicon Macs.
 
 Hold a global hotkey, speak, release — cleaned text is inserted at the cursor in any app. Audio never leaves your Mac unless you opt in to cloud polish, which sends **transcript text only**.
 
-Native Swift / AppKit. On-device ASR via [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) or [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) through [FluidAudio](https://github.com/FluidInference/FluidAudio). Optional on-device polish via Apple Intelligence (`SystemLanguageModel`) or Gemma 4 E2B IT (MLX, text-only). No Ollama.
+Native Swift / AppKit. Default on-device ASR is Apple Speech (`SpeechTranscriber`, macOS 26); [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) and [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (via [FluidAudio](https://github.com/FluidInference/FluidAudio)) are optional. Default on-device polish is Apple Intelligence (`SystemLanguageModel`); Gemma 4 E2B IT (MLX, text-only) is optional. No Ollama.
 
 > Early preview (`0.1.0`). Built for daily use on one machine; expect sharp edges.
 
@@ -20,15 +20,15 @@ Apple Silicon only. Get the DMG from [Releases](https://github.com/usingcolor/Wh
 2. First launch: right-click the app → **Open**. The download is ad-hoc signed (not Apple-notarized), so Gatekeeper warns once.
 3. Grant **Microphone** and **Accessibility**.
 
-Speech models download on first use. Optional Gemma 4 polish is another ~2.7 GB from Settings.
+Speech models: Apple Speech uses a system model (may download once via macOS). Whisper / Parakeet / Gemma still download on first use if you pick them.
 
 ## Features
 
 - Menu-bar agent (no Dock icon)
 - Global hotkey — default **Globe / Fn**; hold-to-talk or tap-to-toggle
 - **Esc** cancels an in-progress dictation
-- On-device English ASR (Core ML / Neural Engine): WhisperKit or Parakeet TDT 0.6B v2
-- Offline heuristic cleanup (optional), then optional Apple Intelligence or Gemma 4 E2B IT polish
+- On-device English ASR: Apple Speech by default (macOS 26); WhisperKit or Parakeet TDT 0.6B v2 optional
+- Offline heuristic cleanup (optional), then Apple Intelligence polish by default, or Gemma 4 E2B IT
 - Optional OpenAI or Anthropic polish (text only; keys in Keychain)
 - Editable custom instructions and personal dictionary for polish
 - Fail-open: if AI cleanup fails or times out, the previous stage is still pasted (heuristic if it ran, otherwise raw ASR)
@@ -40,9 +40,9 @@ Speech models download on first use. Optional Gemma 4 polish is another ~2.7 GB 
 
 ```
 hold hotkey → record 16 kHz audio
-           → WhisperKit or Parakeet (on-device)
+           → Apple Speech (default; or WhisperKit / Parakeet)
            → heuristic polish  (optional; fillers, self-corrections, spoken punctuation, dictionary)
-           → Apple Intelligence or Gemma 4 E2B IT (optional; skipped when cloud polish is on)
+           → Apple Intelligence (default; or Gemma 4 E2B IT; skipped when cloud polish is on)
            → OpenAI / Anthropic                   (optional; replaces the on-device LLM)
            → insert at cursor
 ```
@@ -92,7 +92,7 @@ xcodebuild -scheme WhisperLocal -configuration Release \
 
 After changing `project.yml` or moving files, run `xcodegen generate` again.
 
-First launch downloads the selected speech model from Hugging Face (default Whisper `small.en`). Models live in the engine cache, not in this repo. Parakeet is optional and downloads separately if you pick it.
+First launch uses Apple Speech when macOS 26 is available (system English model). Whisper or Parakeet, if you pick them, download from Hugging Face into the engine cache — not this repo.
 
 ### Signing and Accessibility
 
@@ -119,7 +119,7 @@ Hotkey alternatives in Settings: Right Option, Left Option, Right Command.
 
 | Setting | Default |
 |---|---|
-| Speech model | Whisper `small.en` (`tiny.en`, `base.en`, `large-v3` turbo, or Parakeet TDT 0.6B v2) |
+| Speech model | Apple Speech (macOS 26). Fallback Whisper `small.en`. Also `tiny.en`, `base.en`, Large v3 turbo, Parakeet TDT 0.6B v2 |
 | Text cleanup | On |
 | Heuristic cleanup | On (turn off to send raw ASR to the model) |
 | On-device polish | Apple Intelligence (or Gemma 4 E2B IT; skipped automatically while cloud polish is on) |
@@ -173,7 +173,7 @@ If you need Windows, Linux, streaming, or a large model catalog, start here inst
 - [VoiceInk](https://github.com/Beingpax/VoiceInk) — Mac dictation with Modes and many enhancement backends
 - [OpenWhispr](https://github.com/OpenWhispr/openwhispr) — cross-platform dictation + in-app llama.cpp cleanup
 
-WhisperLocal is a small native Swift app: WhisperKit or Parakeet, plus on-device polish (Apple Intelligence or Gemma 4 via MLX), no sidecar LLM.
+WhisperLocal is a small native Swift app: Apple Speech by default, or WhisperKit / Parakeet, plus on-device polish (Apple Intelligence or Gemma 4 via MLX), no sidecar LLM.
 
 ## Contributing
 

@@ -46,9 +46,14 @@ struct SettingsView: View {
                         Text(model.displayName).tag(model)
                     }
                 }
-                Text("Parakeet TDT 0.6B v2 is NVIDIA’s English model (CC-BY-4.0), running on-device via FluidAudio. First load downloads CoreML weights from Hugging Face.")
+                speechModelHelp
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if settings.asrModel == .appleSpeech, !AppleSpeechASR.isAvailable {
+                    Text(AppleSpeechASR.availabilityMessage)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
                 LabeledContent("Speech status") {
                     HStack(spacing: 8) {
                         if controller.transcription.isLoadingModel {
@@ -348,6 +353,18 @@ struct SettingsView: View {
         .padding()
         .frame(minWidth: 520, minHeight: 680)
         .navigationTitle("WhisperLocal Settings")
+    }
+
+    @ViewBuilder
+    private var speechModelHelp: some View {
+        switch settings.asrModel.engine {
+        case .whisper:
+            Text("WhisperKit Core ML. First use downloads weights from Hugging Face.")
+        case .parakeet:
+            Text("Parakeet TDT 0.6B v2 is NVIDIA’s English model (CC-BY-4.0), running on-device via FluidAudio. First load downloads CoreML weights from Hugging Face.")
+        case .appleSpeech:
+            Text("On-device Apple SpeechTranscriber (macOS 26). English, even if the system language is not. The OS may download a shared speech model on first use; audio stays on this Mac.")
+        }
     }
 
     @ViewBuilder

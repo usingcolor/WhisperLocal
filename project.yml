@@ -96,6 +96,7 @@ targets:
         product: HuggingFace
       - package: swift-transformers
         product: Tokenizers
+      - sdk: Speech.framework
     scheme:
       testTargets:
         - WhisperLocalTests

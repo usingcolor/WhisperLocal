@@ -40,6 +40,8 @@ final class TranscriptionService: ObservableObject {
                 try await loadWhisper(model, generation: generation)
             case .parakeet:
                 try await loadParakeet(model, generation: generation)
+            case .appleSpeech:
+                try await loadAppleSpeech(model, generation: generation)
             }
             guard generation == loadGeneration else { return }
             loadedModel = model
@@ -52,6 +54,7 @@ final class TranscriptionService: ObservableObject {
             lastError = error.localizedDescription
             statusMessage = "\(model.statusBrand): failed \(model.displayName) — \(error.localizedDescription)"
             isLoadingModel = false
+            await AppleSpeechASR.shared.unload()
         }
     }
 
@@ -69,6 +72,11 @@ final class TranscriptionService: ObservableObject {
             return try await transcribeWhisper(samples)
         case .parakeet:
             return try await transcribeParakeet(samples)
+        case .appleSpeech:
+            return try await AppleSpeechASR.shared.transcribe(
+                samples: samples,
+                dictionary: SettingsStore.shared.dictionaryWords
+            )
         }
     }
 
@@ -76,6 +84,7 @@ final class TranscriptionService: ObservableObject {
         switch model.engine {
         case .whisper: return whisperKit != nil
         case .parakeet: return parakeet != nil
+        case .appleSpeech: return AppleSpeechASR.shared.isReady
         }
     }
 
@@ -95,6 +104,7 @@ final class TranscriptionService: ObservableObject {
         guard generation == loadGeneration else { return }
         whisperKit = kit
         parakeet = nil
+        await AppleSpeechASR.shared.unload()
     }
 
     private func loadParakeet(_ model: ASRModelOption, generation: Int) async throws {
@@ -119,6 +129,17 @@ final class TranscriptionService: ObservableObject {
         guard generation == loadGeneration else { return }
         parakeet = manager
         whisperKit = nil
+        await AppleSpeechASR.shared.unload()
+    }
+
+    private func loadAppleSpeech(_: ASRModelOption, generation: Int) async throws {
+        try await AppleSpeechASR.shared.prepare { [weak self] message in
+            guard let self, generation == self.loadGeneration else { return }
+            self.statusMessage = message
+        }
+        guard generation == loadGeneration else { return }
+        whisperKit = nil
+        parakeet = nil
     }
 
     private func transcribeWhisper(_ samples: [Float]) async throws -> String {
@@ -190,6 +211,8 @@ final class TranscriptionService: ObservableObject {
 enum TranscriptionError: LocalizedError {
     case modelNotLoaded
     case emptyAudio
+    case appleSpeechUnavailable
+    case appleSpeechLocaleUnsupported
 
     var errorDescription: String? {
         switch self {
@@ -197,6 +220,10 @@ enum TranscriptionError: LocalizedError {
             return "Speech model is not loaded yet."
         case .emptyAudio:
             return "No audio was recorded."
+        case .appleSpeechUnavailable:
+            return "Apple Speech needs macOS 26 and a supported Apple Silicon Mac."
+        case .appleSpeechLocaleUnsupported:
+            return "Apple Speech has no English model on this Mac."
         }
     }
 }

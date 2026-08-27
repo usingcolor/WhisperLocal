@@ -79,7 +79,7 @@ final class DictationController: ObservableObject {
 
         Task {
             await transcription.ensureModel(named: settings.asrModel)
-            if settings.useLocalLLMPolish {
+            if settings.shouldUseLocalLLMPolish {
                 LocalLLMPolisher.shared.prewarm(
                     personalContext: settings.cleanupPersonalContext,
                     dictionary: settings.dictionaryWords
@@ -210,7 +210,10 @@ final class DictationController: ObservableObject {
             }
 
             hud.update(phase: .processing)
-            if settings.enableTextCleanup, settings.useLocalLLMPolish, LocalLLMPolisher.isAvailable {
+            if settings.enableTextCleanup && (
+                (settings.shouldUseLocalLLMPolish && LocalLLMPolisher.isAvailable)
+                    || settings.hasUsableCloudPolish
+            ) {
                 phase = .polishing
                 hud.update(phase: .polishing)
             }
@@ -314,7 +317,7 @@ final class DictationController: ObservableObject {
             heuristic: HeuristicPolisher(),
             localLLM: LocalLLMPolisher.shared,
             cloud: cloud,
-            useLocalLLM: settings.useLocalLLMPolish && LocalLLMPolisher.isAvailable,
+            useLocalLLM: settings.shouldUseLocalLLMPolish && LocalLLMPolisher.isAvailable,
             enableTextCleanup: settings.enableTextCleanup,
             dictionary: CleanupPrompt.mergedDictionary(settings.dictionaryWords),
             personalContext: settings.cleanupPersonalContext

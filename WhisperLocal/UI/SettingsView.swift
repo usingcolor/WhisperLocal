@@ -69,24 +69,33 @@ struct SettingsView: View {
 
             Section("Polish") {
                 Toggle("Enable text cleanup", isOn: $settings.enableTextCleanup)
-                Text("Heuristic cleanup always runs locally, then optional Apple Intelligence polish. Cloud polish can follow. If AI cleanup fails, text is still pasted.")
+                Text("Heuristic cleanup always runs locally, then Apple Intelligence or cloud polish — not both. If AI cleanup fails, text is still pasted.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle("On-device Apple Intelligence polish", isOn: $settings.useLocalLLMPolish)
-                    .disabled(!settings.enableTextCleanup)
-                    .onChange(of: settings.useLocalLLMPolish) { _, enabled in
-                        if enabled {
-                            LocalLLMPolisher.shared.prewarm(
-                                personalContext: settings.cleanupPersonalContext,
-                                dictionary: settings.dictionaryWords
-                            )
-                        }
+                Toggle("On-device Apple Intelligence polish", isOn: Binding(
+                    get: { settings.shouldUseLocalLLMPolish },
+                    set: { settings.useLocalLLMPolish = $0 }
+                ))
+                .disabled(!settings.enableTextCleanup || settings.isCloudPolishSelected)
+                .onChange(of: settings.useLocalLLMPolish) { _, enabled in
+                    if enabled, settings.shouldUseLocalLLMPolish {
+                        LocalLLMPolisher.shared.prewarm(
+                            personalContext: settings.cleanupPersonalContext,
+                            dictionary: settings.dictionaryWords
+                        )
                     }
-                Text(LocalLLMPolisher.statusMessage)
-                    .font(.caption)
-                    .foregroundStyle(LocalLLMPolisher.isAvailable ? Color.secondary : Color.orange)
-                if LocalLLMPolisher.needsSystemSettings {
+                }
+                if settings.isCloudPolishSelected {
+                    Text("Cloud polish replaces Apple Intelligence. Turn cloud off to use the on-device model again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(LocalLLMPolisher.statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(LocalLLMPolisher.isAvailable ? Color.secondary : Color.orange)
+                }
+                if LocalLLMPolisher.needsSystemSettings, !settings.isCloudPolishSelected {
                     Button("Open Apple Intelligence Settings") {
                         LocalLLMPolisher.openAppleIntelligenceSettings()
                     }

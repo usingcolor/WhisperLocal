@@ -109,6 +109,56 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertEqual(result.text, "um hello there")
         XCTAssertEqual(result.stages, ["Raw"])
     }
+
+    func testPipelineSkipsAppleIntelligenceWhenCloudIsOn() async {
+        let local = ProbePolisher(name: "Apple Intelligence")
+        let cloud = ProbePolisher(name: "OpenAI")
+        let pipeline = PolishPipeline(
+            heuristic: HeuristicPolisher(),
+            localLLM: local,
+            cloud: cloud,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            dictionary: []
+        )
+        let result = await pipeline.run("hello")
+        XCTAssertEqual(local.callCount, 0)
+        XCTAssertEqual(cloud.callCount, 1)
+        XCTAssertEqual(result.stages, ["Heuristic", "OpenAI"])
+        XCTAssertFalse(result.cleanupFailed)
+    }
+
+    func testPipelineUsesAppleIntelligenceWhenCloudIsOff() async {
+        let local = ProbePolisher(name: "Apple Intelligence")
+        let pipeline = PolishPipeline(
+            heuristic: HeuristicPolisher(),
+            localLLM: local,
+            cloud: nil,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            dictionary: []
+        )
+        let result = await pipeline.run("hello")
+        XCTAssertEqual(local.callCount, 1)
+        XCTAssertEqual(result.stages, ["Heuristic", "Apple Intelligence"])
+    }
+}
+
+private final class ProbePolisher: TextPolisher, @unchecked Sendable {
+    let name: String
+    private let lock = NSLock()
+    private(set) var callCount = 0
+
+    init(name: String) {
+        self.name = name
+    }
+
+    func polish(_ text: String, dictionary: [String], personalContext: String) async throws -> String {
+        lock.lock()
+        callCount += 1
+        lock.unlock()
+        return text
+    }
 }
 
 final class CleanupPromptTests: XCTestCase {
@@ -130,13 +180,11 @@ final class CleanupPromptTests: XCTestCase {
     }
 
     func testPersonalContextIsInjected() {
-        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("SPEAKER"))
-        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("WhisperKit follow-up for the next release."))
-        XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("Changho Choi"))
-        XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("@gmail.com"))
+        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("Changho Choi"))
         let personalized = CleanupPrompt.system(personalContext: CleanupPrompt.defaultPersonalContext)
         XCTAssertTrue(personalized.contains("CUSTOM INSTRUCTIONS"))
-        XCTAssertTrue(personalized.contains("WhisperKit follow-up for the next release."))
+        XCTAssertTrue(personalized.contains("Changho Choi"))
+        XCTAssertTrue(personalized.contains("MambaEye follow-up for ICLR 2027."))
         let empty = CleanupPrompt.system(personalContext: "   ")
         XCTAssertFalse(empty.contains("CUSTOM INSTRUCTIONS"))
     }

@@ -92,6 +92,24 @@ final class SettingsStore: ObservableObject {
         set { cloudPolishProviderRaw = newValue.rawValue }
     }
 
+    /// Cloud picker is OpenAI or Anthropic. Apple Intelligence is skipped in this mode.
+    var isCloudPolishSelected: Bool {
+        cloudPolishProvider != .none
+    }
+
+    var hasUsableCloudPolish: Bool {
+        switch cloudPolishProvider {
+        case .none: return false
+        case .openAI: return !openAIAPIKey.isEmpty
+        case .anthropic: return !anthropicAPIKey.isEmpty
+        }
+    }
+
+    /// Stored Apple Intelligence preference, ignored while cloud polish is selected.
+    var shouldUseLocalLLMPolish: Bool {
+        useLocalLLMPolish && !isCloudPolishSelected
+    }
+
     var cleanupPersonalContext: String {
         get { cleanupPersonalContextRaw }
         set {

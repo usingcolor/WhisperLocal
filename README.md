@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="WhisperLocal — local-first dictation for Apple Silicon" width="100%">
+</p>
+
 # WhisperLocal
 
 Local-first dictation for Apple Silicon Macs.
@@ -28,8 +32,8 @@ Native Swift / AppKit. On-device ASR via [WhisperKit](https://github.com/argmaxi
 hold hotkey → record 16 kHz audio
            → WhisperKit or Parakeet (on-device)
            → heuristic polish  (fillers, self-corrections, spoken punctuation, dictionary)
-           → Apple Intelligence polish  (optional, ~3B on Neural Engine, 8s timeout)
-           → OpenAI / Anthropic         (optional)
+           → Apple Intelligence polish  (optional, ~3B; skipped when cloud polish is on)
+           → OpenAI / Anthropic         (optional; replaces Apple Intelligence)
            → insert at cursor
 ```
 
@@ -100,7 +104,7 @@ Hotkey alternatives in Settings: Right Option, Left Option, Right Command.
 |---|---|
 | Speech model | Whisper `small.en` (`tiny.en`, `base.en`, `large-v3` turbo, or Parakeet TDT 0.6B v2) |
 | Text cleanup | On |
-| Apple Intelligence polish | On (when the on-device model is available) |
+| Apple Intelligence polish | On (skipped automatically while cloud polish is on) |
 | Cloud polish | Off (OpenAI / Anthropic; pick a model in Settings) |
 | Custom instructions | Generic starter notes; edit or clear in Settings |
 | Trailing space after paste | On |

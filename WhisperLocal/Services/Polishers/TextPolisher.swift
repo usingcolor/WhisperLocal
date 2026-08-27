@@ -39,7 +39,8 @@ struct PolishResult: Sendable {
     let cleanupNote: String?
 }
 
-/// Chains polishers: heuristic first, then optional local/cloud LLM upgrades.
+/// Chains polishers: heuristic first, then either on-device Apple Intelligence or cloud polish.
+/// Cloud replaces Apple Intelligence so dictation is not delayed by both.
 /// Failures never drop the transcript — OpenWhispr-style paste-on-cleanup-failure.
 struct PolishPipeline: Sendable {
     let heuristic: HeuristicPolisher
@@ -72,7 +73,8 @@ struct PolishPipeline: Sendable {
 
         var llmAttempted = false
 
-        if useLocalLLM, let localLLM {
+        // Cloud polish replaces Apple Intelligence so we do not wait for both.
+        if useLocalLLM, let localLLM, cloud == nil {
             llmAttempted = true
             do {
                 text = try await localLLM.polish(text, dictionary: dictionary, personalContext: personalContext)

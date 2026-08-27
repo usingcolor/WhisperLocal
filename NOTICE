@@ -1,0 +1,23 @@
+Third-party notices for WhisperLocal
+====================================
+
+WhisperLocal application source is licensed under the MIT License (see LICENSE).
+Speech-model weights downloaded at runtime are not MIT unless noted below.
+Do not redistribute those weights under the MIT License.
+
+Whisper / WhisperKit
+  OpenAI Whisper model weights: MIT
+  WhisperKit (argmaxinc/argmax-oss-swift): MIT
+  Downloaded at runtime when you select a Whisper speech model.
+
+NVIDIA Parakeet TDT 0.6B v2
+  Original model: Creative Commons Attribution 4.0 International (CC-BY-4.0)
+  https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2
+  CoreML conversion: FluidInference
+  https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v2-coreml
+  Downloaded at runtime only if you select the Parakeet speech engine.
+  Attribution: NVIDIA Parakeet TDT 0.6B v2, CC-BY-4.0.
+
+FluidAudio
+  https://github.com/FluidInference/FluidAudio
+  Apache License 2.0

@@ -1,0 +1,286 @@
+import AppKit
+import ApplicationServices
+import Carbon.HIToolbox
+import Foundation
+
+enum InsertionMethod: String {
+    case accessibility
+    case clipboard
+    case failed
+}
+
+struct InsertionResult {
+    let success: Bool
+    let method: InsertionMethod
+    let appName: String?
+}
+
+@MainActor
+final class TextInserter {
+    static let shared = TextInserter()
+
+    /// Bundle IDs where AX selected-text insert is unreliable — use clipboard paste.
+    private let terminalBundleIDs: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "net.kovidgoyal.kitty",
+        "io.alacritty",
+        "dev.warp.Warp-Stable",
+        "dev.warp.Warp",
+        "com.mitchellh.ghostty",
+        "com.github.wez.wezterm",
+        "co.zeit.hyper",
+        "com.termius-dmg.mac"
+    ]
+
+    /// Electron / Chromium apps where AXSet selected-text often returns success and types nothing
+    /// (Grok Bot, Cursor, Slack, Chrome, VS Code, …).
+    private let clipboardFirstBundleIDs: Set<String> = [
+        "com.anysphere.sand",              // Grok Bot
+        "com.anysphere.cursor",
+        "com.todesktop.230313mzl4w4u92",   // Cursor (older id)
+        "com.microsoft.VSCode",
+        "com.google.Chrome",
+        "com.google.Chrome.canary",
+        "com.google.Chrome.dev",
+        "company.thebrowser.Browser",      // Arc
+        "com.brave.Browser",
+        "com.microsoft.edgemac",
+        "com.tinyspeck.slackmacgap",
+        "com.hnc.Discord",
+        "com.openai.chat",
+        "com.anthropic.claudefordesktop",
+        "com.apple.Safari.WebApp"          // PWAs / web-app wrappers
+    ]
+
+    /// Name substrings for terminals without a known bundle ID.
+    private let terminalNameHints = [
+        "terminal", "iterm", "kitty", "alacritty", "warp", "ghostty",
+        "wezterm", "hyper", "tabby", "termius", "waveterm", "console"
+    ]
+
+    func insert(_ text: String) async -> InsertionResult {
+        let frontApp = NSWorkspace.shared.frontmostApplication
+        let appName = frontApp?.localizedName
+        let bundleID = frontApp?.bundleIdentifier
+
+        guard AXIsProcessTrusted() else {
+            return InsertionResult(success: false, method: .failed, appName: appName)
+        }
+
+        // Strip BEL (\u{0007}) and other C0 controls — Terminal rings the bell on these.
+        let sanitized = Self.sanitizeForPaste(text)
+        guard !sanitized.isEmpty else {
+            return InsertionResult(success: false, method: .failed, appName: appName)
+        }
+
+        let isTerminal = isTerminalApp(bundleID: bundleID, name: appName)
+        let useClipboardFirst = isTerminal || prefersClipboardPaste(app: frontApp, bundleID: bundleID)
+
+        // Electron/Chromium (Grok Bot, Cursor, Chrome, …): AX insert lies about success.
+        if !useClipboardFirst, insertViaAccessibility(sanitized) {
+            return InsertionResult(success: true, method: .accessibility, appName: appName)
+        }
+
+        let ok = await insertViaClipboard(
+            sanitized,
+            into: frontApp,
+            preferSlowTiming: useClipboardFirst
+        )
+        return InsertionResult(
+            success: ok,
+            method: ok ? .clipboard : .failed,
+            appName: appName
+        )
+    }
+
+    /// Keep newlines/tabs; drop BEL and other control chars that make Terminal beep.
+    static func sanitizeForPaste(_ text: String) -> String {
+        let filtered = text.unicodeScalars.filter { scalar in
+            if scalar == "\n" || scalar == "\t" || scalar == "\r" { return true }
+            return scalar.value >= 0x20 && scalar.value != 0x7F
+        }
+        return String(String.UnicodeScalarView(filtered))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func prefersClipboardPaste(app: NSRunningApplication?, bundleID: String?) -> Bool {
+        if let bundleID, clipboardFirstBundleIDs.contains(bundleID) {
+            return true
+        }
+        if let bundleID {
+            let lower = bundleID.lowercased()
+            if lower.contains("anysphere") || lower.contains("electron") || lower.contains("chrom") {
+                return true
+            }
+        }
+        return isElectronApp(app)
+    }
+
+    /// Grok Bot, Cursor, VS Code, Slack, etc. ship `Electron Framework.framework`.
+    private func isElectronApp(_ app: NSRunningApplication?) -> Bool {
+        guard let bundleURL = app?.bundleURL else { return false }
+        let electron = bundleURL
+            .appendingPathComponent("Contents")
+            .appendingPathComponent("Frameworks")
+            .appendingPathComponent("Electron Framework.framework")
+        return FileManager.default.fileExists(atPath: electron.path)
+    }
+
+    private func isTerminalApp(bundleID: String?, name: String?) -> Bool {
+        if let bundleID, terminalBundleIDs.contains(bundleID) {
+            return true
+        }
+        if let bundleID {
+            let lower = bundleID.lowercased()
+            if lower.contains("terminal") || lower.contains("iterm") || lower.contains("kitty")
+                || lower.contains("alacritty") || lower.contains("warp") || lower.contains("ghostty") {
+                return true
+            }
+        }
+        guard let name else { return false }
+        let normalized = name.lowercased()
+        return terminalNameHints.contains { normalized.contains($0) }
+    }
+
+    private func insertViaAccessibility(_ text: String) -> Bool {
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        let focusStatus = AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        )
+        guard focusStatus == .success, let focusedRef else { return false }
+        let element = focusedRef as! AXUIElement
+
+        var roleRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef) == .success,
+           let role = roleRef as? String {
+            // Chromium/Electron composers are usually AXWebArea / AXGroup — AXSet is a no-op.
+            if role == "AXWebArea" || role == "AXUnknown" {
+                return false
+            }
+        }
+
+        let setStatus = AXUIElementSetAttributeValue(
+            element,
+            kAXSelectedTextAttribute as CFString,
+            text as CFTypeRef
+        )
+        guard setStatus == .success else { return false }
+
+        // Chromium often returns success without changing the field. Confirm it landed.
+        return accessibilityInsertVisible(on: element, text: text)
+    }
+
+    private func accessibilityInsertVisible(on element: AXUIElement, text: String) -> Bool {
+        var selectedRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selectedRef) == .success,
+           let selected = selectedRef as? String,
+           selected == text {
+            return true
+        }
+        var valueRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+           let value = valueRef as? String,
+           value.contains(text) {
+            return true
+        }
+        return false
+    }
+
+    private func insertViaClipboard(
+        _ text: String,
+        into targetApp: NSRunningApplication?,
+        preferSlowTiming: Bool
+    ) async -> Bool {
+        let pasteboard = NSPasteboard.general
+        let saved = snapshot(pasteboard)
+
+        pasteboard.clearContents()
+        let wrote = pasteboard.setString(text, forType: .string)
+        guard wrote else { return false }
+
+        await focusTargetApp(targetApp)
+
+        // Brief settle so the target app sees the new clipboard contents.
+        try? await Task.sleep(nanoseconds: preferSlowTiming ? 180_000_000 : 120_000_000)
+
+        postCommandV(to: targetApp?.processIdentifier)
+
+        // Electron / terminals need longer before it's safe to restore the clipboard.
+        let restoreNs: UInt64 = preferSlowTiming ? 700_000_000 : 450_000_000
+        try? await Task.sleep(nanoseconds: restoreNs)
+        restore(saved, to: pasteboard)
+        return true
+    }
+
+    private func focusTargetApp(_ app: NSRunningApplication?) async {
+        guard let app else { return }
+        let selfPID = ProcessInfo.processInfo.processIdentifier
+        guard app.processIdentifier != selfPID else { return }
+        if !app.isActive {
+            app.activate(options: [.activateIgnoringOtherApps])
+            try? await Task.sleep(nanoseconds: 80_000_000)
+        }
+    }
+
+    /// Four-event ⌘V via HID, posted to the target pid when possible.
+    /// Session-tap + flags-on-V-only is ignored by many Electron webviews (Grok Bot).
+    private func postCommandV(to pid: pid_t?) {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let cmd: CGKeyCode = CGKeyCode(kVK_Command)
+        let v: CGKeyCode = CGKeyCode(kVK_ANSI_V)
+
+        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: cmd, keyDown: true)
+        let vDown = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: true)
+        let vUp = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: false)
+        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: cmd, keyDown: false)
+        vDown?.flags = .maskCommand
+        vUp?.flags = .maskCommand
+
+        let events = [cmdDown, vDown, vUp, cmdUp]
+        if let pid {
+            for (index, event) in events.enumerated() {
+                event?.postToPid(pid)
+                usleep(index == 1 ? 12_000 : 8_000)
+            }
+        } else {
+            for (index, event) in events.enumerated() {
+                event?.post(tap: .cghidEventTap)
+                usleep(index == 1 ? 12_000 : 8_000)
+            }
+        }
+        usleep(20_000)
+    }
+
+    private struct PasteboardSnapshot {
+        let items: [[NSPasteboard.PasteboardType: Data]]
+    }
+
+    private func snapshot(_ pasteboard: NSPasteboard) -> PasteboardSnapshot {
+        var items: [[NSPasteboard.PasteboardType: Data]] = []
+        for item in pasteboard.pasteboardItems ?? [] {
+            var map: [NSPasteboard.PasteboardType: Data] = [:]
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    map[type] = data
+                }
+            }
+            items.append(map)
+        }
+        return PasteboardSnapshot(items: items)
+    }
+
+    private func restore(_ snapshot: PasteboardSnapshot, to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        for map in snapshot.items {
+            let item = NSPasteboardItem()
+            for (type, data) in map {
+                item.setData(data, forType: type)
+            }
+            pasteboard.writeObjects([item])
+        }
+    }
+}

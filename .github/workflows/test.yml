@@ -8,7 +8,8 @@ on:
 jobs:
   polish-tests:
     name: PolishTests
-    runs-on: macos-15
+    # mlx-swift 0.31.6 needs Swift 6.3 tools; macos-15 / Xcode 16.4 is Swift 6.1.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
@@ -20,5 +21,7 @@ jobs:
           xcodebuild test -scheme PolishTests \
             -destination 'platform=macOS,arch=arm64' \
             -derivedDataPath build/DerivedData \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO

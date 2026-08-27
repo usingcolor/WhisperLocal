@@ -70,7 +70,7 @@ final class TextInserter {
 
         // Strip BEL (\u{0007}) and other C0 controls — Terminal rings the bell on these.
         let sanitized = Self.sanitizeForPaste(text)
-        guard !sanitized.isEmpty else {
+        guard !sanitized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return InsertionResult(success: false, method: .failed, appName: appName)
         }
 
@@ -78,8 +78,11 @@ final class TextInserter {
         let useClipboardFirst = isTerminal || prefersClipboardPaste(app: frontApp, bundleID: bundleID)
 
         // Electron/Chromium (Grok Bot, Cursor, Chrome, …): AX insert lies about success.
-        if !useClipboardFirst, insertViaAccessibility(sanitized) {
+        switch insertViaAccessibility(sanitized, skip: useClipboardFirst) {
+        case .inserted, .unverified:
             return InsertionResult(success: true, method: .accessibility, appName: appName)
+        case .skipped, .failed:
+            break
         }
 
         let ok = await insertViaClipboard(
@@ -94,14 +97,13 @@ final class TextInserter {
         )
     }
 
-    /// Keep newlines/tabs; drop BEL and other control chars that make Terminal beep.
-    static func sanitizeForPaste(_ text: String) -> String {
+    /// Keep newlines/tabs/trailing spaces; drop BEL and other control chars that make Terminal beep.
+    nonisolated static func sanitizeForPaste(_ text: String) -> String {
         let filtered = text.unicodeScalars.filter { scalar in
             if scalar == "\n" || scalar == "\t" || scalar == "\r" { return true }
             return scalar.value >= 0x20 && scalar.value != 0x7F
         }
         return String(String.UnicodeScalarView(filtered))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func prefersClipboardPaste(app: NSRunningApplication?, bundleID: String?) -> Bool {
@@ -143,7 +145,17 @@ final class TextInserter {
         return terminalNameHints.contains { normalized.contains($0) }
     }
 
-    private func insertViaAccessibility(_ text: String) -> Bool {
+    private enum AccessibilityInsert {
+        case inserted
+        /// AXSet returned success but we could not confirm. Treat as done so we do not paste twice.
+        case unverified
+        case skipped
+        case failed
+    }
+
+    private func insertViaAccessibility(_ text: String, skip: Bool) -> AccessibilityInsert {
+        if skip { return .skipped }
+
         let systemWide = AXUIElementCreateSystemWide()
         var focusedRef: CFTypeRef?
         let focusStatus = AXUIElementCopyAttributeValue(
@@ -151,7 +163,7 @@ final class TextInserter {
             kAXFocusedUIElementAttribute as CFString,
             &focusedRef
         )
-        guard focusStatus == .success, let focusedRef else { return false }
+        guard focusStatus == .success, let focusedRef else { return .failed }
         let element = focusedRef as! AXUIElement
 
         var roleRef: CFTypeRef?
@@ -159,7 +171,7 @@ final class TextInserter {
            let role = roleRef as? String {
             // Chromium/Electron composers are usually AXWebArea / AXGroup — AXSet is a no-op.
             if role == "AXWebArea" || role == "AXUnknown" {
-                return false
+                return .failed
             }
         }
 
@@ -168,10 +180,13 @@ final class TextInserter {
             kAXSelectedTextAttribute as CFString,
             text as CFTypeRef
         )
-        guard setStatus == .success else { return false }
+        guard setStatus == .success else { return .failed }
 
         // Chromium often returns success without changing the field. Confirm it landed.
-        return accessibilityInsertVisible(on: element, text: text)
+        if accessibilityInsertVisible(on: element, text: text) {
+            return .inserted
+        }
+        return .unverified
     }
 
     private func accessibilityInsertVisible(on element: AXUIElement, text: String) -> Bool {
@@ -275,12 +290,15 @@ final class TextInserter {
 
     private func restore(_ snapshot: PasteboardSnapshot, to pasteboard: NSPasteboard) {
         pasteboard.clearContents()
-        for map in snapshot.items {
+        let items: [NSPasteboardItem] = snapshot.items.map { map in
             let item = NSPasteboardItem()
             for (type, data) in map {
                 item.setData(data, forType: type)
             }
-            pasteboard.writeObjects([item])
+            return item
+        }
+        if !items.isEmpty {
+            pasteboard.writeObjects(items)
         }
     }
 }

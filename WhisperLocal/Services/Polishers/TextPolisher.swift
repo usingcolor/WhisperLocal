@@ -24,10 +24,21 @@ enum PolisherError: LocalizedError {
         case .emptyResponse:
             return "The polish model returned an empty response."
         case .http(let code, let body):
-            return "Polish request failed (\(code)): \(body)"
+            return "Polish request failed (\(code)): \(Self.clipErrorBody(body))"
         case .notAvailable(let reason):
             return reason
         }
+    }
+
+    private static func clipErrorBody(_ body: String) -> String {
+        var text = body.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+        text = text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return "see Console" }
+        if text.count > 180 {
+            return String(text.prefix(180)) + "…"
+        }
+        return text
     }
 }
 

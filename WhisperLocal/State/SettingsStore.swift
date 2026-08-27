@@ -68,19 +68,18 @@ enum CloudPolishProvider: String, CaseIterable, Identifiable, Codable {
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
-    @AppStorage("asrModel") var asrModelRaw: String = ASRModelOption.smallEn.rawValue
-    @AppStorage("cloudPolishProvider") var cloudPolishProviderRaw: String = CloudPolishProvider.none.rawValue
-    @AppStorage("useAppleIntelligencePolish") var useLocalLLMPolish: Bool = true
-    /// Wispr/OpenWhispr-style: cleanup on by default (offline heuristic always; LLM when configured).
-    @AppStorage("enableTextCleanup") var enableTextCleanup: Bool = true
-    @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
-    @AppStorage("dictionaryWords") var dictionaryWordsRaw: String = ""
-    @AppStorage("dictionaryFullyEditable") var dictionaryFullyEditable: Bool = false
-    @AppStorage("cleanupPersonalContext") var cleanupPersonalContextRaw: String = ""
-    @AppStorage("cleanupPersonalContextMigrated") var cleanupPersonalContextMigrated: Bool = false
-    @AppStorage("openAIModel") var openAIModel: String = CloudModelCatalog.openAIDefault
-    @AppStorage("anthropicModel") var anthropicModel: String = CloudModelCatalog.anthropicDefault
-    @AppStorage("insertTrailingSpace") var insertTrailingSpace: Bool = true
+    @Published var asrModelRaw: String { didSet { persist(asrModelRaw, key: "asrModel") } }
+    @Published var cloudPolishProviderRaw: String { didSet { persist(cloudPolishProviderRaw, key: "cloudPolishProvider") } }
+    @Published var useLocalLLMPolish: Bool { didSet { persist(useLocalLLMPolish, key: "useAppleIntelligencePolish") } }
+    @Published var enableTextCleanup: Bool { didSet { persist(enableTextCleanup, key: "enableTextCleanup") } }
+    @Published var hasCompletedOnboarding: Bool { didSet { persist(hasCompletedOnboarding, key: "hasCompletedOnboarding") } }
+    @Published var dictionaryWordsRaw: String { didSet { persist(dictionaryWordsRaw, key: "dictionaryWords") } }
+    @Published var dictionaryFullyEditable: Bool { didSet { persist(dictionaryFullyEditable, key: "dictionaryFullyEditable") } }
+    @Published var cleanupPersonalContextRaw: String { didSet { persist(cleanupPersonalContextRaw, key: "cleanupPersonalContext") } }
+    @Published var cleanupPersonalContextMigrated: Bool { didSet { persist(cleanupPersonalContextMigrated, key: "cleanupPersonalContextMigrated") } }
+    @Published var openAIModel: String { didSet { persist(openAIModel, key: "openAIModel") } }
+    @Published var anthropicModel: String { didSet { persist(anthropicModel, key: "anthropicModel") } }
+    @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
 
     var asrModel: ASRModelOption {
         get { ASRModelOption(rawValue: asrModelRaw) ?? .smallEn }
@@ -129,8 +128,25 @@ final class SettingsStore: ObservableObject {
     }
 
     private init() {
+        let defaults = UserDefaults.standard
+        asrModelRaw = defaults.string(forKey: "asrModel") ?? ASRModelOption.smallEn.rawValue
+        cloudPolishProviderRaw = defaults.string(forKey: "cloudPolishProvider") ?? CloudPolishProvider.none.rawValue
+        useLocalLLMPolish = defaults.object(forKey: "useAppleIntelligencePolish") as? Bool ?? true
+        enableTextCleanup = defaults.object(forKey: "enableTextCleanup") as? Bool ?? true
+        hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
+        dictionaryWordsRaw = defaults.string(forKey: "dictionaryWords") ?? ""
+        dictionaryFullyEditable = defaults.bool(forKey: "dictionaryFullyEditable")
+        cleanupPersonalContextRaw = defaults.string(forKey: "cleanupPersonalContext") ?? ""
+        cleanupPersonalContextMigrated = defaults.bool(forKey: "cleanupPersonalContextMigrated")
+        openAIModel = defaults.string(forKey: "openAIModel") ?? CloudModelCatalog.openAIDefault
+        anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
+        insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
         migrateDictionaryStorage()
         migratePersonalContext()
+    }
+
+    private func persist(_ value: Any, key: String) {
+        UserDefaults.standard.set(value, forKey: key)
     }
 
     func addDictionaryWord(_ raw: String) {

@@ -7,17 +7,15 @@ final class RecordingHUDController: ObservableObject {
     @Published var audioLevel: Float = 0
 
     private var panel: NSPanel?
-    private var levelObserver: NSObjectProtocol?
     private var hideTask: Task<Void, Never>?
 
     func show(phase: DictationPhase, levelPublisher: AudioRecorder) {
         hideTask?.cancel()
         self.phase = phase
         ensurePanel()
+        positionOnActiveScreen()
         panel?.orderFrontRegardless()
 
-        // Poll audio level from recorder while visible
-        levelObserver = nil
         Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak levelPublisher] timer in
             Task { @MainActor in
                 guard let self, let levelPublisher, self.panel?.isVisible == true else {
@@ -25,11 +23,6 @@ final class RecordingHUDController: ObservableObject {
                     return
                 }
                 self.audioLevel = levelPublisher.audioLevel
-                if case .recording = self.phase {
-                    // keep polling
-                } else if self.phase != .recording {
-                    // still allow processing UI
-                }
             }
         }
     }
@@ -37,6 +30,7 @@ final class RecordingHUDController: ObservableObject {
     func update(phase: DictationPhase) {
         self.phase = phase
         ensurePanel()
+        positionOnActiveScreen()
         panel?.orderFrontRegardless()
     }
 
@@ -92,15 +86,19 @@ final class RecordingHUDController: ObservableObject {
         panel.ignoresMouseEvents = true
         panel.becomesKeyOnlyIfNeeded = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        if let screen = NSScreen.main {
-            let frame = screen.visibleFrame
-            let x = frame.midX - hosting.frame.width / 2
-            let y = frame.minY + 48
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
-        }
-
         self.panel = panel
+        positionOnActiveScreen()
+    }
+
+    private func positionOnActiveScreen() {
+        guard let panel else { return }
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+        guard let screen else { return }
+        let frame = screen.visibleFrame
+        let x = frame.midX - panel.frame.width / 2
+        let y = frame.minY + 48
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 }
 

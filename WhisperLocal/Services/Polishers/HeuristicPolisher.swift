@@ -49,8 +49,8 @@ struct HeuristicPolisher: TextPolisher {
             (#"\bclose quote\b"#, "\""),
             (#"\bcomma\b"#, ","),
             (#"\bcolon\b"#, ":"),
-            // Avoid "period of time"
-            (#"\bperiod\b(?!\s+of\b)"#, ".")
+            // Spoken "period" — not "period of time" / "lunch period and …"
+            (#"\bperiod\b(?!\s+(of|and|when|in|to|from)\b)"#, ".")
         ]
         for (pattern, replacement) in replacements {
             result = replacing(pattern, in: result, with: replacement)
@@ -142,8 +142,8 @@ struct HeuristicPolisher: TextPolisher {
         result = replacing(#",\s*i mean\s*,"#, in: result, with: " ")
         result = replacing(#"^i mean,?\s+"#, in: result, with: "")
         result = replacing(#"([.!?]\s+)i mean,?\s+"#, in: result, with: "$1")
-        result = replacing(#"\bsort of\b"#, in: result, with: "")
-        result = replacing(#"\bkind of\b"#, in: result, with: "")
+        result = replacing(#",\s*sort of\s*,"#, in: result, with: " ")
+        result = replacing(#",\s*kind of\s*,"#, in: result, with: " ")
         result = replacing(#",\s*like\s*,"#, in: result, with: " ")
         result = replacing(#"(?<=\s)like,(?=\s)"#, in: result, with: "")
         result = replacing(
@@ -161,7 +161,8 @@ struct HeuristicPolisher: TextPolisher {
     }
 
     private func collapseRepeatedBigrams(_ text: String) -> String {
-        replacing(#"\b((\w+)\s+(\w+))\s+\1\b"#, in: text, with: "$1")
+        // Only collapse lowercase repetitions ("i think i think"). Keep "New York New York".
+        replacing(#"\b(([a-z][\w']*)\s+([\w']+))\s+\1\b"#, in: text, with: "$1", caseInsensitive: false)
     }
 
     private func collapseWhitespace(_ text: String) -> String {
@@ -183,13 +184,17 @@ struct HeuristicPolisher: TextPolisher {
         var result = text
         for word in dictionary {
             let pattern = "\\b\(NSRegularExpression.escapedPattern(for: word))\\b"
-            result = replacing(pattern, in: result, with: word)
+            result = replacing(
+                pattern,
+                in: result,
+                with: NSRegularExpression.escapedTemplate(for: word)
+            )
         }
         return result
     }
 
     private func capitalizePronounI(_ text: String) -> String {
-        replacing(#"\bi\b"#, in: text, with: "I")
+        replacing(#"(?<!for |print )\bi\b"#, in: text, with: "I")
     }
 
     private func capitalizeSentenceStarts(_ text: String, dictionary: [String]) -> String {
@@ -230,9 +235,12 @@ struct HeuristicPolisher: TextPolisher {
     }
 
     private func punctuateLine(_ line: String) -> String {
-        let core = line.trimmingCharacters(in: .whitespaces)
+        var core = line.trimmingCharacters(in: .whitespaces)
+        while core.last == "," {
+            core = String(core.dropLast()).trimmingCharacters(in: .whitespaces)
+        }
         guard let last = core.last else { return line }
-        if ".!?:".contains(last) { return core }
+        if ".!?:;".contains(last) { return core }
 
         let firstWord = core.split(whereSeparator: { $0.isWhitespace || $0 == "'" }).first
             .map(String.init)?.lowercased() ?? ""
@@ -246,8 +254,15 @@ struct HeuristicPolisher: TextPolisher {
 
     // MARK: - Regex
 
-    private func replacing(_ pattern: String, in text: String, with template: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+    private func replacing(
+        _ pattern: String,
+        in text: String,
+        with template: String,
+        caseInsensitive: Bool = true
+    ) -> String {
+        var options: NSRegularExpression.Options = []
+        if caseInsensitive { options.insert(.caseInsensitive) }
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
             return text
         }
         let range = NSRange(text.startIndex..., in: text)

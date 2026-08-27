@@ -7,15 +7,20 @@ final class AudioRecorder: ObservableObject {
     @Published private(set) var audioLevel: Float = 0
 
     private let engine = AVAudioEngine()
-    private var samples: [Float] = []
+    private let lock = NSLock()
+    /// Filled on the audio tap thread; `stop()` reads it after `removeTap`.
+    nonisolated(unsafe) private var converter: AVAudioConverter?
+    nonisolated(unsafe) private var captured: [Float] = []
+
     private let targetSampleRate: Double = 16_000
-    private var converter: AVAudioConverter?
 
     /// Start capturing mono PCM at 16 kHz.
     func start() throws {
         guard !isRecording else { return }
 
-        samples.removeAll(keepingCapacity: true)
+        lock.lock()
+        captured.removeAll(keepingCapacity: true)
+        lock.unlock()
         audioLevel = 0
 
         let input = engine.inputNode
@@ -34,7 +39,7 @@ final class AudioRecorder: ObservableObject {
 
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.handleBuffer(buffer, outputFormat: outputFormat)
+            self?.ingest(buffer, outputFormat: outputFormat)
         }
 
         // Capture-only: never route mic to speakers (no click / feedback / effects).
@@ -47,55 +52,65 @@ final class AudioRecorder: ObservableObject {
 
     /// Stop and return Float32 mono samples at 16 kHz.
     func stop() -> [Float] {
-        guard isRecording else { return samples }
+        guard isRecording else { return snapshot() }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         isRecording = false
         audioLevel = 0
-        return samples
+        return snapshot()
     }
 
     func cancel() {
         _ = stop()
-        samples.removeAll()
+        lock.lock()
+        captured.removeAll()
+        lock.unlock()
     }
 
-    nonisolated private func handleBuffer(_ buffer: AVAudioPCMBuffer, outputFormat: AVAudioFormat) {
-        Task { @MainActor in
-            guard let converter else { return }
+    /// Convert inside the tap so AVAudioEngine's buffer is still valid, and so `stop()`
+    /// cannot return before the last buffers are appended.
+    nonisolated private func ingest(_ buffer: AVAudioPCMBuffer, outputFormat: AVAudioFormat) {
+        let ratio = outputFormat.sampleRate / buffer.format.sampleRate
+        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
+        guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return }
 
-            let ratio = outputFormat.sampleRate / buffer.format.sampleRate
-            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
-            guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        guard let converter else { return }
 
-            var error: NSError?
-            var consumed = false
-            let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-                if consumed {
-                    outStatus.pointee = .noDataNow
-                    return nil
-                }
-                consumed = true
-                outStatus.pointee = .haveData
-                return buffer
+        var error: NSError?
+        var consumed = false
+        let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
+            if consumed {
+                outStatus.pointee = .noDataNow
+                return nil
             }
-
-            converter.convert(to: converted, error: &error, withInputFrom: inputBlock)
-            guard error == nil, let channel = converted.floatChannelData?[0] else { return }
-
-            let frameCount = Int(converted.frameLength)
-            let pointer = UnsafeBufferPointer(start: channel, count: frameCount)
-            samples.append(contentsOf: pointer)
-
-            // Rough RMS for HUD meter
-            var sum: Float = 0
-            for i in 0..<frameCount {
-                let s = channel[i]
-                sum += s * s
-            }
-            let rms = sqrt(sum / Float(max(frameCount, 1)))
-            audioLevel = min(1, rms * 8)
+            consumed = true
+            outStatus.pointee = .haveData
+            return buffer
         }
+
+        converter.convert(to: converted, error: &error, withInputFrom: inputBlock)
+        guard error == nil, let channel = converted.floatChannelData?[0] else { return }
+
+        let frameCount = Int(converted.frameLength)
+        captured.append(contentsOf: UnsafeBufferPointer(start: channel, count: frameCount))
+
+        var sum: Float = 0
+        for i in 0..<frameCount {
+            let s = channel[i]
+            sum += s * s
+        }
+        let rms = min(1, sqrt(sum / Float(max(frameCount, 1))) * 8)
+        Task { @MainActor in
+            self.audioLevel = rms
+        }
+    }
+
+    nonisolated private func snapshot() -> [Float] {
+        lock.lock()
+        defer { lock.unlock() }
+        return captured
     }
 }
 

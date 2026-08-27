@@ -81,6 +81,31 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertEqual(repeats, "I think we should.")
     }
 
+    func testSpokenPeriodIsNotATimePeriod() async throws {
+        let text = try await polish("the meeting ran over the lunch period and then we left")
+        XCTAssertEqual(text, "The meeting ran over the lunch period and then we left.")
+    }
+
+    func testCodeAdjacentIStaysLowercase() async throws {
+        let text = try await polish("for i in range ten print i")
+        XCTAssertEqual(text, "For i in range ten print i.")
+    }
+
+    func testRepeatedProperNounBigramStays() async throws {
+        let text = try await polish("it was a New York New York kind of day")
+        XCTAssertEqual(text, "It was a New York New York kind of day.")
+    }
+
+    func testTrailingSpokenCommaDoesNotMakeCommaPeriod() async throws {
+        let text = try await polish("the list is apples comma bananas comma")
+        XCTAssertEqual(text, "The list is apples, bananas.")
+    }
+
+    func testDictionaryReplacementEscapesTemplates() async throws {
+        let text = try await polish("open $HOME please", dictionary: ["$HOME"])
+        XCTAssertEqual(text, "Open $HOME please.")
+    }
+
     func testPipelineOfflineCleanupIsSuccess() async {
         let pipeline = PolishPipeline(
             heuristic: HeuristicPolisher(),

@@ -51,3 +51,13 @@ final class DictationLogExportTests: XCTestCase {
         XCTAssertEqual(DictationLogExport.plainText(entries: []), "")
     }
 }
+
+final class TextInserterSanitizeTests: XCTestCase {
+    func testKeepsTrailingSpace() {
+        XCTAssertEqual(TextInserter.sanitizeForPaste("Hello world. "), "Hello world. ")
+    }
+
+    func testDropsBellButKeepsText() {
+        XCTAssertEqual(TextInserter.sanitizeForPaste("Hello\u{0007} world."), "Hello world.")
+    }
+}

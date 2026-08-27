@@ -135,7 +135,6 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         let prompt = CleanupPrompt.wrapTranscript(text)
         let options = GenerationOptions(
             sampling: .greedy,
-            temperature: 0.1,
             maximumResponseTokens: min(max(text.count / 2, 128), 1024)
         )
 
@@ -201,7 +200,12 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
                 || (first == "'" && last == "'")
                 || (first == "“" && last == "”")
             if quoted {
-                text = String(text.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+                let inner = String(text.dropFirst().dropLast())
+                let hasInnerQuotes = inner.contains("\"") || inner.contains("'")
+                    || inner.contains("“") || inner.contains("”")
+                if !hasInnerQuotes {
+                    text = inner.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
             }
         }
         return text

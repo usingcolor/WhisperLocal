@@ -111,30 +111,6 @@ struct SettingsView: View {
                 }
                 .disabled(!settings.enableTextCleanup)
 
-                if settings.cloudPolishProvider == .openAI {
-                    CloudModelPicker(
-                        title: "OpenAI model",
-                        options: models.openAIModels,
-                        modelID: $settings.openAIModel,
-                        isLoading: models.isLoadingOpenAI,
-                        status: models.openAIStatus,
-                        canUpdate: !settings.openAIAPIKey.isEmpty
-                    ) {
-                        Task { await models.fetchOpenAI(apiKey: settings.openAIAPIKey) }
-                    }
-                } else if settings.cloudPolishProvider == .anthropic {
-                    CloudModelPicker(
-                        title: "Anthropic model",
-                        options: models.anthropicModels,
-                        modelID: $settings.anthropicModel,
-                        isLoading: models.isLoadingAnthropic,
-                        status: models.anthropicStatus,
-                        canUpdate: !settings.anthropicAPIKey.isEmpty
-                    ) {
-                        Task { await models.fetchAnthropic(apiKey: settings.anthropicAPIKey) }
-                    }
-                }
-
                 Text("Audio never leaves your Mac. Cloud polish sends transcript text only when enabled and a key is saved.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -511,7 +487,7 @@ private struct CloudModelPicker: View {
                     Text(option.pickerLabel).tag(option.id)
                 }
             }
-            .onChange(of: options.map(\.id)) { _, ids in
+            .onChange(of: options.map(\.id), initial: true) { _, ids in
                 if !ids.contains(modelID), let first = ids.first {
                     modelID = first
                 }

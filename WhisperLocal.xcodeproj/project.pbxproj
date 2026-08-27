@@ -35,6 +35,7 @@
 		ACAF76996E8C668DA5DD5B75 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38C1D3FD905430B8186554D /* PermissionManager.swift */; };
 		ACDF4257E090B5ECF7FBA95D /* CloudModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */; };
 		B1D64CFE2C0FABC6720B622F /* DictationLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C627BF10D2B7C3284F755F0 /* DictationLogStore.swift */; };
+		B916FB2C7469C02FC54B3A0F /* TextInserter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D1E69A1A5E6E68B60D9D97 /* TextInserter.swift */; };
 		C0D2F80461008C6015974BDA /* TextPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C75C3C8A0CD848C604E695 /* TextPolisher.swift */; };
 		E5B382402026A0EA34458CA6 /* DictationLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B2368773CE8F483F2B05DC9 /* DictationLogView.swift */; };
 		F4C3CE0FA33D73AC4444CF46 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A99161BEE11539679C79444C /* FluidAudio */; };
@@ -299,6 +300,7 @@
 				B1D64CFE2C0FABC6720B622F /* DictationLogStore.swift in Sources */,
 				72AE2E57624415B1FECFEDF3 /* HeuristicPolisher.swift in Sources */,
 				9580B0607AA1C17304201CBD /* HeuristicPolisherTests.swift in Sources */,
+				B916FB2C7469C02FC54B3A0F /* TextInserter.swift in Sources */,
 				76EDAF7D6575021EF872530A /* TextPolisher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

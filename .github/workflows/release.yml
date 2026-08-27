@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    name: Build DMG
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build DMG
+        run: bash scripts/make-dmg.sh
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhisperLocal-dmg
+          path: dist/*.dmg
+
+      - name: Publish GitHub Release
+        if: github.repository == 'usingcolor/WhisperLocal' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          gh release create "$tag" dist/*.dmg \
+            --title "WhisperLocal ${version}" \
+            --notes "$(printf '%s\n' \
+              'Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applications.' \
+              '' \
+              'First launch: right-click the app → Open. This build is ad-hoc signed, not Apple-notarized, so Gatekeeper warns once.' \
+              '' \
+              'Then grant Microphone and Accessibility. The default Whisper model downloads on first use. Gemma 4 is optional (~2.7 GB) from Settings.')"

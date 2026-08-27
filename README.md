@@ -12,6 +12,16 @@ Native Swift / AppKit. On-device ASR via [WhisperKit](https://github.com/argmaxi
 
 > Early preview (`0.1.0`). Built for daily use on one machine; expect sharp edges.
 
+## Download
+
+Apple Silicon only. Get the DMG from [Releases](https://github.com/usingcolor/WhisperLocal/releases/latest) — no Xcode or git clone required.
+
+1. Open the disk image and drag **WhisperLocal** into **Applications**.
+2. First launch: right-click the app → **Open**. The download is ad-hoc signed (not Apple-notarized), so Gatekeeper warns once.
+3. Grant **Microphone** and **Accessibility**.
+
+Speech models download on first use. Optional Gemma 4 polish is another ~2.7 GB from Settings.
+
 ## Features
 
 - Menu-bar agent (no Dock icon)
@@ -43,11 +53,17 @@ Apple Intelligence polish needs **macOS 26+** with Apple Intelligence enabled. G
 
 ## Requirements
 
+To **run** the app:
+
 - Apple Silicon Mac (M1 or later)
 - macOS 14 or later
-- Xcode 16.4+ (Swift 6.1; needed by mlx-swift-lm 3.x)
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 - Microphone and Accessibility permissions
+
+To **build from source** you also need Xcode 16.4+ (mlx-swift 0.31.6 needs Swift 6.3 tools) and [XcodeGen](https://github.com/yonaskolb/XcodeGen). A Release DMG:
+
+```bash
+bash scripts/make-dmg.sh
+```
 
 The app is **not sandboxed**. Global hotkeys, Accessibility insertion, and synthetic paste need that.
 

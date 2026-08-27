@@ -175,16 +175,17 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertTrue(system.contains("WhisperLocal"))
         XCTAssertTrue(system.contains("Grok Bot"))
         XCTAssertFalse(system.contains("{{agentName}}"))
-        XCTAssertFalse(system.contains("Changho Choi"))
         XCTAssertFalse(system.contains("CUSTOM INSTRUCTIONS"))
+        XCTAssertFalse(system.contains("@gmail.com"))
     }
 
     func testPersonalContextIsInjected() {
-        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("Changho Choi"))
+        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("SPEAKER"))
+        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("WhisperKit follow-up for the next release."))
+        XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("@gmail.com"))
         let personalized = CleanupPrompt.system(personalContext: CleanupPrompt.defaultPersonalContext)
         XCTAssertTrue(personalized.contains("CUSTOM INSTRUCTIONS"))
-        XCTAssertTrue(personalized.contains("Changho Choi"))
-        XCTAssertTrue(personalized.contains("MambaEye follow-up for ICLR 2027."))
+        XCTAssertTrue(personalized.contains("WhisperKit follow-up for the next release."))
         let empty = CleanupPrompt.system(personalContext: "   ")
         XCTAssertFalse(empty.contains("CUSTOM INSTRUCTIONS"))
     }

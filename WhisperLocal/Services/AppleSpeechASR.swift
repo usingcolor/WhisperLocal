@@ -14,14 +14,14 @@ final class AppleSpeechASR {
     /// Holds the prewarm analyzer so `processLifetime` models stay resident.
     private var retainedWarmup: Any?
 
-    static var isAvailable: Bool {
+    nonisolated static var isAvailable: Bool {
         if #available(macOS 26.0, *) {
             return SpeechTranscriber.isAvailable
         }
         return false
     }
 
-    static var availabilityMessage: String {
+    nonisolated static var availabilityMessage: String {
         if #available(macOS 26.0, *) {
             if SpeechTranscriber.isAvailable {
                 return "On-device Apple SpeechTranscriber. English. The system may download a shared speech model on first use."

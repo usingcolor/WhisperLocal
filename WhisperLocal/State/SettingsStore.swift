@@ -111,10 +111,7 @@ final class SettingsStore: ObservableObject {
 
     var cleanupPersonalContext: String {
         get { cleanupPersonalContextRaw }
-        set {
-            cleanupPersonalContextRaw = newValue
-            objectWillChange.send()
-        }
+        set { cleanupPersonalContextRaw = newValue }
     }
 
     var dictionaryWords: [String] {
@@ -123,7 +120,6 @@ final class SettingsStore: ObservableObject {
         }
         set {
             dictionaryWordsRaw = CleanupPrompt.mergedDictionary(newValue).joined(separator: ", ")
-            objectWillChange.send()
         }
     }
 

@@ -60,4 +60,9 @@ final class TextInserterSanitizeTests: XCTestCase {
     func testDropsBellButKeepsText() {
         XCTAssertEqual(TextInserter.sanitizeForPaste("Hello\u{0007} world."), "Hello world.")
     }
+
+    func testUnverifiedInsertMethodIsDistinctFromConfirmedAccessibility() {
+        XCTAssertEqual(InsertionMethod.accessibility.rawValue, "accessibility")
+        XCTAssertEqual(InsertionMethod.accessibilityUnverified.rawValue, "accessibility-unverified")
+    }
 }

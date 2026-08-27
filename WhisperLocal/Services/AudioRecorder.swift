@@ -9,7 +9,6 @@ final class AudioRecorder: ObservableObject {
     private let engine = AVAudioEngine()
     private let lock = NSLock()
     /// Filled on the audio tap thread; `stop()` reads it after `removeTap`.
-    nonisolated(unsafe) private var converter: AVAudioConverter?
     nonisolated(unsafe) private var captured: [Float] = []
 
     private let targetSampleRate: Double = 16_000
@@ -35,11 +34,13 @@ final class AudioRecorder: ObservableObject {
             throw AudioRecorderError.formatUnavailable
         }
 
-        converter = AVAudioConverter(from: inputFormat, to: outputFormat)
+        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+            throw AudioRecorderError.converterUnavailable
+        }
 
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.ingest(buffer, outputFormat: outputFormat)
+            self?.ingest(buffer, outputFormat: outputFormat, converter: converter)
         }
 
         // Capture-only: never route mic to speakers (no click / feedback / effects).
@@ -68,15 +69,16 @@ final class AudioRecorder: ObservableObject {
     }
 
     /// Convert inside the tap so AVAudioEngine's buffer is still valid, and so `stop()`
-    /// cannot return before the last buffers are appended.
-    nonisolated private func ingest(_ buffer: AVAudioPCMBuffer, outputFormat: AVAudioFormat) {
+    /// cannot return before the last buffers are appended. The converter lives in the
+    /// tap closure — it is not shared with a later `start()`.
+    nonisolated private func ingest(
+        _ buffer: AVAudioPCMBuffer,
+        outputFormat: AVAudioFormat,
+        converter: AVAudioConverter
+    ) {
         let ratio = outputFormat.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
         guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return }
-
-        lock.lock()
-        defer { lock.unlock() }
-        guard let converter else { return }
 
         var error: NSError?
         var consumed = false
@@ -94,7 +96,9 @@ final class AudioRecorder: ObservableObject {
         guard error == nil, let channel = converted.floatChannelData?[0] else { return }
 
         let frameCount = Int(converted.frameLength)
+        lock.lock()
         captured.append(contentsOf: UnsafeBufferPointer(start: channel, count: frameCount))
+        lock.unlock()
 
         var sum: Float = 0
         for i in 0..<frameCount {
@@ -116,11 +120,14 @@ final class AudioRecorder: ObservableObject {
 
 enum AudioRecorderError: LocalizedError {
     case formatUnavailable
+    case converterUnavailable
 
     var errorDescription: String? {
         switch self {
         case .formatUnavailable:
             return "Could not create 16 kHz mono audio format."
+        case .converterUnavailable:
+            return "Could not create the 16 kHz audio converter."
         }
     }
 }

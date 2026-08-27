@@ -5,6 +5,8 @@ import Foundation
 
 enum InsertionMethod: String {
     case accessibility
+    /// AXSet returned success but the field could not be confirmed.
+    case accessibilityUnverified = "accessibility-unverified"
     case clipboard
     case failed
 }
@@ -79,8 +81,10 @@ final class TextInserter {
 
         // Electron/Chromium (Grok Bot, Cursor, Chrome, …): AX insert lies about success.
         switch insertViaAccessibility(sanitized, skip: useClipboardFirst) {
-        case .inserted, .unverified:
+        case .inserted:
             return InsertionResult(success: true, method: .accessibility, appName: appName)
+        case .unverified:
+            return InsertionResult(success: true, method: .accessibilityUnverified, appName: appName)
         case .skipped, .failed:
             break
         }

@@ -1,0 +1,24 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, oss]
+  pull_request:
+
+jobs:
+  polish-tests:
+    name: PolishTests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Run PolishTests
+        run: |
+          xcodebuild test -scheme PolishTests \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO

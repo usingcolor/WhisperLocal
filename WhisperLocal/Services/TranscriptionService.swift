@@ -59,13 +59,17 @@ final class TranscriptionService: ObservableObject {
     }
 
     /// Transcribe 16 kHz mono Float32 samples.
-    func transcribe(samples: [Float]) async throws -> String {
+    func transcribe(samples: [Float], extraDictionary: [String] = []) async throws -> String {
         guard isReady, loadedModel == requestedModel, let model = loadedModel else {
             throw TranscriptionError.modelNotLoaded
         }
         guard !samples.isEmpty else {
             throw TranscriptionError.emptyAudio
         }
+
+        let dictionary = CleanupPrompt.mergedDictionary(
+            SettingsStore.shared.dictionaryWords + extraDictionary
+        )
 
         switch model.engine {
         case .whisper:
@@ -75,7 +79,7 @@ final class TranscriptionService: ObservableObject {
         case .appleSpeech:
             return try await AppleSpeechASR.shared.transcribe(
                 samples: samples,
-                dictionary: SettingsStore.shared.dictionaryWords
+                dictionary: dictionary
             )
         }
     }

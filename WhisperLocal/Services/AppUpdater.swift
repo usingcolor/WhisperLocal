@@ -1,0 +1,300 @@
+import AppKit
+import Foundation
+
+/// Fetches the public GitHub Release DMG and replaces `/Applications/WhisperLocal.app`.
+/// UserDefaults and Keychain are outside the bundle, so personal settings stay put.
+@MainActor
+final class AppUpdater: ObservableObject {
+    static let shared = AppUpdater()
+
+    enum Status: Equatable {
+        case idle
+        case checking
+        case upToDate
+        case available(AppUpdateFeed.Release)
+        case downloading
+        case installing
+        case failed(String)
+    }
+
+    @Published private(set) var status: Status = .idle
+
+    static var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+    }
+
+    var isBusy: Bool {
+        switch status {
+        case .checking, .downloading, .installing: return true
+        default: return false
+        }
+    }
+
+    var menuTitle: String {
+        switch status {
+        case .idle:
+            return "Check for Updates…"
+        case .checking:
+            return "Checking for Updates…"
+        case .upToDate:
+            return "Up to Date (\(Self.currentVersion))"
+        case .available(let release):
+            return "Install \(release.version)…"
+        case .downloading:
+            return "Downloading Update…"
+        case .installing:
+            return "Installing Update…"
+        case .failed:
+            return "Update Failed — Try Again"
+        }
+    }
+
+    private let installURL = URL(fileURLWithPath: "/Applications/WhisperLocal.app")
+
+    func handleMenuClick() async {
+        switch status {
+        case .available(let release):
+            confirmAndInstall(release)
+        default:
+            await checkAndPrompt()
+        }
+    }
+
+    func checkAndPrompt() async {
+        await check()
+        promptForCurrentStatus()
+    }
+
+    func check() async {
+        status = .checking
+        do {
+            let release = try await fetchLatestRelease()
+            if AppUpdateFeed.isNewer(latest: release.version, current: Self.currentVersion) {
+                status = .available(release)
+            } else {
+                status = .upToDate
+            }
+        } catch {
+            status = .failed(error.localizedDescription)
+        }
+    }
+
+    private func fetchLatestRelease() async throws -> AppUpdateFeed.Release {
+        var request = URLRequest(url: AppUpdateFeed.latestReleaseURL)
+        request.setValue("WhisperLocal/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 20
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else {
+            throw UpdateError.http(code)
+        }
+        return try AppUpdateFeed.parseRelease(from: data)
+    }
+
+    private func promptForCurrentStatus() {
+        switch status {
+        case .upToDate:
+            alert(
+                title: "WhisperLocal is up to date",
+                message: "This Mac is running \(Self.currentVersion). Personal settings are not changed by an update."
+            )
+        case .available(let release):
+            confirmAndInstall(release)
+        case .failed(let message):
+            alert(title: "Could not check for updates", message: message)
+        default:
+            break
+        }
+    }
+
+    private func confirmAndInstall(_ release: AppUpdateFeed.Release) {
+        let alert = NSAlert()
+        alert.messageText = "Install WhisperLocal \(release.version)?"
+        alert.informativeText = """
+        Downloads the public DMG from GitHub (\(AppUpdateFeed.owner)/\(AppUpdateFeed.repo)) and replaces \(installURL.path).
+
+        Custom instructions, dictionary, and other Settings stay on this Mac. They are not inside the app bundle.
+
+        The public build is ad-hoc signed. You may need to approve Accessibility again after the first launch.
+        """
+        alert.addButton(withTitle: "Install")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task { await install(release) }
+    }
+
+    private func install(_ release: AppUpdateFeed.Release) async {
+        status = .downloading
+        let work = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperLocalUpdate-\(UUID().uuidString)", isDirectory: true)
+        let mount = work.appendingPathComponent("mount", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            let dmg = work.appendingPathComponent(release.dmgName)
+            try await download(from: release.dmgURL, to: dmg)
+            status = .installing
+            try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
+            try attach(dmg: dmg, mount: mount)
+            let sourceApp = try findApp(on: mount)
+            try verifyBundle(at: sourceApp)
+            try spawnInstaller(
+                dmg: dmg,
+                mount: mount,
+                sourceApp: sourceApp,
+                destination: installURL
+            )
+            NSApplication.shared.terminate(nil)
+        } catch {
+            _ = try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"])
+            try? FileManager.default.removeItem(at: work)
+            status = .failed(error.localizedDescription)
+            alert(title: "Update failed", message: error.localizedDescription)
+        }
+    }
+
+    private func download(from url: URL, to destination: URL) async throws {
+        guard AppUpdateFeed.isTrustedDownloadURL(url) else {
+            throw UpdateError.untrustedURL
+        }
+        var request = URLRequest(url: url)
+        request.setValue("WhisperLocal/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 300
+        let (temp, response) = try await URLSession.shared.download(for: request)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else { throw UpdateError.http(code) }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: temp, to: destination)
+        let values = try destination.resourceValues(forKeys: [.fileSizeKey])
+        if let size = values.fileSize, size < 1_000_000 {
+            throw UpdateError.dmgTooSmall
+        }
+    }
+
+    private func attach(dmg: URL, mount: URL) throws {
+        try run("/usr/bin/hdiutil", [
+            "attach", dmg.path,
+            "-nobrowse",
+            "-readonly",
+            "-mountpoint", mount.path
+        ])
+    }
+
+    private func findApp(on mount: URL) throws -> URL {
+        let direct = mount.appendingPathComponent("WhisperLocal.app")
+        if FileManager.default.fileExists(atPath: direct.path) {
+            return direct
+        }
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: mount,
+            includingPropertiesForKeys: nil
+        )
+        if let app = contents.first(where: { $0.pathExtension == "app" }) {
+            return app
+        }
+        throw UpdateError.missingAppOnDMG
+    }
+
+    private func verifyBundle(at url: URL) throws {
+        guard let bundle = Bundle(url: url),
+              bundle.bundleIdentifier == "com.usingcolor.WhisperLocal" else {
+            throw UpdateError.wrongBundle
+        }
+    }
+
+    private func spawnInstaller(dmg: URL, mount: URL, sourceApp: URL, destination: URL) throws {
+        let script = """
+        #!/bin/bash
+        set -euo pipefail
+        pid="$1"
+        mount="$2"
+        src="$3"
+        dest="$4"
+        work="$5"
+        while /bin/kill -0 "$pid" 2>/dev/null; do
+          sleep 0.2
+        done
+        sleep 0.4
+        /usr/bin/ditto "$src" "$dest"
+        /usr/bin/hdiutil detach "$mount" -quiet || true
+        /usr/bin/xattr -dr com.apple.quarantine "$dest" || true
+        /usr/bin/open "$dest"
+        /bin/rm -rf "$work"
+        """
+        let scriptURL = dmg.deletingLastPathComponent().appendingPathComponent("install.sh")
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: scriptURL.path
+        )
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [
+            scriptURL.path,
+            String(ProcessInfo.processInfo.processIdentifier),
+            mount.path,
+            sourceApp.path,
+            destination.path,
+            dmg.deletingLastPathComponent().path
+        ]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+    }
+
+    @discardableResult
+    private func run(_ launchPath: String, _ arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: launchPath)
+        process.arguments = arguments
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            throw UpdateError.commandFailed(launchPath, err)
+        }
+        return String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    }
+
+    private func alert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.runModal()
+    }
+
+    enum UpdateError: LocalizedError {
+        case http(Int)
+        case untrustedURL
+        case dmgTooSmall
+        case missingAppOnDMG
+        case wrongBundle
+        case commandFailed(String, String)
+
+        var errorDescription: String? {
+            switch self {
+            case .http(let code):
+                return "GitHub returned HTTP \(code)."
+            case .untrustedURL:
+                return "The download URL was not a GitHub release asset."
+            case .dmgTooSmall:
+                return "The downloaded file was too small to be a WhisperLocal DMG."
+            case .missingAppOnDMG:
+                return "The disk image did not contain WhisperLocal.app."
+            case .wrongBundle:
+                return "The disk image app is not com.usingcolor.WhisperLocal."
+            case .commandFailed(let command, let err):
+                let detail = err.trimmingCharacters(in: .whitespacesAndNewlines)
+                if detail.isEmpty { return "\(command) failed." }
+                return "\(command) failed: \(detail)"
+            }
+        }
+    }
+}

@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct WhisperLocalApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var controller = DictationController.shared
 
     var body: some Scene {
@@ -21,7 +22,8 @@ struct WhisperLocalApp: App {
             SettingsView(controller: controller)
                 .raiseWindowOnAppear()
         }
-        .defaultSize(width: 560, height: 680)
+        .defaultSize(width: 740, height: 560)
+        .windowResizability(.contentMinSize)
         .defaultPosition(.center)
 
         Window("Dictation Log", id: "log") {
@@ -35,12 +37,15 @@ struct WhisperLocalApp: App {
             OnboardingView(controller: controller)
                 .raiseWindowOnAppear()
         }
-        .defaultSize(width: 500, height: 420)
+        .defaultSize(width: 520, height: 560)
         .windowResizability(.contentSize)
         .defaultPosition(.center)
     }
 
     private func menuBarIcon(for phase: DictationPhase) -> String {
+        if !controller.permissions.allGranted {
+            return "exclamationmark.triangle"
+        }
         if controller.transcription.isLoadingModel {
             return "arrow.down.circle"
         }
@@ -59,10 +64,17 @@ struct WhisperLocalApp: App {
 
 struct MenuBarContent: View {
     @ObservedObject var controller: DictationController
+    @ObservedObject private var permissions = PermissionManager.shared
+    @ObservedObject private var updater = AppUpdater.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Text(statusLine)
+        Text("Version \(AppUpdater.currentVersion)")
+        Button(updater.menuTitle) {
+            Task { await updater.handleMenuClick() }
+        }
+        .disabled(updater.isBusy)
         Divider()
         Button("Settings…") {
             AppWindowFocus.present(title: "WhisperLocal Settings") {
@@ -103,6 +115,12 @@ struct MenuBarContent: View {
     }
 
     private var statusLine: String {
+        if !permissions.inputMonitoringTrusted {
+            return "Input Monitoring missing — hotkey won’t fire in other apps"
+        }
+        if !permissions.accessibilityTrusted {
+            return "Accessibility missing — text won’t paste into other apps"
+        }
         if controller.transcription.isLoadingModel || !controller.transcription.isReady {
             return controller.transcription.statusMessage
         }

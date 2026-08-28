@@ -17,6 +17,108 @@ struct InsertionResult {
     let appName: String?
 }
 
+/// Frontmost app at dictation start. Fed to polish LLMs as formatting context, not as transcript text.
+struct TargetAppContext: Sendable, Equatable {
+    enum Kind: String, Sendable, CaseIterable, Identifiable {
+        case codeEditor = "code editor"
+        case terminal = "terminal"
+        case chat = "chat app"
+        case browser = "browser"
+        case mail = "mail app"
+        case notes = "notes app"
+        case other = "app"
+
+        var id: String { rawValue }
+
+        var menuLabel: String {
+            switch self {
+            case .other: return "Other"
+            default: return rawValue.capitalized
+            }
+        }
+    }
+
+    let name: String
+    let bundleID: String?
+    let kind: Kind
+
+    var promptLine: String {
+        kind == .other ? name : "\(name) — \(kind.rawValue)"
+    }
+
+    static func captureFrontmost() -> TargetAppContext? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        if let id = app.bundleIdentifier, id == Bundle.main.bundleIdentifier {
+            return nil
+        }
+        let name = app.localizedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !name.isEmpty else { return nil }
+        let bundleID = app.bundleIdentifier
+        return TargetAppContext(
+            name: name,
+            bundleID: bundleID,
+            kind: kind(bundleID: bundleID, name: name)
+        )
+    }
+
+    static func kind(bundleID: String?, name: String?) -> Kind {
+        let id = (bundleID ?? "").lowercased()
+        let n = (name ?? "").lowercased()
+
+        if matches(id, n, ids: [
+            "com.anysphere.cursor", "com.anysphere.sand", "com.todesktop.230313mzl4w4u92",
+            "com.microsoft.vscode", "com.apple.dt.xcode", "com.panic.nova",
+            "com.sublimetext.4", "com.microsoft.VSCode"
+        ], names: ["cursor", "visual studio code", "vs code", "xcode", "nova", "sublime text"]) {
+            return .codeEditor
+        }
+        if matches(id, n, ids: [
+            "com.apple.terminal", "com.googlecode.iterm2", "net.kovidgoyal.kitty",
+            "io.alacritty", "dev.warp.warp-stable", "dev.warp.warp",
+            "com.mitchellh.ghostty", "com.github.wez.wezterm"
+        ], names: ["terminal", "iterm", "kitty", "alacritty", "warp", "ghostty", "wezterm"]) {
+            return .terminal
+        }
+        if matches(id, n, ids: [
+            "com.tinyspeck.slackmacgap", "com.hnc.discord", "com.openai.chat",
+            "com.anthropic.claudefordesktop", "net.whatsapp.whatsapp",
+            "com.apple.ichat", "com.apple.MobileSMS", "ru.keepcoder.telegram"
+        ], names: ["slack", "discord", "chatgpt", "claude", "messages", "telegram", "whatsapp"]) {
+            return .chat
+        }
+        if matches(id, n, ids: [
+            "com.google.chrome", "com.apple.safari", "company.thebrowser.browser",
+            "com.brave.browser", "com.microsoft.edgemac", "org.mozilla.firefox"
+        ], names: ["chrome", "safari", "arc", "brave", "edge", "firefox"]) {
+            return .browser
+        }
+        if matches(id, n, ids: ["com.apple.mail", "com.readdle.smartemail-mac"], names: ["mail", "spark"]) {
+            return .mail
+        }
+        if matches(id, n, ids: [
+            "com.apple.notes", "md.obsidian", "notion.id", "com.apple.iwork.pages"
+        ], names: ["notes", "obsidian", "notion", "pages"]) {
+            return .notes
+        }
+        if id.contains("anysphere") || n.contains("cursor") { return .codeEditor }
+        if id.contains("terminal") || id.contains("iterm") { return .terminal }
+        if id.contains("chrom") || id.contains("safari") { return .browser }
+        return .other
+    }
+
+    private static func matches(
+        _ id: String,
+        _ name: String,
+        ids: [String],
+        names: [String]
+    ) -> Bool {
+        if ids.contains(where: { id == $0.lowercased() || id.hasPrefix($0.lowercased() + ".") }) {
+            return true
+        }
+        return names.contains { name.contains($0) }
+    }
+}
+
 @MainActor
 final class TextInserter {
     static let shared = TextInserter()

@@ -109,9 +109,16 @@ final class SettingsStore: ObservableObject {
     @Published var dictionaryFullyEditable: Bool { didSet { persist(dictionaryFullyEditable, key: "dictionaryFullyEditable") } }
     @Published var cleanupPersonalContextRaw: String { didSet { persist(cleanupPersonalContextRaw, key: "cleanupPersonalContext") } }
     @Published var cleanupPersonalContextMigrated: Bool { didSet { persist(cleanupPersonalContextMigrated, key: "cleanupPersonalContextMigrated") } }
+    @Published var cleanupPersonalNotesRaw: String { didSet { persist(cleanupPersonalNotesRaw, key: "cleanupPersonalNotes") } }
+    @Published var cleanupPersonalExamplesRaw: String { didSet { persist(cleanupPersonalExamplesRaw, key: "cleanupPersonalExamples") } }
+    @Published var cleanupExceptionsRaw: String { didSet { persist(cleanupExceptionsRaw, key: "cleanupExceptions") } }
+    @Published var appDictionariesRaw: String { didSet { persist(appDictionariesRaw, key: "appDictionaries") } }
+    @Published var hiddenAppDictionaryNamesRaw: String { didSet { persist(hiddenAppDictionaryNamesRaw, key: "hiddenAppDictionaryNames") } }
+    @Published var systemPromptLayersMigrated: Bool { didSet { persist(systemPromptLayersMigrated, key: "systemPromptLayersMigrated") } }
     @Published var openAIModel: String { didSet { persist(openAIModel, key: "openAIModel") } }
     @Published var anthropicModel: String { didSet { persist(anthropicModel, key: "anthropicModel") } }
     @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
+    @Published var promptCommitForced: Bool { didSet { persist(promptCommitForced, key: "promptCommitForced") } }
 
     var asrModel: ASRModelOption {
         get { ASRModelOption(rawValue: asrModelRaw) ?? .defaultModel }
@@ -163,6 +170,69 @@ final class SettingsStore: ObservableObject {
         set { cleanupPersonalContextRaw = newValue }
     }
 
+    var cleanupPersonalNotes: String {
+        get { cleanupPersonalNotesRaw }
+        set { cleanupPersonalNotesRaw = newValue }
+    }
+
+    var cleanupPersonalExamples: String {
+        get { cleanupPersonalExamplesRaw }
+        set { cleanupPersonalExamplesRaw = newValue }
+    }
+
+    var cleanupExceptions: String {
+        get { cleanupExceptionsRaw }
+        set { cleanupExceptionsRaw = CleanupPrompt.strippedUserExceptions(newValue) }
+    }
+
+    var appDictionaries: [AppDictionaryEntry] {
+        get {
+            guard let data = appDictionariesRaw.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([AppDictionaryEntry].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            let data = (try? JSONEncoder().encode(newValue)) ?? Data("[]".utf8)
+            let encoded = String(data: data, encoding: .utf8) ?? "[]"
+            if encoded != appDictionariesRaw {
+                appDictionariesRaw = encoded
+            }
+        }
+    }
+
+    private var hiddenAppDictionaryNames: Set<String> {
+        get {
+            guard let data = hiddenAppDictionaryNamesRaw.data(using: .utf8),
+                  let names = try? JSONDecoder().decode([String].self, from: data) else {
+                return []
+            }
+            return Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty })
+        }
+        set {
+            let names = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+                .sorted()
+            let data = (try? JSONEncoder().encode(names)) ?? Data("[]".utf8)
+            hiddenAppDictionaryNamesRaw = String(data: data, encoding: .utf8) ?? "[]"
+        }
+    }
+
+    var draftSystemPrompt: String {
+        CleanupPrompt.assembleUserLayers(
+            personalNotes: cleanupPersonalNotes,
+            exceptions: cleanupExceptions,
+            appDictionaries: appDictionaries,
+            examples: cleanupPersonalExamples
+        )
+    }
+
+    var isSystemPromptStale: Bool {
+        promptCommitForced || draftSystemPrompt != cleanupPersonalContext
+    }
+
     var dictionaryWords: [String] {
         get {
             CleanupPrompt.mergedDictionary(parseDictionaryList(dictionaryWordsRaw))
@@ -184,15 +254,28 @@ final class SettingsStore: ObservableObject {
         dictionaryFullyEditable = defaults.bool(forKey: "dictionaryFullyEditable")
         cleanupPersonalContextRaw = defaults.string(forKey: "cleanupPersonalContext") ?? ""
         cleanupPersonalContextMigrated = defaults.bool(forKey: "cleanupPersonalContextMigrated")
+        cleanupPersonalNotesRaw = defaults.string(forKey: "cleanupPersonalNotes") ?? ""
+        cleanupPersonalExamplesRaw = defaults.string(forKey: "cleanupPersonalExamples") ?? ""
+        cleanupExceptionsRaw = CleanupPrompt.strippedUserExceptions(
+            defaults.string(forKey: "cleanupExceptions") ?? ""
+        )
+        appDictionariesRaw = defaults.string(forKey: "appDictionaries") ?? "[]"
+        hiddenAppDictionaryNamesRaw = defaults.string(forKey: "hiddenAppDictionaryNames") ?? "[]"
+        systemPromptLayersMigrated = defaults.bool(forKey: "systemPromptLayersMigrated")
         openAIModel = defaults.string(forKey: "openAIModel") ?? CloudModelCatalog.openAIDefault
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
+        promptCommitForced = defaults.bool(forKey: "promptCommitForced")
         if defaults.string(forKey: "localPolishEngine") != localPolishEngineRaw {
             UserDefaults.standard.set(localPolishEngineRaw, forKey: "localPolishEngine")
         }
         migrateFactoryASRDefault()
         migrateDictionaryStorage()
         migratePersonalContext()
+        migrateSystemPromptLayers()
+        migrateShorterPersonalNotes()
+        migratePersonalExamples()
+        ensurePresetApps()
     }
 
     /// One-time: the old factory ASR was Whisper Small. Move that default to Apple Speech.
@@ -240,11 +323,178 @@ final class SettingsStore: ObservableObject {
     }
 
     func restoreDefaultPersonalContext() {
-        cleanupPersonalContext = CleanupPrompt.defaultPersonalContext
+        cleanupPersonalNotes = CleanupPrompt.defaultPersonalNotes
+        cleanupPersonalExamples = CleanupPrompt.defaultPersonalExamples
+        cleanupExceptions = CleanupPrompt.defaultExceptions
     }
 
     func clearPersonalContext() {
-        cleanupPersonalContext = ""
+        cleanupPersonalNotes = ""
+    }
+
+    func clearPersonalExamples() {
+        cleanupPersonalExamples = ""
+    }
+
+    func clearExceptions() {
+        cleanupExceptions = ""
+    }
+
+    func commitSystemPrompt() {
+        cleanupPersonalContext = draftSystemPrompt
+        promptCommitForced = false
+    }
+
+    func matchingAppDictionaryTerms(targetApp: String?) -> [String] {
+        CleanupPrompt.matchingDictionaryTerms(in: appDictionaries, targetApp: targetApp)
+    }
+
+    func addAppDictionary(_ entry: AppDictionaryEntry) {
+        let nameKey = Self.appNameKey(entry.appName)
+        guard !nameKey.isEmpty else { return }
+        var hidden = hiddenAppDictionaryNames
+        hidden.remove(nameKey)
+        hiddenAppDictionaryNames = hidden
+        var entries = appDictionaries
+        if entries.contains(where: { Self.appNameKey($0.appName) == nameKey }) {
+            return
+        }
+        entries.append(entry)
+        appDictionaries = entries
+        promptCommitForced = true
+    }
+
+    func removeAppDictionary(id: UUID) {
+        guard let entry = appDictionaries.first(where: { $0.id == id }) else { return }
+        let nameKey = Self.appNameKey(entry.appName)
+        if !nameKey.isEmpty {
+            var hidden = hiddenAppDictionaryNames
+            hidden.insert(nameKey)
+            hiddenAppDictionaryNames = hidden
+        }
+        appDictionaries = appDictionaries.filter { $0.id != id }
+        promptCommitForced = true
+    }
+
+    func addAppDictionaryTerm(id: UUID, raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var entries = appDictionaries
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        let key = trimmed.lowercased()
+        if entries[index].terms.contains(where: { $0.lowercased() == key }) { return }
+        entries[index].terms.append(trimmed)
+        entries[index].terms = CleanupPrompt.mergedDictionary(entries[index].terms)
+        appDictionaries = entries
+    }
+
+    func removeAppDictionaryTerm(id: UUID, term: String) {
+        let key = term.lowercased()
+        var entries = appDictionaries
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[index].terms = entries[index].terms.filter { $0.lowercased() != key }
+        appDictionaries = entries
+    }
+
+    func ensurePresetApps() {
+        let hidden = hiddenAppDictionaryNames
+        var entries = appDictionaries.filter {
+            !$0.appName.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#")
+        }
+        for preset in AppDictionaryEntry.presets {
+            let key = Self.appNameKey(preset.appName)
+            if hidden.contains(key) { continue }
+            if let index = entries.firstIndex(where: { Self.appNameKey($0.appName) == key }) {
+                if entries[index].kind.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    entries[index].kind = preset.kind
+                }
+            } else {
+                entries.append(AppDictionaryEntry(appName: preset.appName, kind: preset.kind))
+            }
+        }
+        let presetKeys = AppDictionaryEntry.presets.map { Self.appNameKey($0.appName) }
+        var ordered: [AppDictionaryEntry] = []
+        for preset in AppDictionaryEntry.presets {
+            let key = Self.appNameKey(preset.appName)
+            if let found = entries.first(where: { Self.appNameKey($0.appName) == key }) {
+                ordered.append(found)
+            }
+        }
+        ordered.append(contentsOf: entries.filter { entry in
+            !presetKeys.contains(Self.appNameKey(entry.appName))
+        })
+        appDictionaries = ordered
+    }
+
+    func applyDictionarySnapshot(_ snapshot: DictionaryCSV.Snapshot, replace: Bool) {
+        if !snapshot.apps.isEmpty {
+            var hidden = hiddenAppDictionaryNames
+            for app in snapshot.apps {
+                hidden.remove(Self.appNameKey(app.appName))
+            }
+            hiddenAppDictionaryNames = hidden
+        }
+        if replace {
+            dictionaryWords = snapshot.globalWords
+            appDictionaries = snapshot.apps
+        } else {
+            for word in snapshot.globalWords {
+                addDictionaryWord(word)
+            }
+            var entries = appDictionaries
+            for app in snapshot.apps {
+                let key = Self.appNameKey(app.appName)
+                guard !key.isEmpty else { continue }
+                if let index = entries.firstIndex(where: { Self.appNameKey($0.appName) == key }) {
+                    if !app.kind.isEmpty {
+                        entries[index].kind = app.kind
+                    }
+                    entries[index].terms = CleanupPrompt.mergedDictionary(entries[index].terms + app.terms)
+                } else {
+                    entries.append(app)
+                }
+            }
+            appDictionaries = entries
+        }
+        ensurePresetApps()
+        if !snapshot.exceptionsByApp.isEmpty {
+            cleanupExceptions = DictionaryCSV.mergeExceptions(
+                existing: replace ? "" : cleanupExceptions,
+                byApp: snapshot.exceptionsByApp
+            )
+        }
+    }
+
+    /// One-time: replace the factory About-you blob with the shorter draft if the user never edited it.
+    private func migrateShorterPersonalNotes() {
+        let key = "shortPersonalNotesV1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        let current = cleanupPersonalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+        let legacy = CleanupPrompt.legacyDefaultPersonalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+        let isFactory = current == legacy
+            || (current.contains("not like a native US email") && abs(current.count - legacy.count) < 80)
+        guard isFactory else { return }
+        cleanupPersonalNotes = CleanupPrompt.defaultPersonalNotes
+        cleanupPersonalExamples = CleanupPrompt.defaultPersonalExamples
+        commitSystemPrompt()
+    }
+
+    /// One-time: move a trailing Examples block out of About you into its own field.
+    private func migratePersonalExamples() {
+        let key = "personalExamplesSplitV1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        if !cleanupPersonalExamples.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return
+        }
+        let split = CleanupPrompt.splitNotesAndExamples(cleanupPersonalNotes)
+        guard !split.examples.isEmpty else { return }
+        cleanupPersonalNotes = split.notes
+        cleanupPersonalExamples = split.examples
+        commitSystemPrompt()
     }
 
     /// One-time: copy the built-in speaker notes into the editable Settings field.
@@ -254,6 +504,20 @@ final class SettingsStore: ObservableObject {
             cleanupPersonalContext = CleanupPrompt.defaultPersonalContext
         }
         cleanupPersonalContextMigrated = true
+    }
+
+    /// One-time: split the old single custom-instructions blob into personal + exceptions drafts.
+    private func migrateSystemPromptLayers() {
+        guard !systemPromptLayersMigrated else { return }
+        systemPromptLayersMigrated = true
+        let split = CleanupPrompt.splitLegacyPersonalContext(cleanupPersonalContext)
+        if cleanupPersonalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            cleanupPersonalNotes = split.notes.isEmpty ? CleanupPrompt.defaultPersonalNotes : split.notes
+        }
+        if cleanupExceptions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            cleanupExceptions = split.exceptions.isEmpty ? CleanupPrompt.defaultExceptions : split.exceptions
+        }
+        commitSystemPrompt()
     }
 
     /// One-time: fold the old locked starter list into the editable list.
@@ -269,28 +533,40 @@ final class SettingsStore: ObservableObject {
         raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
+    private static func appNameKey(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     var openAIAPIKey: String {
         get { KeychainHelper.load(account: "openai_api_key") ?? "" }
-        set {
-            if newValue.isEmpty {
-                KeychainHelper.delete(account: "openai_api_key")
-            } else {
-                KeychainHelper.save(account: "openai_api_key", value: newValue)
-            }
-            objectWillChange.send()
-        }
+        set { _ = saveOpenAIAPIKey(newValue) }
     }
 
     var anthropicAPIKey: String {
         get { KeychainHelper.load(account: "anthropic_api_key") ?? "" }
-        set {
-            if newValue.isEmpty {
-                KeychainHelper.delete(account: "anthropic_api_key")
-            } else {
-                KeychainHelper.save(account: "anthropic_api_key", value: newValue)
-            }
-            objectWillChange.send()
+        set { _ = saveAnthropicAPIKey(newValue) }
+    }
+
+    @discardableResult
+    func saveOpenAIAPIKey(_ value: String) -> Bool {
+        saveAPIKey(account: "openai_api_key", value: value)
+    }
+
+    @discardableResult
+    func saveAnthropicAPIKey(_ value: String) -> Bool {
+        saveAPIKey(account: "anthropic_api_key", value: value)
+    }
+
+    private func saveAPIKey(account: String, value: String) -> Bool {
+        let ok: Bool
+        if value.isEmpty {
+            KeychainHelper.delete(account: account)
+            ok = true
+        } else {
+            ok = KeychainHelper.save(account: account, value: value)
         }
+        objectWillChange.send()
+        return ok
     }
 }
 

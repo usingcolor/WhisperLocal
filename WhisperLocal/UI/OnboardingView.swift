@@ -33,7 +33,16 @@ struct OnboardingView: View {
                 permissions.requestAccessibility()
             }
 
-            if !permissions.accessibilityTrusted {
+            permissionRow(
+                title: "Input Monitoring",
+                detail: permissions.inputMonitoringHelpText,
+                granted: permissions.inputMonitoringTrusted,
+                actionTitle: permissions.inputMonitoringTrusted ? "Granted" : "Enable Input Monitoring"
+            ) {
+                permissions.requestInputMonitoring()
+            }
+
+            if !permissions.accessibilityTrusted || !permissions.inputMonitoringTrusted {
                 Text("Running from: \(permissions.runningAppPath)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -56,7 +65,7 @@ struct OnboardingView: View {
                 Button("Refresh") {
                     permissions.refresh()
                 }
-                if !permissions.accessibilityTrusted {
+                if !permissions.accessibilityTrusted || !permissions.inputMonitoringTrusted {
                     Button("Quit & Reopen") {
                         permissions.quitAndRelaunch()
                     }

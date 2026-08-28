@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		18B6B2A9941C3D8D4041791B /* OpenAIPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005FD23F400A298F93508D18 /* OpenAIPolisher.swift */; };
+		1BBDFC011CF6AA23F30046CD /* AppUpdateFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */; };
 		2492640D252CC0BB949F2270 /* WindowFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5763CB6E982097551A2347A /* WindowFocus.swift */; };
 		257AE55C48A885FAEF6FADFC /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A7E52EF80A958922373895 /* OnboardingView.swift */; };
 		2DE43BEE1ABCCCDE4B8FEB29 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44C4928A4E716CB8E7823B2 /* HotKeyManager.swift */; };
@@ -28,6 +29,7 @@
 		5C1D1E7AC805E51D84AD54C5 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = CAFAF41E8683133E12EEB1FE /* HuggingFace */; };
 		60B13AE43169CE7EBAD95865 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B53D098CD2A4802900B6D9D9 /* Speech.framework */; };
 		62C033A5E33A9B81628F3FDB /* AppleSpeechASR.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98A3D822AC9524A9D7D1910 /* AppleSpeechASR.swift */; };
+		64481EF421E2A8C3DE691C1D /* DictionaryCSV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135B2C9F9BB17CBFFB34A72A /* DictionaryCSV.swift */; };
 		68484A6EFE8E4A48F43AE7BE /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83D3461601CD53D69C8AE0F /* AudioRecorder.swift */; };
 		6EA5DB88FB4467EF92F57E28 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = FFC84E10821749934C2E6D9B /* Tokenizers */; };
 		71D93DE7E9B354768A78903C /* AnthropicPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FCC628C5CD310EC5C6F34E0 /* AnthropicPolisher.swift */; };
@@ -35,9 +37,13 @@
 		74B63A76DB2EADA597458D6B /* CleanupPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */; };
 		76EDAF7D6575021EF872530A /* TextPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C75C3C8A0CD848C604E695 /* TextPolisher.swift */; };
 		7AE90627E94B12E6739392B7 /* CleanupPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */; };
+		7CD28AD170006A1D5E402AE7 /* AppUpdateFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */; };
 		82932228A06406AFBCB3ABDE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E19E3CCC2AD2335AECE85AB /* SettingsView.swift */; };
 		8D5FFBBE4122E24EC20BBBC0 /* CloudModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */; };
+		91CC81B9A54FFF2FECC92B8D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1A64FD176FFE5438A4E051 /* AppDelegate.swift */; };
 		9580B0607AA1C17304201CBD /* HeuristicPolisherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C619127B2ED2429C99E41D /* HeuristicPolisherTests.swift */; };
+		9AB3E4B1BE721A705E68FF52 /* DictionaryCSV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135B2C9F9BB17CBFFB34A72A /* DictionaryCSV.swift */; };
+		A2E42C73CB6EC1F334ACE67F /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F293F5BB80064BB9F9A755B /* AppUpdater.swift */; };
 		AC7398423F83CA65BB82A17A /* DictationLogExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38ADAC703311FF92E61C5EF2 /* DictationLogExportTests.swift */; };
 		ACAF76996E8C668DA5DD5B75 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38C1D3FD905430B8186554D /* PermissionManager.swift */; };
 		ACDF4257E090B5ECF7FBA95D /* CloudModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */; };
@@ -55,12 +61,15 @@
 		005FD23F400A298F93508D18 /* OpenAIPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIPolisher.swift; sourceTree = "<group>"; };
 		01AB713D392D16F27F752ED0 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		094325BD00C73626F5A7D8BF /* DictationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationController.swift; sourceTree = "<group>"; };
+		0F293F5BB80064BB9F9A755B /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
+		135B2C9F9BB17CBFFB34A72A /* DictionaryCSV.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryCSV.swift; sourceTree = "<group>"; };
 		22AEB3874E72F1200F202546 /* RecordingHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingHUD.swift; sourceTree = "<group>"; };
 		285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudModelCatalog.swift; sourceTree = "<group>"; };
 		3711BFF5E9F6F19E30941906 /* WhisperLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WhisperLocal.entitlements; sourceTree = "<group>"; };
 		38ADAC703311FF92E61C5EF2 /* DictationLogExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationLogExportTests.swift; sourceTree = "<group>"; };
 		48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupPrompt.swift; sourceTree = "<group>"; };
 		4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemmaMLXPolisher.swift; sourceTree = "<group>"; };
+		4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateFeed.swift; sourceTree = "<group>"; };
 		4C674C2FF65B13EF3ACBA113 /* HeuristicPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeuristicPolisher.swift; sourceTree = "<group>"; };
 		68A7E52EF80A958922373895 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		6FCC628C5CD310EC5C6F34E0 /* AnthropicPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicPolisher.swift; sourceTree = "<group>"; };
@@ -76,6 +85,7 @@
 		AFF3498DCEDC9A6C7A5A13A6 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		B38C1D3FD905430B8186554D /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		B53D098CD2A4802900B6D9D9 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
+		BF1A64FD176FFE5438A4E051 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		D036D4D666946E1E4C5A30F9 /* WhisperLocal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhisperLocal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3A0E540785AF85E8AAB0D1B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D3C75C3C8A0CD848C604E695 /* TextPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPolisher.swift; sourceTree = "<group>"; };
@@ -119,6 +129,7 @@
 		9079C57462B2AB29AF31ED6B /* App */ = {
 			isa = PBXGroup;
 			children = (
+				BF1A64FD176FFE5438A4E051 /* AppDelegate.swift */,
 				8FFA29539CB2FD9B242651AC /* Info.plist */,
 				3711BFF5E9F6F19E30941906 /* WhisperLocal.entitlements */,
 				748E974DF04BD7DC99D7796A /* WhisperLocalApp.swift */,
@@ -175,6 +186,8 @@
 			isa = PBXGroup;
 			children = (
 				E98A3D822AC9524A9D7D1910 /* AppleSpeechASR.swift */,
+				4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */,
+				0F293F5BB80064BB9F9A755B /* AppUpdater.swift */,
 				F83D3461601CD53D69C8AE0F /* AudioRecorder.swift */,
 				F44C4928A4E716CB8E7823B2 /* HotKeyManager.swift */,
 				B38C1D3FD905430B8186554D /* PermissionManager.swift */,
@@ -214,6 +227,7 @@
 				6FCC628C5CD310EC5C6F34E0 /* AnthropicPolisher.swift */,
 				48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */,
 				285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */,
+				135B2C9F9BB17CBFFB34A72A /* DictionaryCSV.swift */,
 				4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */,
 				4C674C2FF65B13EF3ACBA113 /* HeuristicPolisher.swift */,
 				952854698DE0B29BA5C9B04D /* LocalLLMPolisher.swift */,
@@ -329,11 +343,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7CD28AD170006A1D5E402AE7 /* AppUpdateFeed.swift in Sources */,
 				74B63A76DB2EADA597458D6B /* CleanupPrompt.swift in Sources */,
 				8D5FFBBE4122E24EC20BBBC0 /* CloudModelCatalog.swift in Sources */,
 				40D1512B4165FAA3F8FB2FF2 /* DictationLogExport.swift in Sources */,
 				AC7398423F83CA65BB82A17A /* DictationLogExportTests.swift in Sources */,
 				B1D64CFE2C0FABC6720B622F /* DictationLogStore.swift in Sources */,
+				9AB3E4B1BE721A705E68FF52 /* DictionaryCSV.swift in Sources */,
 				72AE2E57624415B1FECFEDF3 /* HeuristicPolisher.swift in Sources */,
 				9580B0607AA1C17304201CBD /* HeuristicPolisherTests.swift in Sources */,
 				B916FB2C7469C02FC54B3A0F /* TextInserter.swift in Sources */,
@@ -346,6 +362,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				71D93DE7E9B354768A78903C /* AnthropicPolisher.swift in Sources */,
+				91CC81B9A54FFF2FECC92B8D /* AppDelegate.swift in Sources */,
+				1BBDFC011CF6AA23F30046CD /* AppUpdateFeed.swift in Sources */,
+				A2E42C73CB6EC1F334ACE67F /* AppUpdater.swift in Sources */,
 				62C033A5E33A9B81628F3FDB /* AppleSpeechASR.swift in Sources */,
 				68484A6EFE8E4A48F43AE7BE /* AudioRecorder.swift in Sources */,
 				7AE90627E94B12E6739392B7 /* CleanupPrompt.swift in Sources */,
@@ -354,6 +373,7 @@
 				390F2B285D4D8AC4D4C0F701 /* DictationLogExport.swift in Sources */,
 				3602BFC7FCCDE16F91B95D0E /* DictationLogStore.swift in Sources */,
 				E5B382402026A0EA34458CA6 /* DictationLogView.swift in Sources */,
+				64481EF421E2A8C3DE691C1D /* DictionaryCSV.swift in Sources */,
 				CBA348D127EC79309CBBFEA0 /* GemmaMLXPolisher.swift in Sources */,
 				32BAE91519BD9E26D3678EDE /* HeuristicPolisher.swift in Sources */,
 				2DE43BEE1ABCCCDE4B8FEB29 /* HotKeyManager.swift in Sources */,
@@ -406,7 +426,7 @@
 				CODE_SIGN_ENTITLEMENTS = WhisperLocal/App/WhisperLocal.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXCLUDED_ARCHS = x86_64;
@@ -590,7 +610,7 @@
 				CODE_SIGN_ENTITLEMENTS = WhisperLocal/App/WhisperLocal.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXCLUDED_ARCHS = x86_64;

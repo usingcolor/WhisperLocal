@@ -70,7 +70,12 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
         #endif
     }
 
-    func polish(_ text: String, dictionary: [String], personalContext: String = "") async throws -> String {
+    func polish(
+        _ text: String,
+        dictionary: [String],
+        personalContext: String = "",
+        targetApp: String? = nil
+    ) async throws -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return trimmed }
 
@@ -79,7 +84,8 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
             return try await AppleIntelligenceBackend.shared.polish(
                 trimmed,
                 dictionary: dictionary,
-                personalContext: personalContext
+                personalContext: personalContext,
+                targetApp: targetApp
             )
         }
         #endif
@@ -100,43 +106,54 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
     static let shared = AppleIntelligenceBackend()
 
     private let lock = NSLock()
-    private var warmSession: LanguageModelSession?
+    private var warmSessions: [LanguageModelSession] = []
     private var warmFingerprint = ""
+    private let poolSize = 2
     private let timeoutSeconds: TimeInterval = 8
 
     func prewarm(personalContext: String = "", dictionary: [String] = []) {
         guard SystemLanguageModel.default.isAvailable else { return }
-        let session = makeSession(dictionary: dictionary, personalContext: personalContext)
-        session.prewarm()
-        lock.lock()
-        warmSession = session
-        warmFingerprint = fingerprint(dictionary: dictionary, personalContext: personalContext)
-        lock.unlock()
+        let fp = fingerprint(dictionary: dictionary, personalContext: personalContext)
+        Task.detached { [fp, dictionary, personalContext] in
+            AppleIntelligenceBackend.shared.fillPool(
+                fingerprint: fp,
+                dictionary: dictionary,
+                personalContext: personalContext
+            )
+        }
     }
 
-    func polish(_ text: String, dictionary: [String], personalContext: String = "") async throws -> String {
+    func polish(
+        _ text: String,
+        dictionary: [String],
+        personalContext: String = "",
+        targetApp: String? = nil
+    ) async throws -> String {
         guard SystemLanguageModel.default.isAvailable else {
             throw PolisherError.notAvailable(LocalLLMPolisher.statusMessage)
         }
 
         let fp = fingerprint(dictionary: dictionary, personalContext: personalContext)
-        let session: LanguageModelSession
-        lock.lock()
-        if let warmSession, warmFingerprint == fp {
-            self.warmSession = nil
-            lock.unlock()
-            session = warmSession
-            replenishWarmSession(dictionary: dictionary, personalContext: personalContext)
-        } else {
-            lock.unlock()
-            session = makeSession(dictionary: dictionary, personalContext: personalContext)
-        }
-
-        let prompt = CleanupPrompt.wrapTranscript(text)
+        let session = takeSession(fingerprint: fp, dictionary: dictionary, personalContext: personalContext)
+        let prompt = CleanupPrompt.wrapOnDeviceTranscript(
+            text,
+            targetApp: targetApp,
+            personalContext: personalContext
+        )
         let options = GenerationOptions(
             sampling: .greedy,
             maximumResponseTokens: min(max(text.count / 2, 128), 1024)
         )
+
+        defer {
+            Task.detached { [fp, dictionary, personalContext] in
+                AppleIntelligenceBackend.shared.fillPool(
+                    fingerprint: fp,
+                    dictionary: dictionary,
+                    personalContext: personalContext
+                )
+            }
+        }
 
         do {
             let cleaned = try await withTimeout(timeoutSeconds) {
@@ -159,6 +176,49 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         }
     }
 
+    private func takeSession(
+        fingerprint fp: String,
+        dictionary: [String],
+        personalContext: String
+    ) -> LanguageModelSession {
+        lock.lock()
+        if warmFingerprint == fp, !warmSessions.isEmpty {
+            let session = warmSessions.removeFirst()
+            lock.unlock()
+            return session
+        }
+        lock.unlock()
+        return makeSession(dictionary: dictionary, personalContext: personalContext)
+    }
+
+    private func fillPool(fingerprint fp: String, dictionary: [String], personalContext: String) {
+        guard SystemLanguageModel.default.isAvailable else { return }
+        lock.lock()
+        if warmFingerprint != fp {
+            warmSessions.removeAll()
+            warmFingerprint = fp
+        }
+        lock.unlock()
+
+        while true {
+            lock.lock()
+            let hasRoom = warmFingerprint == fp && warmSessions.count < poolSize
+            lock.unlock()
+            guard hasRoom else { return }
+
+            let session = makeSession(dictionary: dictionary, personalContext: personalContext)
+            session.prewarm()
+
+            lock.lock()
+            if warmFingerprint == fp, warmSessions.count < poolSize {
+                warmSessions.append(session)
+            }
+            let done = warmFingerprint != fp || warmSessions.count >= poolSize
+            lock.unlock()
+            if done { return }
+        }
+    }
+
     private func makeSession(dictionary: [String] = [], personalContext: String = "") -> LanguageModelSession {
         let model = SystemLanguageModel(
             useCase: .general,
@@ -166,22 +226,15 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         )
         return LanguageModelSession(
             model: model,
-            instructions: CleanupPrompt.system(dictionary: dictionary, personalContext: personalContext)
+            instructions: CleanupPrompt.onDeviceSystem(
+                dictionary: dictionary,
+                personalContext: personalContext
+            )
         )
     }
 
-    private func replenishWarmSession(dictionary: [String], personalContext: String) {
-        guard SystemLanguageModel.default.isAvailable else { return }
-        let next = makeSession(dictionary: dictionary, personalContext: personalContext)
-        next.prewarm()
-        lock.lock()
-        warmSession = next
-        warmFingerprint = fingerprint(dictionary: dictionary, personalContext: personalContext)
-        lock.unlock()
-    }
-
     private func fingerprint(dictionary: [String], personalContext: String) -> String {
-        personalContext + "\u{1e}" + dictionary.joined(separator: "\u{1f}")
+        CleanupPrompt.onDeviceSystem(dictionary: dictionary, personalContext: personalContext)
     }
 
     private func withTimeout<T: Sendable>(

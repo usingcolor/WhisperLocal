@@ -50,9 +50,18 @@ final class DictationController: ObservableObject {
 
     private var cancelRequested = false
     private var cancellables = Set<AnyCancellable>()
+    /// Frontmost app when dictation started. Passed to polish LLMs as formatting context.
+    private var dictationTargetApp: TargetAppContext?
+    private var recordingBeganAt: Date?
 
     private init() {
         transcription.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        permissions.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -134,7 +143,9 @@ final class DictationController: ObservableObject {
         }
 
         do {
+            dictationTargetApp = TargetAppContext.captureFrontmost()
             try recorder.start()
+            recordingBeganAt = Date()
             phase = .recording
             hotKey.markSessionActive(true)
             hud.show(phase: .recording, levelPublisher: recorder)
@@ -147,6 +158,8 @@ final class DictationController: ObservableObject {
 
     private func cancelRecording() {
         cancelRequested = true
+        dictationTargetApp = nil
+        recordingBeganAt = nil
         recorder.cancel()
         hotKey.markSessionActive(false)
         phase = .idle
@@ -159,6 +172,8 @@ final class DictationController: ObservableObject {
         hotKey.markSessionActive(false)
 
         if cancelRequested {
+            dictationTargetApp = nil
+            recordingBeganAt = nil
             phase = .idle
             hud.hide()
             return
@@ -166,10 +181,19 @@ final class DictationController: ObservableObject {
 
         // Ignore accidental taps / empty holds
         if samples.count < Int(16_000 * 0.25) {
-            phase = .idle
-            hud.hide()
+            let held = recordingBeganAt.map { Date().timeIntervalSince($0) } ?? 0
+            recordingBeganAt = nil
+            dictationTargetApp = nil
+            if held >= 0.5 {
+                phase = .error("No microphone input")
+                hud.flashError("No microphone input")
+            } else {
+                phase = .idle
+                hud.hide()
+            }
             return
         }
+        recordingBeganAt = nil
 
         phase = .processing
         hud.update(phase: .processing)
@@ -181,8 +205,11 @@ final class DictationController: ObservableObject {
 
     private func process(samples: [Float]) async {
         let audioSeconds = Double(samples.count) / 16_000
+        let targetApp = dictationTargetApp?.promptLine
+        dictationTargetApp = nil
         do {
-            let raw = try await transcription.transcribe(samples: samples)
+            let extraTerms = settings.matchingAppDictionaryTerms(targetApp: targetApp)
+            let raw = try await transcription.transcribe(samples: samples, extraDictionary: extraTerms)
             lastTranscript = raw
 
             guard !raw.isEmpty else {
@@ -212,7 +239,7 @@ final class DictationController: ObservableObject {
                 phase = .polishing
                 hud.update(phase: .polishing)
             }
-            let result = await makePipeline().run(raw)
+            let result = await makePipeline(extraHeuristicTerms: extraTerms).run(raw, targetApp: targetApp)
             var output = result.text
             if settings.insertTrailingSpace, !output.hasSuffix(" ") {
                 output += " "
@@ -292,7 +319,7 @@ final class DictationController: ObservableObject {
         }
     }
 
-    private func makePipeline() -> PolishPipeline {
+    private func makePipeline(extraHeuristicTerms: [String] = []) -> PolishPipeline {
         var cloud: (any TextPolisher)?
         switch settings.cloudPolishProvider {
         case .none:
@@ -308,6 +335,7 @@ final class DictationController: ObservableObject {
             }
         }
 
+        let global = CleanupPrompt.mergedDictionary(settings.dictionaryWords)
         return PolishPipeline(
             heuristic: HeuristicPolisher(),
             localLLM: onDevicePolisher(),
@@ -315,7 +343,8 @@ final class DictationController: ObservableObject {
             useLocalLLM: settings.shouldRunOnDevicePolish,
             enableTextCleanup: settings.enableTextCleanup,
             enableHeuristicCleanup: settings.enableHeuristicCleanup,
-            dictionary: CleanupPrompt.mergedDictionary(settings.dictionaryWords),
+            dictionary: global,
+            heuristicDictionary: CleanupPrompt.mergedDictionary(global + extraHeuristicTerms),
             personalContext: settings.cleanupPersonalContext
         )
     }

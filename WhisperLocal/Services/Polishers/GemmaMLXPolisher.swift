@@ -65,13 +65,18 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
         }
     }
 
-    func polish(_ text: String, dictionary: [String], personalContext: String = "") async throws -> String {
+    func polish(
+        _ text: String,
+        dictionary: [String],
+        personalContext: String = "",
+        targetApp: String? = nil
+    ) async throws -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return trimmed }
 
         let model = try await ensureLoaded()
-        let system = CleanupPrompt.compactSystem(dictionary: dictionary, personalContext: personalContext)
-        let user = CleanupPrompt.wrapTranscript(trimmed)
+        let system = CleanupPrompt.onDeviceSystem(dictionary: dictionary, personalContext: personalContext)
+        let user = CleanupPrompt.wrapOnDeviceTranscript(trimmed, targetApp: targetApp, personalContext: personalContext)
         let maxTokens = Self.tokenBudget(for: trimmed)
         let timeout = generateTimeout
 

@@ -2,12 +2,21 @@ import Foundation
 
 protocol TextPolisher: Sendable {
     var name: String { get }
-    func polish(_ text: String, dictionary: [String], personalContext: String) async throws -> String
+    func polish(
+        _ text: String,
+        dictionary: [String],
+        personalContext: String,
+        targetApp: String?
+    ) async throws -> String
 }
 
 extension TextPolisher {
     func polish(_ text: String, dictionary: [String]) async throws -> String {
-        try await polish(text, dictionary: dictionary, personalContext: "")
+        try await polish(text, dictionary: dictionary, personalContext: "", targetApp: nil)
+    }
+
+    func polish(_ text: String, dictionary: [String], personalContext: String) async throws -> String {
+        try await polish(text, dictionary: dictionary, personalContext: personalContext, targetApp: nil)
     }
 }
 
@@ -94,9 +103,11 @@ struct PolishPipeline: Sendable {
     let enableTextCleanup: Bool
     var enableHeuristicCleanup: Bool = true
     let dictionary: [String]
+    /// Extra terms for heuristic cleanup only (per-app dictionary). LLM keeps `dictionary` so prefill stays stable.
+    var heuristicDictionary: [String]? = nil
     var personalContext: String = ""
 
-    func run(_ raw: String) async -> PolishResult {
+    func run(_ raw: String, targetApp: String? = nil) async -> PolishResult {
         guard enableTextCleanup else {
             return PolishResult(
                 text: raw.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -112,10 +123,17 @@ struct PolishPipeline: Sendable {
         var cleanupNote: String?
 
         if enableHeuristicCleanup,
-           let polished = try? await heuristic.polish(text, dictionary: dictionary, personalContext: personalContext) {
+           let polished = try? await heuristic.polish(
+            text,
+            dictionary: heuristicDictionary ?? dictionary,
+            personalContext: personalContext,
+            targetApp: targetApp
+           ) {
             text = polished
             stages.append(heuristic.name)
         }
+
+        text = applyFillerFilter(text, stages: &stages)
 
         var llmAttempted = false
 
@@ -123,7 +141,12 @@ struct PolishPipeline: Sendable {
         if useLocalLLM, let localLLM, cloud == nil {
             llmAttempted = true
             do {
-                text = try await localLLM.polish(text, dictionary: dictionary, personalContext: personalContext)
+                text = try await localLLM.polish(
+                    text,
+                    dictionary: dictionary,
+                    personalContext: personalContext,
+                    targetApp: targetApp
+                )
                 stages.append(localLLM.name)
             } catch {
                 stages.append("\(localLLM.name) failed")
@@ -135,7 +158,12 @@ struct PolishPipeline: Sendable {
         if let cloud {
             llmAttempted = true
             do {
-                text = try await cloud.polish(text, dictionary: dictionary, personalContext: personalContext)
+                text = try await cloud.polish(
+                    text,
+                    dictionary: dictionary,
+                    personalContext: personalContext,
+                    targetApp: targetApp
+                )
                 stages.append(cloud.name)
                 // Cloud success clears earlier local-LLM failure note
                 cleanupFailed = false
@@ -146,6 +174,8 @@ struct PolishPipeline: Sendable {
                 cleanupNote = "Pasted without AI cleanup"
             }
         }
+
+        text = applyFillerFilter(text, stages: &stages)
 
         // Heuristic-only path is still "cleaned" — only flag when an LLM step was expected.
         if !llmAttempted {
@@ -163,5 +193,13 @@ struct PolishPipeline: Sendable {
             cleanupFailed: cleanupFailed,
             cleanupNote: cleanupNote
         )
+    }
+
+    private func applyFillerFilter(_ text: String, stages: inout [String]) -> String {
+        let cleaned = VocalFillerFilter.strip(text)
+        if cleaned != text, stages.last != "Fillers" {
+            stages.append("Fillers")
+        }
+        return cleaned
     }
 }

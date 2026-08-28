@@ -69,6 +69,7 @@ final class RecordingHUDController: ObservableObject {
         if panel != nil { return }
 
         let hosting = NSHostingView(rootView: RecordingHUDView(controller: self))
+        hosting.sizingOptions = []
         hosting.frame = NSRect(x: 0, y: 0, width: 280, height: 72)
 
         let panel = HUDPanel(
@@ -120,16 +121,14 @@ struct RecordingHUDView: View {
                     .foregroundStyle(.white)
                     .lineLimit(2)
                 if case .recording = controller.phase {
-                    GeometryReader { geo in
+                    ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.white.opacity(0.15))
-                            .overlay(alignment: .leading) {
-                                Capsule()
-                                    .fill(Color.accentColor)
-                                    .frame(width: max(4, geo.size.width * CGFloat(controller.audioLevel)))
-                            }
+                        Capsule()
+                            .fill(Color.accentColor)
+                            .frame(width: max(4, 168 * CGFloat(min(1, controller.audioLevel))))
                     }
-                    .frame(height: 4)
+                    .frame(width: 168, height: 4)
                 }
             }
             Spacer(minLength: 0)

@@ -107,23 +107,27 @@ final class HotKeyManager: ObservableObject {
         stop()
 
         flagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            Task { @MainActor in
-                self?.handleFlagsChanged(event)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.handleFlagsChanged(event)
+                }
             }
         }
         keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            Task { @MainActor in
-                self?.handleKeyDown(event)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.handleKeyDown(event)
+                }
             }
         }
         localFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.handleFlagsChanged(event)
             }
             return event
         }
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.handleKeyDown(event)
             }
             return event

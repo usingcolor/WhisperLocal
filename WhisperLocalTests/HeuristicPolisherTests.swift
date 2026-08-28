@@ -21,6 +21,13 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertEqual(so, "I think we should go.")
     }
 
+    func testVocalFillerSounds() {
+        XCTAssertEqual(VocalFillerFilter.strip("um hello hmm there uh"), "hello there")
+        XCTAssertEqual(VocalFillerFilter.strip("Um, I think, uh, we should go."), "I think, we should go.")
+        XCTAssertEqual(VocalFillerFilter.strip("Hmm. Let's start"), "Let's start")
+        XCTAssertEqual(VocalFillerFilter.strip("I like coffee"), "I like coffee")
+    }
+
     func testKeepsSemanticLikeAndYouKnow() async throws {
         let like = try await polish("I like coffee")
         let know = try await polish("do you know the way")
@@ -148,8 +155,8 @@ final class HeuristicPolisherTests: XCTestCase {
         )
         let result = await pipeline.run("um hello there")
         XCTAssertEqual(local.callCount, 1)
-        XCTAssertEqual(result.text, "um hello there")
-        XCTAssertEqual(result.stages, ["Gemma 4 E2B"])
+        XCTAssertEqual(result.text, "hello there")
+        XCTAssertEqual(result.stages, ["Fillers", "Gemma 4 E2B"])
         XCTAssertFalse(result.cleanupFailed)
     }
 
@@ -164,9 +171,9 @@ final class HeuristicPolisherTests: XCTestCase {
             dictionary: []
         )
         let result = await pipeline.run("um hello there")
-        XCTAssertEqual(result.text, "um hello there")
+        XCTAssertEqual(result.text, "hello there")
         XCTAssertFalse(result.cleanupFailed)
-        XCTAssertEqual(result.stages, ["Raw"])
+        XCTAssertEqual(result.stages, ["Fillers"])
     }
 
     func testPipelineSkipsAppleIntelligenceWhenCloudIsOn() async {
@@ -201,6 +208,50 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertEqual(local.callCount, 1)
         XCTAssertEqual(result.stages, ["Heuristic", "Apple Intelligence"])
     }
+
+    func testPipelinePassesTargetAppToLLM() async {
+        let local = ProbePolisher(name: "Apple Intelligence")
+        let pipeline = PolishPipeline(
+            heuristic: HeuristicPolisher(),
+            localLLM: local,
+            cloud: nil,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            dictionary: []
+        )
+        _ = await pipeline.run("hello", targetApp: "Cursor — code editor")
+        XCTAssertEqual(local.lastTargetApp, "Cursor — code editor")
+    }
+
+    func testPipelineStripsFillersTheModelLeftIn() async {
+        let local = FillerReinjectingPolisher()
+        let pipeline = PolishPipeline(
+            heuristic: HeuristicPolisher(),
+            localLLM: local,
+            cloud: nil,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            enableHeuristicCleanup: false,
+            dictionary: []
+        )
+        let result = await pipeline.run("hello there")
+        XCTAssertEqual(result.text, "hello there")
+        XCTAssertEqual(result.stages, ["Apple Intelligence", "Fillers"])
+        XCTAssertFalse(result.cleanupFailed)
+    }
+}
+
+private final class FillerReinjectingPolisher: TextPolisher {
+    let name = "Apple Intelligence"
+
+    func polish(
+        _ text: String,
+        dictionary _: [String],
+        personalContext _: String,
+        targetApp _: String?
+    ) async throws -> String {
+        "um \(text) uh"
+    }
 }
 
 private final class ProbePolisher: TextPolisher, @unchecked Sendable {
@@ -212,9 +263,17 @@ private final class ProbePolisher: TextPolisher, @unchecked Sendable {
         self.name = name
     }
 
-    func polish(_ text: String, dictionary: [String], personalContext: String) async throws -> String {
+    private(set) var lastTargetApp: String?
+
+    func polish(
+        _ text: String,
+        dictionary: [String],
+        personalContext: String,
+        targetApp: String?
+    ) async throws -> String {
         lock.lock()
         callCount += 1
+        lastTargetApp = targetApp
         lock.unlock()
         return text
     }
@@ -225,28 +284,51 @@ final class CleanupPromptTests: XCTestCase {
         let wrapped = CleanupPrompt.wrapTranscript("hello")
         XCTAssertTrue(wrapped.contains("<transcript>\nhello\n</transcript>"))
         XCTAssertTrue(wrapped.contains("Output only the cleaned transcript."))
+        XCTAssertFalse(wrapped.contains("<target-app>"))
+    }
+
+    func testWrapPutsTargetAppInFrontOfTranscript() {
+        let wrapped = CleanupPrompt.wrapTranscript("hello", targetApp: "Cursor — code editor")
+        XCTAssertTrue(wrapped.hasPrefix("<target-app>Cursor — code editor</target-app>\n<transcript>"))
+        XCTAssertTrue(wrapped.contains("<transcript>\nhello\n</transcript>"))
+    }
+
+    func testWrapEscapesTargetAppXml() {
+        let wrapped = CleanupPrompt.wrapTranscript("hello", targetApp: "Foo <bar> & baz")
+        XCTAssertTrue(wrapped.contains("<target-app>Foo &lt;bar&gt; &amp; baz</target-app>"))
     }
 
     func testSystemPromptIsCleanupEngineNotChatbot() {
         let system = CleanupPrompt.system()
-        XCTAssertTrue(system.contains("THE SPEAKER IS NEVER TALKING TO YOU"))
-        XCTAssertTrue(system.contains("What's the capital of France?"))
+        XCTAssertTrue(system.lowercased().contains("never talking to you"))
+        XCTAssertTrue(system.contains("I think we should go."))
+        XCTAssertTrue(system.contains("I wanted to email Sarah."))
+        XCTAssertTrue(system.lowercased().contains("cancel a phrase"))
+        XCTAssertTrue(system.lowercased().contains("restart a sentence"))
         XCTAssertTrue(system.contains("WhisperLocal"))
         XCTAssertTrue(system.contains("ChatGPT"))
+        XCTAssertTrue(system.contains("<target-app>"))
+        XCTAssertTrue(system.contains("<app-notes>"))
+        XCTAssertLessThan(system.count, 1200)
         XCTAssertFalse(system.contains("{{agentName}}"))
-        XCTAssertFalse(system.contains("CUSTOM INSTRUCTIONS"))
-        XCTAssertFalse(system.contains("@gmail.com"))
         XCTAssertFalse(system.contains("Changho Choi"))
+        XCTAssertFalse(system.contains("CUSTOM INSTRUCTIONS"))
     }
 
     func testPersonalContextIsInjected() {
-        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("SPEAKER"))
-        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("WhisperKit follow-up for the next release."))
+        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("Fill this in"))
+        XCTAssertTrue(CleanupPrompt.defaultPersonalContext.contains("Email Alex about the draft"))
         XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("@gmail.com"))
         XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("Changho Choi"))
         let personalized = CleanupPrompt.system(personalContext: CleanupPrompt.defaultPersonalContext)
         XCTAssertTrue(personalized.contains("CUSTOM INSTRUCTIONS"))
+        XCTAssertTrue(personalized.contains("Fill this in"))
         XCTAssertTrue(personalized.contains("WhisperKit follow-up for the next release."))
+        XCTAssertTrue(personalized.contains("PERSONAL"))
+        XCTAssertTrue(personalized.contains("EXAMPLES"))
+        XCTAssertTrue(personalized.contains("EXCEPTIONS"))
+        XCTAssertTrue(personalized.contains("Cursor / VS Code"))
+        XCTAssertTrue(personalized.contains("match <target-app>"))
         let empty = CleanupPrompt.system(personalContext: "   ")
         XCTAssertFalse(empty.contains("CUSTOM INSTRUCTIONS"))
     }
@@ -266,13 +348,291 @@ final class CleanupPromptTests: XCTestCase {
     func testCompactSystemIsShorterButStillACleanupEngine() {
         let compact = CleanupPrompt.compactSystem()
         let full = CleanupPrompt.system()
-        XCTAssertTrue(compact.count < full.count / 2)
+        XCTAssertEqual(compact, full)
         XCTAssertTrue(compact.lowercased().contains("never talking to you"))
-        XCTAssertTrue(compact.contains("What's the capital of France?"))
+        XCTAssertTrue(compact.contains("I think we should go."))
+        XCTAssertTrue(compact.contains("I wanted to email Sarah."))
+        XCTAssertTrue(compact.contains("<target-app>"))
+        XCTAssertTrue(compact.contains("<app-notes>"))
         XCTAssertFalse(compact.contains("Changho Choi"))
         let personalized = CleanupPrompt.compactSystem(personalContext: "Keep UTC.")
         XCTAssertTrue(personalized.contains("CUSTOM INSTRUCTIONS"))
         XCTAssertTrue(personalized.contains("Keep UTC."))
+        XCTAssertLessThan(
+            CleanupPrompt.defaultPersonalNotes.count,
+            CleanupPrompt.legacyDefaultPersonalNotes.count
+        )
+    }
+
+    func testOnDeviceSystemDropsAllAppsDump() {
+        let baked = CleanupPrompt.assembleUserLayers(
+            personalNotes: "Keep UTC.",
+            exceptions: "- Cursor: keep comments tight.\n- Mail: light letter polish.",
+            appDictionaries: [
+                AppDictionaryEntry(appName: "Cursor", kind: "code editor", terms: ["mlx-swift"]),
+                AppDictionaryEntry(appName: "Mail", kind: "mail app", terms: ["Alex"])
+            ]
+        )
+        let onDevice = CleanupPrompt.onDeviceSystem(personalContext: baked)
+        XCTAssertTrue(onDevice.contains("Keep UTC."))
+        XCTAssertFalse(onDevice.contains("mlx-swift"))
+        XCTAssertFalse(onDevice.contains("light letter polish"))
+        XCTAssertFalse(onDevice.contains("Alex"))
+        XCTAssertLessThan(onDevice.count, CleanupPrompt.system(personalContext: baked).count)
+    }
+
+    func testOnDeviceWrapKeepsOnlyMatchingAppNotes() {
+        let baked = CleanupPrompt.assembleUserLayers(
+            personalNotes: "Keep UTC.",
+            exceptions: "- Cursor: keep comments tight.\n- Mail: light letter polish.",
+            appDictionaries: [
+                AppDictionaryEntry(appName: "Cursor", kind: "code editor", terms: ["mlx-swift"]),
+                AppDictionaryEntry(appName: "Mail", kind: "mail app", terms: ["Alex"])
+            ]
+        )
+        let wrapped = CleanupPrompt.wrapOnDeviceTranscript(
+            "hello",
+            targetApp: "Cursor — code editor",
+            personalContext: baked
+        )
+        XCTAssertTrue(wrapped.contains("<target-app>Cursor — code editor</target-app>"))
+        XCTAssertTrue(wrapped.contains("keep comments tight"))
+        XCTAssertTrue(wrapped.contains("mlx-swift"))
+        XCTAssertFalse(wrapped.contains("light letter polish"))
+        XCTAssertFalse(wrapped.contains("Alex"))
+    }
+
+    func testAssembleUserLayersOmitsEmptySections() {
+        let personalOnly = CleanupPrompt.assembleUserLayers(
+            personalNotes: "Keep UTC.",
+            exceptions: "  ",
+            appDictionaries: []
+        )
+        XCTAssertTrue(personalOnly.hasPrefix("PERSONAL\nKeep UTC."))
+        XCTAssertFalse(personalOnly.contains("EXCEPTIONS"))
+        XCTAssertFalse(personalOnly.contains("EXAMPLES"))
+        XCTAssertFalse(personalOnly.contains("PER-APP DICTIONARY"))
+
+        let withExamples = CleanupPrompt.assembleUserLayers(
+            personalNotes: "Keep UTC.",
+            exceptions: "",
+            appDictionaries: [],
+            examples: "whisper kit → WhisperKit"
+        )
+        XCTAssertTrue(withExamples.contains("PERSONAL\nKeep UTC."))
+        XCTAssertTrue(withExamples.contains("EXAMPLES\nwhisper kit → WhisperKit"))
+        XCTAssertFalse(withExamples.contains("EXCEPTIONS"))
+
+        let withDict = CleanupPrompt.assembleUserLayers(
+            personalNotes: "",
+            exceptions: "In Slack stay casual.",
+            appDictionaries: [
+                AppDictionaryEntry(appName: "Cursor", kind: "code editor", terms: ["WhisperKit", "mlx-swift"])
+            ]
+        )
+        XCTAssertTrue(withDict.contains("EXCEPTIONS\n\(CleanupPrompt.hiddenExceptionRule)\nIn Slack stay casual."))
+        XCTAssertTrue(withDict.contains("PER-APP DICTIONARY"))
+        XCTAssertTrue(withDict.contains("- Cursor — code editor: WhisperKit, mlx-swift"))
+    }
+
+    func testSplitNotesAndExamples() {
+        let combined = """
+        Keep UTC.
+
+        Examples:
+        whisper kit → WhisperKit
+        """
+        let split = CleanupPrompt.splitNotesAndExamples(combined)
+        XCTAssertEqual(split.notes, "Keep UTC.")
+        XCTAssertEqual(split.examples, "whisper kit → WhisperKit")
+        XCTAssertFalse(CleanupPrompt.defaultPersonalNotes.contains("Examples:"))
+        XCTAssertTrue(CleanupPrompt.defaultPersonalExamples.contains("WhisperKit follow-up for the next release."))
+        let none = CleanupPrompt.splitNotesAndExamples("Keep UTC.")
+        XCTAssertEqual(none.notes, "Keep UTC.")
+        XCTAssertEqual(none.examples, "")
+    }
+
+    func testExceptionBoilerplateIsHiddenFromUserDrafts() {
+        XCTAssertFalse(CleanupPrompt.defaultExceptions.contains("<target-app>"))
+        XCTAssertTrue(CleanupPrompt.defaultExceptions.contains("- Cursor / VS Code"))
+        let assembled = CleanupPrompt.assembleUserLayers(
+            personalNotes: "",
+            exceptions: CleanupPrompt.defaultExceptions,
+            appDictionaries: []
+        )
+        XCTAssertTrue(assembled.contains(CleanupPrompt.hiddenExceptionRule))
+        XCTAssertEqual(
+            CleanupPrompt.strippedUserExceptions(
+                "Apply only the notes that match <target-app>. Ignore the rest.\n- In Cursor keep comments tight."
+            ),
+            "- In Cursor keep comments tight."
+        )
+    }
+
+    func testSplitLegacyKeepsExamplesInPersonalNotes() {
+        let blob = """
+        SPEAKER
+        Hello.
+
+        PER APP
+        In Cursor keep comments tight.
+
+        EXAMPLES
+        Input: hi
+        Output: Hi.
+        """
+        let split = CleanupPrompt.splitLegacyPersonalContext(blob)
+        XCTAssertTrue(split.notes.contains("SPEAKER"))
+        XCTAssertTrue(split.notes.contains("EXAMPLES"))
+        XCTAssertTrue(split.notes.contains("Input: hi"))
+        XCTAssertFalse(split.notes.contains("PER APP"))
+        XCTAssertTrue(split.exceptions.contains("In Cursor keep comments tight."))
+        XCTAssertFalse(split.exceptions.contains("Apply only the notes"))
+        XCTAssertFalse(split.exceptions.contains("EXAMPLES"))
+    }
+
+    func testMatchingAppDictionaryUsesFocusedAppName() {
+        let entries = [
+            AppDictionaryEntry(appName: "Cursor", kind: "code editor", terms: ["WhisperKit"]),
+            AppDictionaryEntry(appName: "Slack", kind: "chat app", terms: ["standup"])
+        ]
+        XCTAssertEqual(
+            CleanupPrompt.matchingDictionaryTerms(in: entries, targetApp: "Cursor — code editor"),
+            ["WhisperKit"]
+        )
+        XCTAssertEqual(
+            CleanupPrompt.matchingDictionaryTerms(in: entries, targetApp: "Slack — chat app"),
+            ["standup"]
+        )
+        XCTAssertEqual(
+            CleanupPrompt.matchingDictionaryTerms(in: entries, targetApp: "Safari — browser"),
+            []
+        )
+    }
+}
+
+final class DictionaryCSVTests: XCTestCase {
+    func testParsesEveryAppAndPerAppRows() throws {
+        let csv = """
+        app,kind,word,exception
+        ,,WhisperKit,
+        Cursor,code editor,mlx-swift,keep comments tight
+        Cursor,code editor,Gemma,
+        Slack,chat app,standup,keep casual
+        """
+        let snapshot = try DictionaryCSV.parse(csv)
+        XCTAssertEqual(snapshot.globalWords, ["WhisperKit"])
+        XCTAssertEqual(snapshot.apps.map(\.appName), ["Cursor", "Slack"])
+        XCTAssertEqual(snapshot.apps[0].terms, ["mlx-swift", "Gemma"])
+        XCTAssertEqual(snapshot.apps[0].kind, "code editor")
+        XCTAssertEqual(snapshot.exceptionsByApp["Cursor"], "keep comments tight")
+        XCTAssertEqual(snapshot.exceptionsByApp["Slack"], "keep casual")
+    }
+
+    func testIgnoresCommentsAndAcceptsQuotedCommas() throws {
+        let csv = """
+        # WhisperLocal dictionary CSV
+        # kind: code editor, chat app, browser, terminal, mail app, notes app, app
+        # Empty app = words for every app. One word per row, or separate several with ;
+        app,kind,word,exception
+        Cursor,code editor,"foo, bar","tight, no fences"
+        """
+        let snapshot = try DictionaryCSV.parse(csv)
+        XCTAssertEqual(snapshot.apps.map(\.appName), ["Cursor"])
+        XCTAssertEqual(snapshot.apps.first?.terms, ["foo, bar"])
+        XCTAssertEqual(snapshot.exceptionsByApp["Cursor"], "tight, no fences")
+        XCTAssertFalse(snapshot.apps.contains(where: { $0.appName.hasPrefix("#") }))
+    }
+
+    func testTemplateDoesNotImportHashNotesAsApps() throws {
+        let snapshot = try DictionaryCSV.parse(DictionaryCSV.template)
+        XCTAssertTrue(snapshot.globalWords.contains("WhisperLocal"))
+        XCTAssertTrue(snapshot.apps.contains(where: { $0.appName == "Cursor" }))
+        XCTAssertFalse(snapshot.apps.contains(where: { $0.appName.hasPrefix("#") }))
+        XCTAssertFalse(snapshot.apps.contains(where: { $0.appName.localizedCaseInsensitiveContains("kind:") }))
+    }
+
+    func testRoundTripExportParse() throws {
+        let apps = [
+            AppDictionaryEntry(appName: "Cursor", kind: "code editor", terms: ["WhisperKit"]),
+            AppDictionaryEntry(appName: "Slack", kind: "chat app", terms: ["standup"])
+        ]
+        let text = DictionaryCSV.export(
+            globalWords: ["WhisperLocal"],
+            apps: apps,
+            exceptions: "- Cursor: keep comments tight\n- Slack: keep casual"
+        )
+        let snapshot = try DictionaryCSV.parse(text)
+        XCTAssertEqual(snapshot.globalWords, ["WhisperLocal"])
+        XCTAssertEqual(
+            snapshot.apps.first(where: { $0.appName == "Cursor" })?.terms,
+            ["WhisperKit"]
+        )
+        XCTAssertEqual(snapshot.exceptionsByApp["Cursor"], "keep comments tight")
+    }
+
+    func testTemplateIsImportable() throws {
+        let snapshot = try DictionaryCSV.parse(DictionaryCSV.template)
+        XCTAssertTrue(snapshot.globalWords.contains("WhisperLocal"))
+        XCTAssertTrue(snapshot.apps.contains(where: { $0.appName == "Cursor" }))
+        XCTAssertEqual(
+            snapshot.apps.filter { $0.appName.hasPrefix("#") }.map(\.appName),
+            []
+        )
+    }
+
+    func testMergeExceptionsReplacesMatchingBullet() {
+        let merged = DictionaryCSV.mergeExceptions(
+            existing: "- Cursor / VS Code / Xcode: old rule.\n- Mail: light letter polish.",
+            byApp: ["Cursor": "keep comments tight"]
+        )
+        XCTAssertTrue(merged.contains("- Cursor: keep comments tight"))
+        XCTAssertFalse(merged.contains("old rule"))
+        XCTAssertTrue(merged.contains("- Mail: light letter polish."))
+    }
+}
+
+final class TargetAppContextTests: XCTestCase {
+    func testKindFromKnownBundleIDs() {
+        XCTAssertEqual(
+            TargetAppContext.kind(bundleID: "com.anysphere.cursor", name: "Cursor"),
+            .codeEditor
+        )
+        XCTAssertEqual(
+            TargetAppContext.kind(bundleID: "com.microsoft.VSCode", name: "Code"),
+            .codeEditor
+        )
+        XCTAssertEqual(
+            TargetAppContext.kind(bundleID: "com.tinyspeck.slackmacgap", name: "Slack"),
+            .chat
+        )
+        XCTAssertEqual(
+            TargetAppContext.kind(bundleID: "com.apple.Safari", name: "Safari"),
+            .browser
+        )
+        XCTAssertEqual(
+            TargetAppContext.kind(bundleID: "com.apple.Terminal", name: "Terminal"),
+            .terminal
+        )
+        XCTAssertEqual(
+            TargetAppContext.kind(bundleID: "com.apple.mail", name: "Mail"),
+            .mail
+        )
+        XCTAssertEqual(
+            TargetAppContext.kind(bundleID: "com.apple.Notes", name: "Notes"),
+            .notes
+        )
+        XCTAssertEqual(
+            TargetAppContext.kind(bundleID: "com.example.unknown", name: "Mystery"),
+            .other
+        )
+    }
+
+    func testPromptLineOmitsKindForUnknownApps() {
+        let cursor = TargetAppContext(name: "Cursor", bundleID: "com.anysphere.cursor", kind: .codeEditor)
+        XCTAssertEqual(cursor.promptLine, "Cursor — code editor")
+        let other = TargetAppContext(name: "Mystery", bundleID: "com.example.unknown", kind: .other)
+        XCTAssertEqual(other.promptLine, "Mystery")
     }
 }
 
@@ -350,5 +710,51 @@ final class PolishOutputTests: XCTestCase {
 
     func testStripsGemmaEndOfTurn() {
         XCTAssertEqual(PolishOutput.sanitize("Hello there.<end_of_turn>"), "Hello there.")
+    }
+}
+
+final class AppUpdateFeedTests: XCTestCase {
+    func testVersionCompare() {
+        XCTAssertTrue(AppUpdateFeed.isNewer(latest: "0.1.3", current: "0.1.2"))
+        XCTAssertTrue(AppUpdateFeed.isNewer(latest: "v0.2.0", current: "0.1.9"))
+        XCTAssertTrue(AppUpdateFeed.isNewer(latest: "0.1.10", current: "0.1.2"))
+        XCTAssertFalse(AppUpdateFeed.isNewer(latest: "0.1.2", current: "0.1.2"))
+        XCTAssertFalse(AppUpdateFeed.isNewer(latest: "0.1.1", current: "0.1.2"))
+    }
+
+    func testParsesGitHubReleaseAndPrefersArm64DMG() throws {
+        let json = """
+        {
+          "tag_name": "v0.1.3",
+          "html_url": "https://github.com/usingcolor/WhisperLocal/releases/tag/v0.1.3",
+          "assets": [
+            {
+              "name": "WhisperLocal-0.1.3.zip",
+              "browser_download_url": "https://github.com/usingcolor/WhisperLocal/releases/download/v0.1.3/WhisperLocal-0.1.3.zip",
+              "size": 12
+            },
+            {
+              "name": "WhisperLocal-0.1.3-arm64.dmg",
+              "browser_download_url": "https://github.com/usingcolor/WhisperLocal/releases/download/v0.1.3/WhisperLocal-0.1.3-arm64.dmg",
+              "size": 80000000
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        let release = try AppUpdateFeed.parseRelease(from: json)
+        XCTAssertEqual(release.version, "0.1.3")
+        XCTAssertEqual(release.dmgName, "WhisperLocal-0.1.3-arm64.dmg")
+        XCTAssertTrue(release.dmgURL.absoluteString.hasSuffix("WhisperLocal-0.1.3-arm64.dmg"))
+    }
+
+    func testRejectsOffsiteAssetURLs() {
+        XCTAssertFalse(
+            AppUpdateFeed.isTrustedDownloadURL(URL(string: "https://evil.example/WhisperLocal.dmg")!)
+        )
+        XCTAssertTrue(
+            AppUpdateFeed.isTrustedDownloadURL(
+                URL(string: "https://github.com/usingcolor/WhisperLocal/releases/download/v0.1.2/WhisperLocal-0.1.2-arm64.dmg")!
+            )
+        )
     }
 }

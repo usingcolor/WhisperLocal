@@ -5,7 +5,12 @@ import Foundation
 struct HeuristicPolisher: TextPolisher {
     let name = "Heuristic"
 
-    func polish(_ text: String, dictionary: [String], personalContext _: String = "") async throws -> String {
+    func polish(
+        _ text: String,
+        dictionary: [String],
+        personalContext _: String = "",
+        targetApp _: String? = nil
+    ) async throws -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { return result }
 
@@ -133,8 +138,7 @@ struct HeuristicPolisher: TextPolisher {
     }
 
     private func stripFillers(_ text: String) -> String {
-        var result = text
-        result = replacing(#"\b(um|uh|uhm|er|erm|ah|eh|hmm)\b[.,]?"#, in: result, with: "")
+        var result = VocalFillerFilter.strip(text)
         result = replacing(#",\s*you know\s*,"#, in: result, with: " ")
         result = replacing(#"(?<=\s)you know,(?=\s)"#, in: result, with: "")
         result = replacing(#"^you know,?\s+"#, in: result, with: "")
@@ -267,5 +271,24 @@ struct HeuristicPolisher: TextPolisher {
         }
         let range = NSRange(text.startIndex..., in: text)
         return regex.stringByReplacingMatches(in: text, range: range, withTemplate: template)
+    }
+}
+
+/// Drops vocalized pauses / sound effects that ASR writes as words.
+/// Runs even when full heuristic cleanup is off, so Apple Intelligence still loses um / hmm / uh.
+enum VocalFillerFilter {
+    static func strip(_ text: String) -> String {
+        var result = text
+        result = result.replacingOccurrences(
+            of: #"\b(um+|uh+|uhm|er|erm|ah+|eh+|hm+|mm+|mhm)\b[.,!?…]*"#,
+            with: " ",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        result = result.replacingOccurrences(of: #",[ \t]*,+"#, with: ",", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"^[ \t,;:]+"#, with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"[ \t,;:]+$"#, with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"\s+([,.;!?])"#, with: "$1", options: .regularExpression)
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -5,7 +5,10 @@ import SwiftUI
 /// Activate, move onto this Space, and raise — and restore accessory policy when idle.
 @MainActor
 enum AppWindowFocus {
+    /// Restored windows must not steal focus on launch — that kills the dictation hotkey.
+    static var shouldRaiseRestoredWindows = false
     static func present(title: String, open: () -> Void) {
+        shouldRaiseRestoredWindows = true
         becomeRegular()
         activate()
         open()
@@ -98,9 +101,12 @@ final class WindowRaiserView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window else { return }
-        Task { @MainActor in
-            AppWindowFocus.raise(window)
+        if AppWindowFocus.shouldRaiseRestoredWindows {
+            Task { @MainActor in
+                AppWindowFocus.raise(window)
+            }
         }
+        disableHostingWindowSizing(from: self)
 
         if closeObserver == nil {
             closeObserver = NotificationCenter.default.addObserver(
@@ -118,6 +124,19 @@ final class WindowRaiserView: NSView {
     deinit {
         if let closeObserver {
             NotificationCenter.default.removeObserver(closeObserver)
+        }
+    }
+}
+
+/// macOS 26 crashes if NSHostingView drives window min/max size during Auto Layout.
+private func disableHostingWindowSizing(from view: NSView) {
+    DispatchQueue.main.async {
+        var node: NSView? = view
+        while let current = node {
+            if current.responds(to: NSSelectorFromString("setSizingOptions:")) {
+                current.setValue(0, forKey: "sizingOptions")
+            }
+            node = current.superview
         }
     }
 }

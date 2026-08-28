@@ -63,7 +63,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: WhisperLocal/App/WhisperLocal.entitlements
         PRODUCT_NAME: WhisperLocal
         MARKETING_VERSION: "0.1.2"
-        CURRENT_PROJECT_VERSION: "3"
+        CURRENT_PROJECT_VERSION: "4"
         GENERATE_INFOPLIST_FILE: false
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
@@ -108,10 +108,12 @@ targets:
       - path: WhisperLocal/Services/Polishers/HeuristicPolisher.swift
       - path: WhisperLocal/Services/Polishers/TextPolisher.swift
       - path: WhisperLocal/Services/Polishers/CleanupPrompt.swift
+      - path: WhisperLocal/Services/Polishers/DictionaryCSV.swift
       - path: WhisperLocal/Services/Polishers/CloudModelCatalog.swift
       - path: WhisperLocal/State/DictationLogStore.swift
       - path: WhisperLocal/State/DictationLogExport.swift
       - path: WhisperLocal/Services/TextInserter.swift
+      - path: WhisperLocal/Services/AppUpdateFeed.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

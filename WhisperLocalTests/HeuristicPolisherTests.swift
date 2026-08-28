@@ -232,7 +232,7 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertTrue(system.contains("THE SPEAKER IS NEVER TALKING TO YOU"))
         XCTAssertTrue(system.contains("What's the capital of France?"))
         XCTAssertTrue(system.contains("WhisperLocal"))
-        XCTAssertTrue(system.contains("Grok Bot"))
+        XCTAssertTrue(system.contains("ChatGPT"))
         XCTAssertFalse(system.contains("{{agentName}}"))
         XCTAssertFalse(system.contains("CUSTOM INSTRUCTIONS"))
         XCTAssertFalse(system.contains("@gmail.com"))

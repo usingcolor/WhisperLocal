@@ -36,9 +36,9 @@ final class TextInserter {
     ]
 
     /// Electron / Chromium apps where AXSet selected-text often returns success and types nothing
-    /// (Grok Bot, Cursor, Slack, Chrome, VS Code, …).
+    /// (Cursor, Slack, Chrome, VS Code, …).
     private let clipboardFirstBundleIDs: Set<String> = [
-        "com.anysphere.sand",              // Grok Bot
+        "com.anysphere.sand",              // Cursor (Anysphere)
         "com.anysphere.cursor",
         "com.todesktop.230313mzl4w4u92",   // Cursor (older id)
         "com.microsoft.VSCode",
@@ -79,7 +79,7 @@ final class TextInserter {
         let isTerminal = isTerminalApp(bundleID: bundleID, name: appName)
         let useClipboardFirst = isTerminal || prefersClipboardPaste(app: frontApp, bundleID: bundleID)
 
-        // Electron/Chromium (Grok Bot, Cursor, Chrome, …): AX insert lies about success.
+        // Electron/Chromium (Cursor, Slack, Chrome, …): AX insert lies about success.
         switch insertViaAccessibility(sanitized, skip: useClipboardFirst) {
         case .inserted:
             return InsertionResult(success: true, method: .accessibility, appName: appName)
@@ -123,7 +123,7 @@ final class TextInserter {
         return isElectronApp(app)
     }
 
-    /// Grok Bot, Cursor, VS Code, Slack, etc. ship `Electron Framework.framework`.
+    /// Cursor, VS Code, Slack, etc. ship `Electron Framework.framework`.
     private func isElectronApp(_ app: NSRunningApplication?) -> Bool {
         guard let bundleURL = app?.bundleURL else { return false }
         let electron = bundleURL
@@ -246,7 +246,7 @@ final class TextInserter {
     }
 
     /// Four-event ⌘V via HID, posted to the target pid when possible.
-    /// Session-tap + flags-on-V-only is ignored by many Electron webviews (Grok Bot).
+    /// Session-tap + flags-on-V-only is ignored by many Electron webviews (Cursor, Slack).
     private func postCommandV(to pid: pid_t?) {
         let source = CGEventSource(stateID: .hidSystemState)
         let cmd: CGKeyCode = CGKeyCode(kVK_Command)

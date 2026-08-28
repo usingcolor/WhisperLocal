@@ -102,7 +102,7 @@ final class RecordingHUDController: ObservableObject {
     }
 }
 
-/// HUD must never become key — otherwise ⌘V lands in WhisperLocal instead of Grok Bot / Cursor.
+/// HUD must never become key — otherwise ⌘V lands in WhisperLocal instead of Cursor / Chrome.
 private final class HUDPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }

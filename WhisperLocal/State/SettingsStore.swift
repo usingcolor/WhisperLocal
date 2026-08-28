@@ -29,19 +29,23 @@ enum ASRModelOption: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Compact label for the menu bar and status line.
+    var shortName: String {
+        switch self {
+        case .appleSpeech: return "Apple Speech"
+        case .tinyEn: return "Whisper Tiny"
+        case .baseEn: return "Whisper Base"
+        case .smallEn: return "Whisper Small"
+        case .largeV3Turbo: return "Whisper Large v3 Turbo"
+        case .parakeetTDT06bV2: return "Parakeet 0.6B"
+        }
+    }
+
     var engine: ASREngine {
         switch self {
         case .parakeetTDT06bV2: return .parakeet
         case .appleSpeech: return .appleSpeech
         default: return .whisper
-        }
-    }
-
-    var statusBrand: String {
-        switch engine {
-        case .whisper: return "Whisper"
-        case .parakeet: return "Parakeet"
-        case .appleSpeech: return "Apple Speech"
         }
     }
 

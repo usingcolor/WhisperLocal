@@ -359,8 +359,8 @@ final class DictationController: ObservableObject {
         case .tap:
             hotkey = "tap \(hotKey.selectedKey.displayName)"
         }
-        if transcription.isReady {
-            return "\(transcription.statusMessage) · \(hotkey)"
+        if transcription.isReady, let model = transcription.loadedModel {
+            return "\(model.shortName) · \(hotkey)"
         }
         return transcription.statusMessage
     }

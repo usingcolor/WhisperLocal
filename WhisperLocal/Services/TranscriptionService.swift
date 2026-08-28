@@ -32,7 +32,7 @@ final class TranscriptionService: ObservableObject {
         isLoadingModel = true
         isReady = false
         lastError = nil
-        statusMessage = "\(model.statusBrand): loading \(model.displayName)…"
+        statusMessage = "Loading \(model.shortName)…"
 
         do {
             switch model.engine {
@@ -52,7 +52,7 @@ final class TranscriptionService: ObservableObject {
             loadedModel = nil
             isReady = false
             lastError = error.localizedDescription
-            statusMessage = "\(model.statusBrand): failed \(model.displayName) — \(error.localizedDescription)"
+            statusMessage = "\(model.shortName) failed — \(error.localizedDescription)"
             isLoadingModel = false
             await AppleSpeechASR.shared.unload()
         }
@@ -182,7 +182,7 @@ final class TranscriptionService: ObservableObject {
         isLoadingModel = false
         isReady = true
         lastError = nil
-        statusMessage = "\(model.statusBrand): \(model.displayName) — ready"
+        statusMessage = "\(model.shortName) — ready"
     }
 
     /// Parakeet rejects clips shorter than 0.3s.
@@ -196,7 +196,7 @@ final class TranscriptionService: ObservableObject {
         let pct = Int((progress.fractionCompleted * 100).rounded())
         switch progress.phase {
         case .listing:
-            return "Parakeet: finding \(model.displayName)…"
+            return "Parakeet: finding \(model.shortName)…"
         case .downloading(let completed, let total):
             if total > 0 {
                 return "Parakeet: downloading \(completed)/\(total) files (\(pct)%)…"

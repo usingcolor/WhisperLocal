@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Security
 import SwiftUI
 
@@ -291,8 +292,12 @@ final class SettingsStore: ObservableObject {
 
 enum KeychainHelper {
     private static let service = "com.usingcolor.WhisperLocal"
+    private static let logger = Logger(subsystem: service, category: "keychain")
 
-    static func save(account: String, value: String) {
+    /// Returns false when the Keychain refused the write. Callers must not assume a
+    /// successful save — a silent failure looks identical to a stored key in the UI.
+    @discardableResult
+    static func save(account: String, value: String) -> Bool {
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -303,7 +308,13 @@ enum KeychainHelper {
         var attrs = query
         attrs[kSecValueData as String] = data
         attrs[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(attrs as CFDictionary, nil)
+        let status = SecItemAdd(attrs as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            let message = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
+            logger.error("Keychain save failed for \(account, privacy: .public): \(message, privacy: .public)")
+            return false
+        }
+        return true
     }
 
     static func load(account: String) -> String? {

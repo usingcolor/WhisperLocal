@@ -38,8 +38,7 @@ struct AnthropicPolisher: TextPolisher {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let contentBlocks = json?["content"] as? [[String: Any]]
         let textBlock = contentBlocks?.first(where: { ($0["type"] as? String) == "text" })
-        let content = (textBlock?["text"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let content = (textBlock?["text"] as? String).map(PolishOutput.sanitize)
         guard let content, !content.isEmpty else { throw PolisherError.emptyResponse }
         return content
     }

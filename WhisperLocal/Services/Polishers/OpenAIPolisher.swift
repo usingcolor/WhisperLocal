@@ -38,8 +38,7 @@ struct OpenAIPolisher: TextPolisher {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let choices = json?["choices"] as? [[String: Any]]
         let message = choices?.first?["message"] as? [String: Any]
-        let content = (message?["content"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let content = (message?["content"] as? String).map(PolishOutput.sanitize)
         guard let content, !content.isEmpty else { throw PolisherError.emptyResponse }
         return content
     }

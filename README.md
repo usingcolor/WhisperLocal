@@ -59,7 +59,7 @@ To **run** the app:
 - macOS 14 or later
 - Microphone and Accessibility permissions
 
-To **build from source** you also need Xcode 16.4+ (mlx-swift 0.31.6 needs Swift 6.3 tools) and [XcodeGen](https://github.com/yonaskolb/XcodeGen). A Release DMG:
+To **build from source** you also need Xcode 26 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen). mlx-swift 0.31.6 requires Swift 6.3 tools — Xcode 16.4 ships Swift 6.1 and cannot resolve the package, which is why CI builds on the `macos-26` runner. A Release DMG:
 
 ```bash
 bash scripts/make-dmg.sh

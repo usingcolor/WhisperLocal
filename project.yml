@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.usingcolor
   deploymentTarget:
     macOS: "14.0"
-  xcodeVersion: "16.0"
+  xcodeVersion: "26.0"
   createIntermediateGroups: true
 settings:
   base:
@@ -63,7 +63,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: WhisperLocal/App/WhisperLocal.entitlements
         PRODUCT_NAME: WhisperLocal
         MARKETING_VERSION: "0.1.2"
-        CURRENT_PROJECT_VERSION: "4"
+        CURRENT_PROJECT_VERSION: "5"
         GENERATE_INFOPLIST_FILE: false
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"

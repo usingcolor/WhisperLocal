@@ -17,7 +17,7 @@ struct AnthropicPolisher: TextPolisher {
 
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 1024,
+            "max_tokens": PolishOutput.maxOutputTokens(for: text),
             "temperature": 0.2,
             "system": system,
             "messages": [
@@ -31,7 +31,7 @@ struct AnthropicPolisher: TextPolisher {
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 30
+        request.timeoutInterval = PolishTimeouts.cloud
 
         let (data, response) = try await URLSession.shared.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -41,6 +41,9 @@ struct AnthropicPolisher: TextPolisher {
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        if PolishOutput.anthropicHitTokenCap(json?["stop_reason"] as? String) {
+            throw PolisherError.truncated
+        }
         let contentBlocks = json?["content"] as? [[String: Any]]
         let textBlock = contentBlocks?.first(where: { ($0["type"] as? String) == "text" })
         let content = (textBlock?["text"] as? String).map(PolishOutput.sanitize)

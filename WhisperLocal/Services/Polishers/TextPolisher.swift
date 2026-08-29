@@ -20,11 +20,20 @@ extension TextPolisher {
     }
 }
 
+/// Wall-clock caps. Apple Intelligence used to be 8s and fail-opened on long takes.
+enum PolishTimeouts {
+    static let appleIntelligence: TimeInterval = 20
+    static let gemma: TimeInterval = 20
+    static let cloud: TimeInterval = 30
+}
+
 enum PolisherError: LocalizedError {
     case missingAPIKey(String)
     case emptyResponse
     case http(Int, String)
     case notAvailable(String)
+    /// Model hit its output cap. Pipeline fail-opens to the previous stage.
+    case truncated
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +45,18 @@ enum PolisherError: LocalizedError {
             return "Polish request failed (\(code)): \(Self.clipErrorBody(body))"
         case .notAvailable(let reason):
             return reason
+        case .truncated:
+            return "Cleanup was cut short. Pasted without AI cleanup."
+        }
+    }
+
+    /// HUD / log note when an LLM step fails and the previous text is pasted.
+    var pasteNote: String {
+        switch self {
+        case .truncated:
+            return "Cleanup was cut short. Pasted without AI cleanup."
+        default:
+            return "Pasted without AI cleanup"
         }
     }
 
@@ -81,6 +102,19 @@ enum PolishOutput {
             text = String(text[..<eos.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return text
+    }
+
+    /// Scale cloud / on-device output caps with the input. Dictation should not hit a 1k floor.
+    static func maxOutputTokens(for text: String) -> Int {
+        min(max(text.count / 2, 256), 4096)
+    }
+
+    static func openaiHitLengthCap(_ finishReason: String?) -> Bool {
+        finishReason == "length"
+    }
+
+    static func anthropicHitTokenCap(_ stopReason: String?) -> Bool {
+        stopReason == "max_tokens"
     }
 }
 
@@ -151,7 +185,7 @@ struct PolishPipeline: Sendable {
             } catch {
                 stages.append("\(localLLM.name) failed")
                 cleanupFailed = true
-                cleanupNote = "Pasted without AI cleanup"
+                cleanupNote = (error as? PolisherError)?.pasteNote ?? "Pasted without AI cleanup"
             }
         }
 
@@ -171,7 +205,7 @@ struct PolishPipeline: Sendable {
             } catch {
                 stages.append("\(cloud.name) failed")
                 cleanupFailed = true
-                cleanupNote = "Pasted without AI cleanup"
+                cleanupNote = (error as? PolisherError)?.pasteNote ?? "Pasted without AI cleanup"
             }
         }
 

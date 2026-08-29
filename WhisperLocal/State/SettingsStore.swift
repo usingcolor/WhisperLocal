@@ -118,6 +118,7 @@ final class SettingsStore: ObservableObject {
     @Published var openAIModel: String { didSet { persist(openAIModel, key: "openAIModel") } }
     @Published var anthropicModel: String { didSet { persist(anthropicModel, key: "anthropicModel") } }
     @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
+    @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
     @Published var promptCommitForced: Bool { didSet { persist(promptCommitForced, key: "promptCommitForced") } }
 
     var asrModel: ASRModelOption {
@@ -265,6 +266,7 @@ final class SettingsStore: ObservableObject {
         openAIModel = defaults.string(forKey: "openAIModel") ?? CloudModelCatalog.openAIDefault
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
+        enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
         promptCommitForced = defaults.bool(forKey: "promptCommitForced")
         if defaults.string(forKey: "localPolishEngine") != localPolishEngineRaw {
             UserDefaults.standard.set(localPolishEngineRaw, forKey: "localPolishEngine")

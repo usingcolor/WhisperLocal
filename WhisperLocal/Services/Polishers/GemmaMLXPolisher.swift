@@ -47,7 +47,7 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
     }
 
     private let loader = Loader()
-    private let generateTimeout: TimeInterval = 20
+    private let generateTimeout: TimeInterval = PolishTimeouts.gemma
 
     private static let idleMessage =
         "Gemma 4 E2B IT is not loaded. Select it to download ~2.7 GB (MLX, on-device, text-only)."
@@ -92,6 +92,8 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
                 let deadline = Date().addingTimeInterval(timeout)
                 let charCap = trimmed.count * 3 + 80
                 var output = ""
+                var sawEndOfTurn = false
+                var generatedTokens = 0
                 for await event in stream {
                     if Date() > deadline {
                         throw PolisherError.notAvailable("On-device polish timed out.")
@@ -99,12 +101,21 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
                     switch event {
                     case .chunk(let chunk):
                         output += chunk
-                        if output.contains("<end_of_turn>") || output.count > charCap {
+                        if output.contains("<end_of_turn>") {
+                            sawEndOfTurn = true
                             return output
                         }
-                    case .info, .toolCall:
+                        if output.count > charCap {
+                            throw PolisherError.truncated
+                        }
+                    case .info(let info):
+                        generatedTokens = info.generationTokenCount
+                    case .toolCall:
                         break
                     }
+                }
+                if !sawEndOfTurn, generatedTokens >= maxTokens {
+                    throw PolisherError.truncated
                 }
                 return output
             }
@@ -183,7 +194,7 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
     /// Dictation output should stay close to the input length. A high cap lets a missed EOS run for seconds.
     private static func tokenBudget(for text: String) -> Int {
         let words = text.split { $0.isWhitespace || $0.isNewline }.count
-        return min(max(words * 2 + 24, 48), 192)
+        return min(max(words * 2 + 32, 64), 1024)
     }
 
     /// First generate compiles Metal kernels. Do that at load time, not during a dictation.

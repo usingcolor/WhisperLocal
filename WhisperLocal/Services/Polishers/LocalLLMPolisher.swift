@@ -109,7 +109,7 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
     private var warmSessions: [LanguageModelSession] = []
     private var warmFingerprint = ""
     private let poolSize = 2
-    private let timeoutSeconds: TimeInterval = 8
+    private let timeoutSeconds: TimeInterval = PolishTimeouts.appleIntelligence
 
     func prewarm(personalContext: String = "", dictionary: [String] = []) {
         guard SystemLanguageModel.default.isAvailable else { return }
@@ -142,7 +142,7 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         )
         let options = GenerationOptions(
             sampling: .greedy,
-            maximumResponseTokens: min(max(text.count / 2, 128), 1024)
+            maximumResponseTokens: PolishOutput.maxOutputTokens(for: text)
         )
 
         defer {
@@ -172,6 +172,9 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         } catch let error as PolisherError {
             throw error
         } catch {
+            if Self.looksLikeTruncation(error) {
+                throw PolisherError.truncated
+            }
             throw PolisherError.notAvailable(error.localizedDescription)
         }
     }
@@ -235,6 +238,12 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
 
     private func fingerprint(dictionary: [String], personalContext: String) -> String {
         CleanupPrompt.onDeviceSystem(dictionary: dictionary, personalContext: personalContext)
+    }
+
+    private static func looksLikeTruncation(_ error: Error) -> Bool {
+        let text = error.localizedDescription.lowercased()
+        if text.contains("exceeded context") { return true }
+        return text.contains("maximum") && (text.contains("token") || text.contains("response"))
     }
 
     private func withTimeout<T: Sendable>(

@@ -123,10 +123,14 @@ enum DictationLogExport {
     }
 
     static func escapeCSV(_ field: String) -> String {
-        if field.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" }) {
-            return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        var value = field
+        if let first = value.first, "=+-@".contains(first) {
+            value = "'" + value
         }
-        return field
+        if value.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" }) {
+            return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }
+        return value
     }
 
     enum ExportError: LocalizedError {

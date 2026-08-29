@@ -53,6 +53,8 @@ final class DictationController: ObservableObject {
     /// Frontmost app when dictation started. Passed to polish LLMs as formatting context.
     private var dictationTargetApp: TargetAppContext?
     private var recordingBeganAt: Date?
+    /// MenuBarExtra onAppear also calls start(); only load speech once.
+    private var didBootstrapSpeech = false
 
     private init() {
         transcription.objectWillChange
@@ -62,6 +64,12 @@ final class DictationController: ObservableObject {
             }
             .store(in: &cancellables)
         permissions.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        hotKey.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -86,6 +94,8 @@ final class DictationController: ObservableObject {
             showOnboarding = true
         }
 
+        guard !didBootstrapSpeech else { return }
+        didBootstrapSpeech = true
         Task {
             await transcription.ensureModel(named: settings.asrModel)
             prewarmOnDevicePolish()
@@ -207,6 +217,10 @@ final class DictationController: ObservableObject {
         let audioSeconds = Double(samples.count) / 16_000
         let targetApp = dictationTargetApp?.promptLine
         dictationTargetApp = nil
+        lastTranscript = ""
+        lastPolished = ""
+        lastStages = []
+        lastCleanupNote = nil
         do {
             let extraTerms = settings.matchingAppDictionaryTerms(targetApp: targetApp)
             let raw = try await transcription.transcribe(samples: samples, extraDictionary: extraTerms)

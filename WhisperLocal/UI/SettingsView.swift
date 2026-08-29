@@ -42,6 +42,7 @@ struct SettingsView: View {
     @ObservedObject var controller: DictationController
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var permissions = PermissionManager.shared
+    @ObservedObject private var hotKey = HotKeyManager.shared
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var models = CloudModelCatalog.shared
     @ObservedObject private var gemma = GemmaMLXPolisher.shared
@@ -87,6 +88,9 @@ struct SettingsView: View {
         .onAppear {
             openAIKeyDraft = settings.openAIAPIKey
             anthropicKeyDraft = settings.anthropicAPIKey
+            if !controller.transcription.isReady, !controller.transcription.isLoadingModel {
+                Task { await controller.transcription.ensureModel(named: settings.asrModel) }
+            }
         }
         .onChange(of: settings.appDictionariesRaw) { _, _ in
             if case .app(let id) = dictionaryDestination,
@@ -99,23 +103,17 @@ struct SettingsView: View {
     private var dictationPane: some View {
         settingsForm {
             Section {
-                Picker("Hotkey", selection: Binding(
-                    get: { controller.hotKey.selectedKey },
-                    set: { controller.hotKey.selectedKey = $0 }
-                )) {
+                Picker("Hotkey", selection: $hotKey.selectedKey) {
                     ForEach(HotKeyManager.KeyChoice.allCases) { key in
                         Text(key.displayName).tag(key)
                     }
                 }
-                Picker("Mode", selection: Binding(
-                    get: { controller.hotKey.mode },
-                    set: { controller.hotKey.mode = $0 }
-                )) {
+                Picker("Mode", selection: $hotKey.mode) {
                     ForEach(HotkeyMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }
-                Text(controller.hotKey.mode.helpText)
+                Text(hotKey.mode.helpText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -179,6 +177,10 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
+                Toggle("Keep a dictation log", isOn: $settings.enableDictationLog)
+                Text("Saves recent takes as local JSON (text only). Turn off to skip new entries; existing log is not deleted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Button("Open dictation log…") {
                     AppWindowFocus.present(title: "Dictation Log") {
                         openWindow(id: "log")
@@ -628,7 +630,7 @@ struct SettingsView: View {
         case .parakeet:
             Text("Parakeet TDT 0.6B v2 is NVIDIA’s English model (CC-BY-4.0), running on-device via FluidAudio. First load downloads CoreML weights from Hugging Face.")
         case .appleSpeech:
-            Text("On-device Apple SpeechTranscriber (macOS 26). English, even if the system language is Korean. The OS may download a shared speech model on first use; audio stays on this Mac.")
+            Text("On-device Apple SpeechTranscriber (macOS 26). English, even if the system language is Korean. The OS may download a shared speech model on first use. Each take is written to a private temp file and deleted after transcription; audio stays on this Mac.")
         }
     }
 

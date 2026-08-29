@@ -17,7 +17,7 @@ Native Swift / AppKit. Default on-device ASR is Apple Speech (`SpeechTranscriber
 Apple Silicon only. Get the DMG from [Releases](https://github.com/usingcolor/WhisperLocal/releases/latest) — no Xcode or git clone required.
 
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
-2. First launch: right-click the app → **Open**. The download is ad-hoc signed (not Apple-notarized), so Gatekeeper warns once.
+2. First launch: **System Settings → Privacy & Security → Open Anyway**. The download is ad-hoc signed (not Apple-notarized), so Gatekeeper warns once.
 3. Grant **Microphone** and **Accessibility**.
 
 Speech models: Apple Speech uses a system model (may download once via macOS). Whisper / Parakeet / Gemma still download on first use if you pick them.
@@ -130,7 +130,7 @@ Hotkey alternatives in Settings: Right Option, Left Option, Right Command.
 
 API keys are stored in the Keychain under `com.usingcolor.WhisperLocal`.
 
-The dictation log is `~/Library/Application Support/WhisperLocal/dictation-log.json` (text only).
+The dictation log is `~/Library/Application Support/WhisperLocal/dictation-log.json` (text only). Turn it off in Settings → Dictation.
 
 ## Privacy
 
@@ -138,8 +138,12 @@ The dictation log is `~/Library/Application Support/WhisperLocal/dictation-log.j
 |---|---|
 | Default | Nothing. ASR, heuristic cleanup, and on-device polish (Apple Intelligence or Gemma) stay on this Mac. |
 | Cloud polish enabled | Transcript **text** only, to OpenAI or Anthropic. |
-| Audio | Never uploaded. |
-| Log | Local JSON; no audio. |
+| Audio | Never uploaded. Apple Speech writes a private temp `.caf` for each take and deletes it afterward; Whisper and Parakeet stay in memory. |
+| Keystrokes | Global hotkey and Esc are observed via Accessibility. Keystrokes are never stored or logged. |
+| Clipboard | Clipboard-paste mode briefly uses the general pasteboard. |
+| Log | Optional local JSON (`~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`); text only, no audio. Turn off in Settings → Dictation. |
+
+On-device polish waits up to 20s (Apple Intelligence and Gemma). Cloud polish waits up to 30s. A timeout pastes the previous stage instead of hanging.
 
 ## Project layout
 

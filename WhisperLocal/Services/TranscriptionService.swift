@@ -1,6 +1,7 @@
 import Foundation
 import WhisperKit
 import FluidAudio
+import os
 
 @MainActor
 final class TranscriptionService: ObservableObject {
@@ -17,15 +18,21 @@ final class TranscriptionService: ObservableObject {
     private var whisperKit: WhisperKit?
     private var parakeet: AsrManager?
     private var loadGeneration = 0
+    private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "speech")
 
     /// Load `model`. Pass `force: true` to download/reload even if that model is already in memory.
     func ensureModel(named model: ASRModelOption, force: Bool = false) async {
-        requestedModel = model
-
         if !force, loadedModel == model, backendIsReady(for: model) {
+            requestedModel = model
             applyReady(model)
             return
         }
+        if !force, isLoadingModel, requestedModel == model {
+            logger.info("Speech load already in progress for \(model.shortName, privacy: .public)")
+            return
+        }
+
+        requestedModel = model
 
         loadGeneration += 1
         let generation = loadGeneration
@@ -33,6 +40,7 @@ final class TranscriptionService: ObservableObject {
         isReady = false
         lastError = nil
         statusMessage = "Loading \(model.shortName)…"
+        logger.info("Loading speech model \(model.shortName, privacy: .public)")
 
         do {
             switch model.engine {
@@ -46,6 +54,7 @@ final class TranscriptionService: ObservableObject {
             guard generation == loadGeneration else { return }
             loadedModel = model
             applyReady(model)
+            logger.info("Speech model ready \(model.shortName, privacy: .public)")
         } catch {
             guard generation == loadGeneration else { return }
             unloadAll()
@@ -54,6 +63,7 @@ final class TranscriptionService: ObservableObject {
             lastError = error.localizedDescription
             statusMessage = "\(model.shortName) failed — \(error.localizedDescription)"
             isLoadingModel = false
+            logger.error("Speech model failed \(model.shortName, privacy: .public): \(error.localizedDescription, privacy: .public)")
             await AppleSpeechASR.shared.unload()
         }
     }

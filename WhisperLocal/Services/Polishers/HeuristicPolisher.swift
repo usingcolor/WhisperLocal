@@ -41,21 +41,38 @@ struct HeuristicPolisher: TextPolisher {
         return result
     }
 
+    /// Determiners/modifiers that mark a *literal mention* of a punctuation name
+    /// ("the comma", "an exclamation mark", "Oxford comma", "double quote").
+    private static let mentionBefore =
+        "(?:the|a|an|this|that|these|those|my|your|our|their|its|each|every|any|some|no"
+        + "|oxford|serial|trailing|leading|double|single|closing|opening|matching)"
+
+    /// Words that mark a literal mention when they follow ("comma separated", "colon is").
+    private static let mentionAfter =
+        "(?:separated|delimited|separator|delimiter|key|character|char|symbol|symbols"
+        + "|rule|rules|usage|placement|notation|syntax|is|are|was|were|and|or|of|when|in|to|from|vs|versus)"
+
+    /// Only convert when the word reads as a dictation command, not as its own name.
+    /// A missed conversion stays readable; a wrong one destroys the word.
+    private static func spokenPattern(_ core: String) -> String {
+        "(?<!\\b" + mentionBefore + "\\s)\\b(?:" + core + ")\\b(?!\\s+" + mentionAfter + "\\b)"
+    }
+
     private func applySpokenPunctuation(_ text: String) -> String {
         var result = text
+        // Semicolon before colon so "semicolon" is not eaten as "semi" + "colon".
         let replacements: [(String, String)] = [
-            (#"\bquestion mark\b"#, "?"),
-            (#"\bexclamation point\b|\bexclamation mark\b"#, "!"),
-            (#"\bfull stop\b"#, "."),
-            (#"\bsemi colon\b|\bsemicolon\b"#, ";"),
-            (#"\bopen parenthesis\b|\bopen paren\b"#, "("),
-            (#"\bclose parenthesis\b|\bclose paren\b"#, ")"),
-            (#"\bopen quote\b"#, "\""),
-            (#"\bclose quote\b"#, "\""),
-            (#"\bcomma\b"#, ","),
-            (#"\bcolon\b"#, ":"),
-            // Spoken "period" — not "period of time" / "lunch period and …"
-            (#"\bperiod\b(?!\s+(of|and|when|in|to|from)\b)"#, ".")
+            (Self.spokenPattern(#"semi colon|semicolon"#), ";"),
+            (Self.spokenPattern(#"comma"#), ","),
+            (Self.spokenPattern(#"colon"#), ":"),
+            (Self.spokenPattern(#"question mark"#), "?"),
+            (Self.spokenPattern(#"exclamation point|exclamation mark"#), "!"),
+            (Self.spokenPattern(#"full stop"#), "."),
+            (Self.spokenPattern(#"open parenthesis|open paren"#), "("),
+            (Self.spokenPattern(#"close parenthesis|close paren"#), ")"),
+            (Self.spokenPattern(#"open quote"#), "\""),
+            (Self.spokenPattern(#"close quote"#), "\""),
+            (Self.spokenPattern(#"period"#), ".")
         ]
         for (pattern, replacement) in replacements {
             result = replacing(pattern, in: result, with: replacement)

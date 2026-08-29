@@ -31,7 +31,7 @@ struct OpenAIPolisher: TextPolisher {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 30
+        request.timeoutInterval = PolishTimeouts.cloud
 
         let (data, response) = try await URLSession.shared.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -42,6 +42,9 @@ struct OpenAIPolisher: TextPolisher {
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let choices = json?["choices"] as? [[String: Any]]
+        if PolishOutput.openaiHitLengthCap(choices?.first?["finish_reason"] as? String) {
+            throw PolisherError.truncated
+        }
         let message = choices?.first?["message"] as? [String: Any]
         let content = (message?["content"] as? String).map(PolishOutput.sanitize)
         guard let content, !content.isEmpty else { throw PolisherError.emptyResponse }

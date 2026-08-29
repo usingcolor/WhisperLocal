@@ -3,11 +3,17 @@ import SwiftUI
 
 struct DictationLogView: View {
     @ObservedObject var log = DictationLogStore.shared
+    @ObservedObject var settings = SettingsStore.shared
     @State private var selectedID: UUID?
 
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedID) {
+                if !settings.enableDictationLog {
+                    Text("Logging is off. New takes are not saved. Existing entries stay until you clear them.")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
                 if log.entries.isEmpty {
                     Text("No dictations yet.")
                         .foregroundStyle(.secondary)

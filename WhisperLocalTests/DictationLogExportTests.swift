@@ -50,6 +50,34 @@ final class DictationLogExportTests: XCTestCase {
     func testEmptyPlainText() {
         XCTAssertEqual(DictationLogExport.plainText(entries: []), "")
     }
+
+    func testCSVNeutralizesFormulaInjection() {
+        XCTAssertEqual(DictationLogExport.escapeCSV("=CMD()"), "'=CMD()")
+        XCTAssertEqual(DictationLogExport.escapeCSV("+1+1"), "'+1+1")
+        XCTAssertEqual(DictationLogExport.escapeCSV("-SUM(A1)"), "'-SUM(A1)")
+        XCTAssertEqual(DictationLogExport.escapeCSV("@SUM(A1)"), "'@SUM(A1)")
+        XCTAssertEqual(DictationLogExport.escapeCSV("hello"), "hello")
+
+        let formula = DictationLogEntry(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            date: Date(timeIntervalSince1970: 1_720_000_000),
+            raw: "=HYPERLINK(\"http://evil.example\")",
+            polished: "+cmd|'/C calc'",
+            stages: [],
+            cleanupNote: "@SUM(A1)",
+            appName: "-Notes",
+            insertMethod: "clipboard",
+            outcome: .success,
+            errorMessage: nil,
+            audioSeconds: 1.5
+        )
+        let csv = DictationLogExport.csv(entries: [formula])
+        XCTAssertTrue(csv.contains("'=HYPERLINK("))
+        XCTAssertTrue(csv.contains("'+cmd|'/C calc'"))
+        XCTAssertTrue(csv.contains("'@SUM(A1)"))
+        XCTAssertTrue(csv.contains("'-Notes"))
+        XCTAssertFalse(csv.contains("\n=HYPERLINK"))
+    }
 }
 
 final class TextInserterSanitizeTests: XCTestCase {

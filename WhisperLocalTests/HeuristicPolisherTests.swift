@@ -108,6 +108,39 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertEqual(text, "The list is apples, bananas.")
     }
 
+    func testSpokenPunctuationDoesNotDestroyNames() async throws {
+        let oxford = try await polish("the Oxford comma is contentious")
+        let csv = try await polish("comma separated values")
+        let colon = try await polish("we should discuss the colon and the semicolon")
+        let key = try await polish("the question mark key is broken")
+        let marks = try await polish("use a full stop instead of an exclamation mark")
+        XCTAssertEqual(oxford, "The Oxford comma is contentious.")
+        XCTAssertEqual(csv, "Comma separated values.")
+        XCTAssertEqual(colon, "We should discuss the colon and the semicolon.")
+        XCTAssertEqual(key, "The question mark key is broken.")
+        XCTAssertEqual(marks, "Use a full stop instead of an exclamation mark.")
+    }
+
+    func testSpokenPunctuationStillConvertsCommands() async throws {
+        let comma = try await polish("send it to Sarah comma then archive")
+        let question = try await polish("send it now question mark")
+        let bang = try await polish("ship it exclamation mark")
+        let paren = try await polish("call foo open paren bar close paren")
+        XCTAssertEqual(comma, "Send it to Sarah, then archive.")
+        XCTAssertEqual(question, "Send it now?")
+        XCTAssertEqual(bang, "Ship it!")
+        XCTAssertEqual(paren, "Call foo (bar).")
+    }
+
+    func testPolishTruncationHelpers() {
+        XCTAssertTrue(PolishOutput.openaiHitLengthCap("length"))
+        XCTAssertFalse(PolishOutput.openaiHitLengthCap("stop"))
+        XCTAssertTrue(PolishOutput.anthropicHitTokenCap("max_tokens"))
+        XCTAssertFalse(PolishOutput.anthropicHitTokenCap("end_turn"))
+        XCTAssertEqual(PolishOutput.maxOutputTokens(for: "hi"), 256)
+        XCTAssertEqual(PolisherError.truncated.pasteNote, "Cleanup was cut short. Pasted without AI cleanup.")
+    }
+
     func testDictionaryReplacementEscapesTemplates() async throws {
         let text = try await polish("open $HOME please", dictionary: ["$HOME"])
         XCTAssertEqual(text, "Open $HOME please.")
@@ -238,6 +271,37 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertEqual(result.text, "hello there")
         XCTAssertEqual(result.stages, ["Apple Intelligence", "Fillers"])
         XCTAssertFalse(result.cleanupFailed)
+    }
+
+    func testPipelineTruncationFailOpensWithCutShortNote() async {
+        let local = TruncatingPolisher()
+        let pipeline = PolishPipeline(
+            heuristic: HeuristicPolisher(),
+            localLLM: local,
+            cloud: nil,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            enableHeuristicCleanup: false,
+            dictionary: []
+        )
+        let result = await pipeline.run("hello there")
+        XCTAssertEqual(result.text, "hello there")
+        XCTAssertTrue(result.cleanupFailed)
+        XCTAssertEqual(result.cleanupNote, "Cleanup was cut short. Pasted without AI cleanup.")
+        XCTAssertEqual(result.stages, ["Apple Intelligence failed"])
+    }
+}
+
+private final class TruncatingPolisher: TextPolisher {
+    let name = "Apple Intelligence"
+
+    func polish(
+        _ text: String,
+        dictionary _: [String],
+        personalContext _: String,
+        targetApp _: String?
+    ) async throws -> String {
+        throw PolisherError.truncated
     }
 }
 

@@ -65,6 +65,7 @@ struct WhisperLocalApp: App {
 struct MenuBarContent: View {
     @ObservedObject var controller: DictationController
     @ObservedObject private var permissions = PermissionManager.shared
+    @ObservedObject private var hotKey = HotKeyManager.shared
     @ObservedObject private var updater = AppUpdater.shared
     @Environment(\.openWindow) private var openWindow
 

@@ -1,9 +1,13 @@
 import AVFoundation
 import Foundation
+import os
 import Speech
 
+private let appleSpeechLogger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "speech")
+private let appleSpeechTempPrefix = "whisperlocal-apple-speech-"
+
 /// On-device Apple Speech (`SpeechAnalyzer` + `SpeechTranscriber`, macOS 26+).
-/// Audio stays on this Mac. Locale is English even if the system language is not.
+/// Audio stays on this Mac. Locale is English; there is no fallback to the system locale.
 @MainActor
 final class AppleSpeechASR {
     static let shared = AppleSpeechASR()
@@ -58,6 +62,7 @@ final class AppleSpeechASR {
 
     @available(macOS 26.0, *)
     private func prepareOnSupportedOS(onStatus: @escaping (String) -> Void) async throws {
+        Self.sweepStaleTempAudio()
         isReady = false
         guard SpeechTranscriber.isAvailable else {
             throw TranscriptionError.appleSpeechUnavailable
@@ -84,7 +89,9 @@ final class AppleSpeechASR {
                 }
             }
             do {
-                try await request.downloadAndInstall()
+                try await Task.detached {
+                    try await request.downloadAndInstall()
+                }.value
             } catch {
                 ticker.cancel()
                 throw error
@@ -140,7 +147,7 @@ final class AppleSpeechASR {
         }
 
         let url = try Self.writeTempAudio(samples: samples)
-        defer { try? FileManager.default.removeItem(at: url) }
+        defer { Self.removeTempAudio(url) }
 
         let file = try AVAudioFile(forReading: url)
         async let collected = Self.collectTranscript(from: transcriber)
@@ -158,6 +165,7 @@ final class AppleSpeechASR {
         return try await collected
     }
 
+    /// English only. Do not fall back to the system locale (a Korean Mac must not get a Korean transcriber).
     @available(macOS 26.0, *)
     private static func englishLocale() async -> Locale? {
         if let enUS = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US")) {
@@ -166,7 +174,7 @@ final class AppleSpeechASR {
         if let en = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en")) {
             return en
         }
-        return await SpeechTranscriber.supportedLocale(equivalentTo: .current)
+        return nil
     }
 
     @available(macOS 26.0, *)
@@ -195,7 +203,7 @@ final class AppleSpeechASR {
             throw TranscriptionError.emptyAudio
         }
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("whisperlocal-apple-speech-\(UUID().uuidString).caf")
+            .appendingPathComponent("\(appleSpeechTempPrefix)\(UUID().uuidString).caf")
         let file = try AVAudioFile(forWriting: url, settings: format.settings)
         guard let buffer = AVAudioPCMBuffer(
             pcmFormat: format,
@@ -209,6 +217,50 @@ final class AppleSpeechASR {
             dest.update(from: base, count: samples.count)
         }
         try file.write(from: buffer)
+        Self.protectTempAudio(url)
         return url
+    }
+
+    /// Crash leftovers from a previous take. Safe to call at launch.
+    nonisolated static func sweepStaleTempAudio() {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory
+        guard let items = try? fm.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        for url in items where url.lastPathComponent.hasPrefix(appleSpeechTempPrefix) {
+            removeTempAudio(url)
+        }
+    }
+
+    private static func protectTempAudio(_ url: URL) {
+        do {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: url.path
+            )
+        } catch {
+            appleSpeechLogger.error("Could not restrict temp speech-file permissions: \(error.localizedDescription, privacy: .public)")
+        }
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        do {
+            var mutable = url
+            try mutable.setResourceValues(values)
+        } catch {
+            appleSpeechLogger.error("Could not exclude temp speech file from backup: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private nonisolated static func removeTempAudio(_ url: URL) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        do {
+            try fm.removeItem(at: url)
+        } catch {
+            appleSpeechLogger.error("Could not delete temp speech audio: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

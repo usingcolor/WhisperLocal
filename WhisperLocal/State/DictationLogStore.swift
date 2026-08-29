@@ -48,9 +48,11 @@ final class DictationLogStore: ObservableObject {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         fileURL = folder.appendingPathComponent("dictation-log.json")
         entries = Self.load(from: fileURL)
+        Self.restrictPermissions(at: fileURL)
     }
 
     func append(_ entry: DictationLogEntry) {
+        guard UserDefaults.standard.object(forKey: "enableDictationLog") as? Bool ?? true else { return }
         entries.insert(entry, at: 0)
         if entries.count > maxEntries {
             entries = Array(entries.prefix(maxEntries))
@@ -70,9 +72,18 @@ final class DictationLogStore: ObservableObject {
         do {
             let data = try JSONEncoder().encode(entries)
             try data.write(to: fileURL, options: [.atomic])
+            Self.restrictPermissions(at: fileURL)
         } catch {
             logger.error("Failed to save dictation log: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private static func restrictPermissions(at url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: url.path
+        )
     }
 
     private static func load(from url: URL) -> [DictationLogEntry] {

@@ -10,7 +10,7 @@ Hold a global hotkey, speak, release — cleaned text is inserted at the cursor 
 
 Native Swift / AppKit. Default on-device ASR is Apple Speech (`SpeechTranscriber`, macOS 26); [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) and [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (via [FluidAudio](https://github.com/FluidInference/FluidAudio)) are optional. Default on-device polish is Apple Intelligence (`SystemLanguageModel`); Gemma 4 E2B IT (MLX, text-only) is optional. No Ollama.
 
-> Early preview (`0.1.2`). Built for daily use on one machine; expect sharp edges.
+> Early preview (`0.1.3`). Built for daily use on one machine; expect sharp edges.
 
 ## Download
 

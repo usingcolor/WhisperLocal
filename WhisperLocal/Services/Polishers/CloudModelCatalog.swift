@@ -26,6 +26,7 @@ final class CloudModelCatalog: ObservableObject {
     @Published private(set) var isLoadingAnthropic = false
 
     /// Fast models first — dictation polish does not need a frontier model.
+    /// IDs match OpenAI’s API (`gpt-5.6-luna` / `-terra` / `-sol`).
     static let openAIRecommended: [CloudModelOption] = [
         CloudModelOption(id: "gpt-5.6-luna", displayName: "GPT-5.6 Luna", note: "fast / cheap"),
         CloudModelOption(id: "gpt-5.6-terra", displayName: "GPT-5.6 Terra", note: "balanced"),

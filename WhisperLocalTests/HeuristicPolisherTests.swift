@@ -808,6 +808,7 @@ final class AppUpdateFeedTests: XCTestCase {
         let release = try AppUpdateFeed.parseRelease(from: json)
         XCTAssertEqual(release.version, "0.1.3")
         XCTAssertEqual(release.dmgName, "WhisperLocal-0.1.3-arm64.dmg")
+        XCTAssertEqual(release.dmgBytes, 80_000_000)
         XCTAssertTrue(release.dmgURL.absoluteString.hasSuffix("WhisperLocal-0.1.3-arm64.dmg"))
     }
 
@@ -820,5 +821,45 @@ final class AppUpdateFeedTests: XCTestCase {
                 URL(string: "https://github.com/usingcolor/WhisperLocal/releases/download/v0.1.2/WhisperLocal-0.1.2-arm64.dmg")!
             )
         )
+        XCTAssertFalse(
+            AppUpdateFeed.isTrustedDownloadURL(
+                URL(string: "http://github.com/usingcolor/WhisperLocal/releases/download/v0.1.2/WhisperLocal-0.1.2-arm64.dmg")!
+            )
+        )
+        XCTAssertFalse(
+            AppUpdateFeed.isTrustedDownloadURL(
+                URL(string: "file:///tmp/WhisperLocal.dmg")!
+            )
+        )
+    }
+}
+
+final class UpdateInstallLogTests: XCTestCase {
+    func testParsesSuccess() {
+        let text = """
+        === 2026-08-29T00:00:00Z WhisperLocal update start pid=1 ===
+        copying
+        UPDATE_OK
+        """
+        XCTAssertEqual(UpdateInstallLog.parse(text), .succeeded)
+    }
+
+    func testParsesFailureAndAcknowledgement() {
+        let failed = """
+        === 2026-08-29T00:00:00Z WhisperLocal update start pid=1 ===
+        ditto: permission denied
+        UPDATE_FAILED status=1
+        """
+        guard case .failed(let detail) = UpdateInstallLog.parse(failed) else {
+            return XCTFail("expected failed")
+        }
+        XCTAssertTrue(detail.contains("UPDATE_FAILED"))
+
+        let ack = failed + "\nUPDATE_FAILURE_ACK\n"
+        XCTAssertEqual(UpdateInstallLog.parse(ack), .acknowledgedFailure)
+    }
+
+    func testEmptyLog() {
+        XCTAssertEqual(UpdateInstallLog.parse(""), .none)
     }
 }

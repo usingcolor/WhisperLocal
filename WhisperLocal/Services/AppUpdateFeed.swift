@@ -93,6 +93,7 @@ enum AppUpdateFeed {
     }
 
     static func isTrustedDownloadURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https" else { return false }
         guard let host = url.host?.lowercased() else { return false }
         let allowedHosts: Set<String> = [
             "github.com",

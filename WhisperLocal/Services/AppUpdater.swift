@@ -116,7 +116,7 @@ final class AppUpdater: ObservableObject {
 
         Custom instructions, dictionary, and other Settings stay on this Mac. They are not inside the app bundle.
 
-        The public build is ad-hoc signed. You may need to approve Accessibility again after the first launch.
+        The public build is ad-hoc signed, not notarized. macOS may ask you to allow it under System Settings → Privacy & Security after install. Do not expect the update to launch silently. You may need to approve Accessibility again.
         """
         alert.addButton(withTitle: "Install")
         alert.addButton(withTitle: "Cancel")
@@ -132,12 +132,13 @@ final class AppUpdater: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
             let dmg = work.appendingPathComponent(release.dmgName)
-            try await download(from: release.dmgURL, to: dmg)
+            try await download(from: release.dmgURL, to: dmg, expectedBytes: release.dmgBytes)
             status = .installing
             try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
             try attach(dmg: dmg, mount: mount)
             let sourceApp = try findApp(on: mount)
             try verifyBundle(at: sourceApp)
+            try ensureDestinationWritable(installURL)
             try spawnInstaller(
                 dmg: dmg,
                 mount: mount,
@@ -153,7 +154,21 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    private func download(from url: URL, to destination: URL) async throws {
+    func presentPendingInstallFailureIfNeeded() {
+        if case .failed(let detail) = UpdateInstallLog.readLastRun() {
+            UpdateInstallLog.acknowledgeFailure()
+            alert(
+                title: "The last WhisperLocal update did not finish",
+                message: """
+                \(detail)
+
+                The previous app should still be in \(installURL.path). Try Check for Updates again, or install the DMG from GitHub Releases. Details: \(UpdateInstallLog.fileURL.path)
+                """
+            )
+        }
+    }
+
+    private func download(from url: URL, to destination: URL, expectedBytes: Int) async throws {
         guard AppUpdateFeed.isTrustedDownloadURL(url) else {
             throw UpdateError.untrustedURL
         }
@@ -168,8 +183,12 @@ final class AppUpdater: ObservableObject {
         }
         try FileManager.default.moveItem(at: temp, to: destination)
         let values = try destination.resourceValues(forKeys: [.fileSizeKey])
-        if let size = values.fileSize, size < 1_000_000 {
+        let size = values.fileSize ?? 0
+        if size < 1_000_000 {
             throw UpdateError.dmgTooSmall
+        }
+        if expectedBytes > 0, size != expectedBytes {
+            throw UpdateError.dmgSizeMismatch(expected: expectedBytes, actual: size)
         }
     }
 
@@ -204,7 +223,14 @@ final class AppUpdater: ObservableObject {
         }
     }
 
+    /// `ditto` into a sibling then rename, so a mid-copy failure does not leave a half-written app.
+    /// Quarantine is left in place — Gatekeeper is the backstop until Developer ID notarization.
     private func spawnInstaller(dmg: URL, mount: URL, sourceApp: URL, destination: URL) throws {
+        try FileManager.default.createDirectory(
+            at: UpdateInstallLog.directory,
+            withIntermediateDirectories: true
+        )
+        let log = UpdateInstallLog.fileURL
         let script = """
         #!/bin/bash
         set -euo pipefail
@@ -213,15 +239,46 @@ final class AppUpdater: ObservableObject {
         src="$3"
         dest="$4"
         work="$5"
+        log="$6"
+        new="${dest}.new"
+        old="${dest}.old"
+
+        mkdir -p "$(dirname "$log")"
+        exec >>"$log" 2>&1
+        echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) WhisperLocal update start pid=$pid ==="
+
+        fail() {
+          trap - ERR
+          echo "UPDATE_FAILED ${1:-}"
+          /usr/bin/hdiutil detach "$mount" -quiet || true
+          /usr/bin/open "$dest" || true
+          /bin/rm -rf "$work" "$new" || true
+          exit 1
+        }
+        trap 'fail "status=$?"' ERR
+
         while /bin/kill -0 "$pid" 2>/dev/null; do
           sleep 0.2
         done
         sleep 0.4
-        /usr/bin/ditto "$src" "$dest"
+
+        /bin/rm -rf "$new" "$old"
+        /usr/bin/ditto "$src" "$new"
+        if [[ -d "$dest" ]]; then
+          /bin/mv "$dest" "$old"
+          if ! /bin/mv "$new" "$dest"; then
+            /bin/mv "$old" "$dest" || true
+            fail "rollback"
+          fi
+          /bin/rm -rf "$old"
+        else
+          /bin/mv "$new" "$dest"
+        fi
         /usr/bin/hdiutil detach "$mount" -quiet || true
-        /usr/bin/xattr -dr com.apple.quarantine "$dest" || true
         /usr/bin/open "$dest"
         /bin/rm -rf "$work"
+        echo "UPDATE_OK"
+        trap - ERR
         """
         let scriptURL = dmg.deletingLastPathComponent().appendingPathComponent("install.sh")
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
@@ -237,11 +294,21 @@ final class AppUpdater: ObservableObject {
             mount.path,
             sourceApp.path,
             destination.path,
-            dmg.deletingLastPathComponent().path
+            dmg.deletingLastPathComponent().path,
+            log.path
         ]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
         try process.run()
+    }
+
+    private func ensureDestinationWritable(_ dest: URL) throws {
+        let parent = dest.deletingLastPathComponent()
+        guard FileManager.default.isWritableFile(atPath: parent.path) else {
+            throw UpdateError.destinationNotWritable
+        }
+        if FileManager.default.fileExists(atPath: dest.path),
+           !FileManager.default.isWritableFile(atPath: dest.path) {
+            throw UpdateError.destinationNotWritable
+        }
     }
 
     @discardableResult
@@ -276,6 +343,8 @@ final class AppUpdater: ObservableObject {
         case dmgTooSmall
         case missingAppOnDMG
         case wrongBundle
+        case destinationNotWritable
+        case dmgSizeMismatch(expected: Int, actual: Int)
         case commandFailed(String, String)
 
         var errorDescription: String? {
@@ -286,10 +355,14 @@ final class AppUpdater: ObservableObject {
                 return "The download URL was not a GitHub release asset."
             case .dmgTooSmall:
                 return "The downloaded file was too small to be a WhisperLocal DMG."
+            case .dmgSizeMismatch(let expected, let actual):
+                return "The downloaded DMG was \(actual) bytes; GitHub listed \(expected)."
             case .missingAppOnDMG:
                 return "The disk image did not contain WhisperLocal.app."
             case .wrongBundle:
                 return "The disk image app is not com.usingcolor.WhisperLocal."
+            case .destinationNotWritable:
+                return "Cannot write /Applications/WhisperLocal.app. Check that the app lives in Applications and is not locked."
             case .commandFailed(let command, let err):
                 let detail = err.trimmingCharacters(in: .whitespacesAndNewlines)
                 if detail.isEmpty { return "\(command) failed." }

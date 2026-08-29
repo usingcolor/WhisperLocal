@@ -6,5 +6,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // clicks the status item — so hotkeys must start here, not in onAppear.
         AppleSpeechASR.sweepStaleTempAudio()
         DictationController.shared.start()
+        AppUpdater.shared.presentPendingInstallFailureIfNeeded()
     }
 }

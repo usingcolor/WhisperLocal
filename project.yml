@@ -117,6 +117,7 @@ targets:
       - path: WhisperLocal/Services/TextInserter.swift
       - path: WhisperLocal/Services/AppUpdateFeed.swift
       - path: WhisperLocal/Services/UpdateInstallLog.swift
+      - path: WhisperLocal/Services/AudioInputRoute.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

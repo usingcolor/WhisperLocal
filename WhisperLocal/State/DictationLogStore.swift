@@ -51,6 +51,24 @@ final class DictationLogStore: ObservableObject {
         Self.restrictPermissions(at: fileURL)
     }
 
+    func recentPolishExamples(limit: Int) -> [RecentDictationExample] {
+        let cap = CleanupPrompt.clampRecentPolishLogCount(limit)
+        var examples: [RecentDictationExample] = []
+        for entry in entries {
+            guard entry.outcome == .success else { continue }
+            let raw = entry.raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let polished = entry.polished.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty, !polished.isEmpty else { continue }
+            examples.append(RecentDictationExample(
+                raw: raw,
+                polished: polished,
+                appName: entry.appName
+            ))
+            if examples.count == cap { break }
+        }
+        return examples
+    }
+
     func append(_ entry: DictationLogEntry) {
         guard UserDefaults.standard.object(forKey: "enableDictationLog") as? Bool ?? true else { return }
         entries.insert(entry, at: 0)

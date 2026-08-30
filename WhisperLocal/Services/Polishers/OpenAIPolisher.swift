@@ -9,7 +9,8 @@ struct OpenAIPolisher: TextPolisher {
         _ text: String,
         dictionary: [String],
         personalContext: String = "",
-        targetApp: String? = nil
+        targetApp: String? = nil,
+        recentDictations: String = ""
     ) async throws -> String {
         guard !apiKey.isEmpty else { throw PolisherError.missingAPIKey("OpenAI") }
 
@@ -19,7 +20,11 @@ struct OpenAIPolisher: TextPolisher {
             "model": model,
             "messages": [
                 ["role": "system", "content": system],
-                ["role": "user", "content": CleanupPrompt.wrapTranscript(text, targetApp: targetApp)]
+                ["role": "user", "content": CleanupPrompt.wrapTranscript(
+                    text,
+                    targetApp: targetApp,
+                    recentDictations: recentDictations
+                )]
             ]
         ]
         if CloudModelCatalog.supportsChatTemperature(model) {

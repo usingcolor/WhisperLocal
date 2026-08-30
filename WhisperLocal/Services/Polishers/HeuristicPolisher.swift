@@ -9,7 +9,8 @@ struct HeuristicPolisher: TextPolisher {
         _ text: String,
         dictionary: [String],
         personalContext _: String = "",
-        targetApp _: String? = nil
+        targetApp _: String? = nil,
+        recentDictations _: String = ""
     ) async throws -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { return result }

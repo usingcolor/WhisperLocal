@@ -63,7 +63,7 @@ The defaults assume macOS 26. Older versions still work, with more setup:
 | Your macOS | Transcription | Cleanup |
 |---|---|---|
 | **26 or later** | Apple Speech, built in — nothing to download | Apple Intelligence, on-device — nothing to download |
-| **14 – 15** | Whisper `small.en`, downloaded on first use | Heuristic only, unless you add Gemma 4 (~2.7 GB) or a cloud API key |
+| **14 – 15** | Whisper `small.en`, downloaded on first use | Fillers stripped; turn on heuristic, Gemma 4 (~2.7 GB), or a cloud API key for more cleanup |
 
 Everything below the defaults is optional and switchable in Settings.
 
@@ -72,7 +72,7 @@ Everything below the defaults is optional and switchable in Settings.
 - Menu-bar agent — no Dock icon, no window to manage
 - Global hotkey, hold-to-talk or tap-to-toggle; **Esc** cancels
 - On-device English transcription: Apple Speech, or WhisperKit (`tiny.en` / `base.en` / `small.en` / Large v3 Turbo), or NVIDIA Parakeet TDT 0.6B v2
-- On-device cleanup: fast offline heuristics, then Apple Intelligence or Gemma 4 E2B IT
+- On-device cleanup: optional heuristics, then Apple Intelligence or Gemma 4 E2B IT
 - Optional OpenAI or Anthropic cleanup — **transcript text only**, keys stored in the Keychain
 - Editable custom instructions, per-app rules, and a personal dictionary for names and jargon
 - Fail-open: if cleanup fails or times out, the previous stage is pasted anyway — you never lose a dictation
@@ -104,9 +104,10 @@ On-device cleanup waits up to 20 s; cloud cleanup waits up to 30 s. A timeout pa
 |---|---|
 | Speech model | Apple Speech (macOS 26); falls back to Whisper `small.en`. Also `tiny.en`, `base.en`, Large v3 Turbo, Parakeet TDT 0.6B v2 |
 | Text cleanup | On |
-| Heuristic cleanup | On — turn off to send raw transcription straight to the model |
+| Heuristic cleanup | Off — optional extra pass before the model |
 | On-device cleanup | Apple Intelligence, or Gemma 4 E2B IT; skipped automatically while cloud cleanup is on |
 | Cloud cleanup | Off (OpenAI / Anthropic; pick a model in Settings) |
+| Recent dictations in polish | Off. Optional; you choose 1–8 previous takes. Not written into the system prompt. |
 | Custom instructions | Generic starter notes; edit or clear in Settings |
 | Dictionary | Editable list, with CSV import |
 | Trailing space after paste | On |
@@ -118,11 +119,12 @@ API keys live in the Keychain under `com.usingcolor.WhisperLocal`.
 | | What leaves your Mac |
 |---|---|
 | **Default setup** | **Nothing.** Transcription, heuristic cleanup, and on-device cleanup all stay local. |
-| Cloud cleanup, if you turn it on | Transcript **text** only, to OpenAI or Anthropic. Never audio. |
+| Cloud cleanup, if you turn it on | Transcript **text** only, to OpenAI or Anthropic. Never audio. If you also turn on recent dictations in polish, those earlier takes (text) go with the request. |
 | Audio | Never uploaded. Apple Speech writes a private temp `.caf` per take and deletes it right after; Whisper and Parakeet stay in memory. |
+| Microphone indicator | After you let go, the input graph stays open briefly so the next take starts faster. Built-in mics drop it after about 2 seconds. A Bluetooth headset used only as input can stay open up to 45 seconds — the orange Control Center dot stays lit. If those headphones are also playing audio, the graph drops after 2 seconds so they can leave the hands-free profile. Nothing is recorded or uploaded during that idle hold. |
 | Keystrokes | The hotkey and Esc are observed through Accessibility. Keystrokes are never stored or logged. |
 | Clipboard | Clipboard-paste mode briefly uses the general pasteboard, marked so clipboard managers skip it. |
-| Dictation log | Optional, off-switchable, local only: `~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`, text with no audio. |
+| Dictation log | Optional, off-switchable, local only: `~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`, text with no audio. Polish does not read it unless you enable recent dictations in polish. |
 
 The app is **not sandboxed** — global hotkeys, Accessibility insertion, and synthetic paste all require that.
 
@@ -132,7 +134,7 @@ Security reports: see [SECURITY.md](SECURITY.md). Please don't file them as publ
 
 Contributions are genuinely welcome, and this project is easier to work on than most Mac apps.
 
-**The test suite is fast and needs nothing.** 84 tests run in about a tenth of a second — no microphone, no model download, no network, no API key:
+**The test suite is fast and needs nothing.** 103 tests run in about a tenth of a second — no microphone, no model download, no network, no API key:
 
 ```bash
 brew install xcodegen   # once

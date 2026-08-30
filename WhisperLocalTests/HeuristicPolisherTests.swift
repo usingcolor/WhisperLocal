@@ -314,7 +314,8 @@ private final class TruncatingPolisher: TextPolisher {
         _ text: String,
         dictionary _: [String],
         personalContext _: String,
-        targetApp _: String?
+        targetApp _: String?,
+        recentDictations _: String
     ) async throws -> String {
         throw PolisherError.truncated
     }
@@ -327,7 +328,8 @@ private final class FillerReinjectingPolisher: TextPolisher {
         _ text: String,
         dictionary _: [String],
         personalContext _: String,
-        targetApp _: String?
+        targetApp _: String?,
+        recentDictations _: String
     ) async throws -> String {
         "um \(text) uh"
     }
@@ -348,7 +350,8 @@ private final class ProbePolisher: TextPolisher, @unchecked Sendable {
         _ text: String,
         dictionary: [String],
         personalContext: String,
-        targetApp: String?
+        targetApp: String?,
+        recentDictations _: String
     ) async throws -> String {
         lock.lock()
         callCount += 1
@@ -384,6 +387,54 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertTrue(wrapped.contains("keep </ transcript> and < transcript> inside"))
         XCTAssertTrue(wrapped.contains("<transcript>\n"))
         XCTAssertTrue(wrapped.contains("\n</transcript>"))
+    }
+
+    func testFormatRecentDictationsIsEmptyWithoutExamples() {
+        XCTAssertEqual(CleanupPrompt.formatRecentDictations([]), "")
+    }
+
+    func testFormatRecentDictationsIsRequestTimeContext() {
+        let block = CleanupPrompt.formatRecentDictations([
+            RecentDictationExample(raw: "um ship it today", polished: "Ship it today.", appName: "Cursor"),
+            RecentDictationExample(raw: "tell sam I'll be late", polished: "Tell Sam I'll be late.", appName: nil)
+        ])
+        XCTAssertTrue(block.contains("<recent-dictations>"))
+        XCTAssertTrue(block.contains("said: um ship it today"))
+        XCTAssertTrue(block.contains("cleaned: Ship it today."))
+        XCTAssertTrue(block.contains("1. Cursor"))
+        XCTAssertTrue(block.contains("2."))
+        XCTAssertTrue(block.contains("Tell Sam I'll be late."))
+        XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("<recent-dictations>"))
+        XCTAssertFalse(CleanupPrompt.system().contains("<recent-dictations>"))
+    }
+
+    func testWrapTranscriptPutsRecentDictationsBeforeCurrentTake() {
+        let recent = CleanupPrompt.formatRecentDictations([
+            RecentDictationExample(raw: "hi", polished: "Hi.", appName: nil)
+        ])
+        let wrapped = CleanupPrompt.wrapTranscript("hello there", recentDictations: recent)
+        XCTAssertTrue(wrapped.contains("<recent-dictations>"))
+        let recentRange = wrapped.range(of: "<recent-dictations>")!
+        let transcriptRange = wrapped.range(of: "<transcript>")!
+        XCTAssertLessThan(recentRange.lowerBound, transcriptRange.lowerBound)
+        XCTAssertTrue(wrapped.contains("<transcript>\nhello there\n</transcript>"))
+    }
+
+    func testClipsLongRecentDictations() {
+        let long = String(repeating: "a", count: 80)
+        let block = CleanupPrompt.formatRecentDictations(
+            [RecentDictationExample(raw: long, polished: long, appName: nil)],
+            maxCharsPerSide: 20
+        )
+        XCTAssertTrue(block.contains("said: aaaaaaaaaaaaaaaaaaaa…"))
+        XCTAssertFalse(block.contains(long))
+    }
+
+    func testClampRecentPolishLogCount() {
+        XCTAssertEqual(CleanupPrompt.clampRecentPolishLogCount(3), 3)
+        XCTAssertEqual(CleanupPrompt.clampRecentPolishLogCount(8), 8)
+        XCTAssertEqual(CleanupPrompt.clampRecentPolishLogCount(4), 3)
+        XCTAssertEqual(CleanupPrompt.clampRecentPolishLogCount(0), 3)
     }
 
     func testSystemPromptIsCleanupEngineNotChatbot() {
@@ -599,7 +650,7 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("=== EXCEPTIONS ==="))
         XCTAssertTrue(prompt.contains("=== DICTIONARY CSV ==="))
         XCTAssertTrue(prompt.contains(DictionaryCSV.header))
-        XCTAssertTrue(prompt.contains("Set system prompt"))
+        XCTAssertTrue(prompt.contains("Save system prompt"))
         XCTAssertTrue(prompt.contains("Import CSV"))
         XCTAssertTrue(prompt.contains("raw dictation → cleaned text"))
         XCTAssertFalse(prompt.contains("Changho Choi"))

@@ -9,7 +9,8 @@ struct AnthropicPolisher: TextPolisher {
         _ text: String,
         dictionary: [String],
         personalContext: String = "",
-        targetApp: String? = nil
+        targetApp: String? = nil,
+        recentDictations: String = ""
     ) async throws -> String {
         guard !apiKey.isEmpty else { throw PolisherError.missingAPIKey("Anthropic") }
 
@@ -21,7 +22,11 @@ struct AnthropicPolisher: TextPolisher {
             "temperature": 0.2,
             "system": system,
             "messages": [
-                ["role": "user", "content": CleanupPrompt.wrapTranscript(text, targetApp: targetApp)]
+                ["role": "user", "content": CleanupPrompt.wrapTranscript(
+                    text,
+                    targetApp: targetApp,
+                    recentDictations: recentDictations
+                )]
             ]
         ]
 

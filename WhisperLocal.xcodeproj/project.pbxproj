@@ -10,6 +10,7 @@
 		0419BE025A39877373BDBDFB /* UpdateInstallLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098B35DAE350505F007B6800 /* UpdateInstallLog.swift */; };
 		18B6B2A9941C3D8D4041791B /* OpenAIPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005FD23F400A298F93508D18 /* OpenAIPolisher.swift */; };
 		1BBDFC011CF6AA23F30046CD /* AppUpdateFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */; };
+		1D50AA3CEE8B37409DA4B35B /* AudioInputRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */; };
 		2492640D252CC0BB949F2270 /* WindowFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5763CB6E982097551A2347A /* WindowFocus.swift */; };
 		257AE55C48A885FAEF6FADFC /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A7E52EF80A958922373895 /* OnboardingView.swift */; };
 		2DE43BEE1ABCCCDE4B8FEB29 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44C4928A4E716CB8E7823B2 /* HotKeyManager.swift */; };
@@ -26,6 +27,7 @@
 		476BA72EBF0492CCC55DF26C /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 85AA4A641FF9EABF44C46867 /* MLXLLM */; };
 		4C69688248E40969DCF7AD85 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8CE719A87227A909E499E466 /* WhisperKit */; };
 		55508417CAC3686AF9D7212F /* RecordingHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22AEB3874E72F1200F202546 /* RecordingHUD.swift */; };
+		58BE50F5E1BFFD45650943DE /* AudioInputRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */; };
 		59C0B52FB06EF6786BA03CE5 /* DictationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 094325BD00C73626F5A7D8BF /* DictationController.swift */; };
 		5C1D1E7AC805E51D84AD54C5 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = CAFAF41E8683133E12EEB1FE /* HuggingFace */; };
 		60B13AE43169CE7EBAD95865 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B53D098CD2A4802900B6D9D9 /* Speech.framework */; };
@@ -55,6 +57,7 @@
 		CBA348D127EC79309CBBFEA0 /* GemmaMLXPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */; };
 		E5B382402026A0EA34458CA6 /* DictationLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B2368773CE8F483F2B05DC9 /* DictationLogView.swift */; };
 		F4C3CE0FA33D73AC4444CF46 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A99161BEE11539679C79444C /* FluidAudio */; };
+		F55B6AD2BE935B1AB1C599D8 /* AudioInputRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */; };
 		FA8A33D7AD3D3AAC906F95F6 /* WhisperLocalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748E974DF04BD7DC99D7796A /* WhisperLocalApp.swift */; };
 		FC265F40D5DBB593351122A5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D3A0E540785AF85E8AAB0D1B /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -69,6 +72,7 @@
 		22AEB3874E72F1200F202546 /* RecordingHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingHUD.swift; sourceTree = "<group>"; };
 		285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudModelCatalog.swift; sourceTree = "<group>"; };
 		3711BFF5E9F6F19E30941906 /* WhisperLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WhisperLocal.entitlements; sourceTree = "<group>"; };
+		38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputRoute.swift; sourceTree = "<group>"; };
 		38ADAC703311FF92E61C5EF2 /* DictationLogExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationLogExportTests.swift; sourceTree = "<group>"; };
 		48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupPrompt.swift; sourceTree = "<group>"; };
 		4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemmaMLXPolisher.swift; sourceTree = "<group>"; };
@@ -90,6 +94,7 @@
 		B53D098CD2A4802900B6D9D9 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 		BF1A64FD176FFE5438A4E051 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		D036D4D666946E1E4C5A30F9 /* WhisperLocal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhisperLocal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputRouteTests.swift; sourceTree = "<group>"; };
 		D3A0E540785AF85E8AAB0D1B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D3C75C3C8A0CD848C604E695 /* TextPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPolisher.swift; sourceTree = "<group>"; };
 		E98A3D822AC9524A9D7D1910 /* AppleSpeechASR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechASR.swift; sourceTree = "<group>"; };
@@ -179,6 +184,7 @@
 		BCAE4A3E70A189601A225C91 /* WhisperLocalTests */ = {
 			isa = PBXGroup;
 			children = (
+				D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */,
 				38ADAC703311FF92E61C5EF2 /* DictationLogExportTests.swift */,
 				80C619127B2ED2429C99E41D /* HeuristicPolisherTests.swift */,
 			);
@@ -191,6 +197,7 @@
 				E98A3D822AC9524A9D7D1910 /* AppleSpeechASR.swift */,
 				4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */,
 				0F293F5BB80064BB9F9A755B /* AppUpdater.swift */,
+				38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */,
 				F83D3461601CD53D69C8AE0F /* AudioRecorder.swift */,
 				F44C4928A4E716CB8E7823B2 /* HotKeyManager.swift */,
 				B38C1D3FD905430B8186554D /* PermissionManager.swift */,
@@ -348,6 +355,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				7CD28AD170006A1D5E402AE7 /* AppUpdateFeed.swift in Sources */,
+				58BE50F5E1BFFD45650943DE /* AudioInputRoute.swift in Sources */,
+				F55B6AD2BE935B1AB1C599D8 /* AudioInputRouteTests.swift in Sources */,
 				74B63A76DB2EADA597458D6B /* CleanupPrompt.swift in Sources */,
 				8D5FFBBE4122E24EC20BBBC0 /* CloudModelCatalog.swift in Sources */,
 				40D1512B4165FAA3F8FB2FF2 /* DictationLogExport.swift in Sources */,
@@ -371,6 +380,7 @@
 				1BBDFC011CF6AA23F30046CD /* AppUpdateFeed.swift in Sources */,
 				A2E42C73CB6EC1F334ACE67F /* AppUpdater.swift in Sources */,
 				62C033A5E33A9B81628F3FDB /* AppleSpeechASR.swift in Sources */,
+				1D50AA3CEE8B37409DA4B35B /* AudioInputRoute.swift in Sources */,
 				68484A6EFE8E4A48F43AE7BE /* AudioRecorder.swift in Sources */,
 				7AE90627E94B12E6739392B7 /* CleanupPrompt.swift in Sources */,
 				ACDF4257E090B5ECF7FBA95D /* CloudModelCatalog.swift in Sources */,

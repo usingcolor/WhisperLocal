@@ -177,7 +177,7 @@ struct SettingsView: View {
                         .foregroundStyle(.orange)
                 }
                 Toggle("Keep a dictation log", isOn: $settings.enableDictationLog)
-                Text("Saves recent takes as local JSON (text only). Turn off to skip new entries; existing log is not deleted.")
+                Text("Saves recent takes as local JSON (text only). Turn off to skip new entries; existing log is not deleted. Polish can optionally reuse these takes — that is off until you enable it on the Polish page.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Open dictation log…") {
@@ -199,7 +199,7 @@ struct SettingsView: View {
 
                 Toggle("Heuristic cleanup", isOn: $settings.enableHeuristicCleanup)
                     .disabled(!settings.enableTextCleanup)
-                Text("Local fillers, spoken punctuation, and dictionary replacements before the model. Turn off to send raw ASR to Gemma, Apple Intelligence, or cloud. Um / uh / hmm are still stripped.")
+                Text("Optional extra pass before the model. Off by default — Apple Intelligence or cloud usually handles this. Turn on for spoken punctuation and self-corrections without an LLM. Um / uh / hmm are still stripped.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -267,14 +267,45 @@ struct SettingsView: View {
                 }
                 .disabled(!settings.enableTextCleanup)
                 .onChange(of: settings.cloudPolishProvider) { _, provider in
-                    if provider == .none {
-                        controller.prewarmOnDevicePolish()
-                    } else {
-                        GemmaMLXPolisher.shared.unload()
+                    applyCloudPolish(provider, revealPolish: false)
+                }
+
+                if settings.enableTextCleanup {
+                    switch settings.cloudPolishProvider {
+                    case .none:
+                        HStack {
+                            Button("Set up OpenAI…") { page = .openai }
+                            Button("Set up Anthropic…") { page = .anthropic }
+                        }
+                    case .openAI:
+                        Button(settings.hasOpenAIKey ? "OpenAI settings…" : "Add OpenAI API key…") {
+                            page = .openai
+                        }
+                    case .anthropic:
+                        Button(settings.hasAnthropicKey ? "Anthropic settings…" : "Add Anthropic API key…") {
+                            page = .anthropic
+                        }
                     }
                 }
 
                 Text("Audio never leaves your Mac. Cloud polish sends transcript text only when enabled and a key is saved.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Include recent dictations in polish", isOn: $settings.includeRecentPolishLogs)
+                    .disabled(!settings.enableDictationLog || !settings.enableTextCleanup)
+                if settings.includeRecentPolishLogs {
+                    Picker("How many", selection: Binding(
+                        get: { settings.recentPolishLogCount },
+                        set: { settings.recentPolishLogCount = $0 }
+                    )) {
+                        ForEach(CleanupPrompt.recentPolishLogCounts, id: \.self) { count in
+                            Text(count == 1 ? "Last take" : "Last \(count) takes").tag(count)
+                        }
+                    }
+                    .disabled(!settings.enableDictationLog || !settings.enableTextCleanup)
+                }
+                Text(recentPolishLogsHelp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -409,6 +440,7 @@ struct SettingsView: View {
                     Task { await models.fetchOpenAI(apiKey: settings.openAIAPIKey) }
                 }
             }
+            cloudProviderActivationSection(.openAI)
         }
         .onAppear { openAIKeyDraft = "" }
     }
@@ -440,6 +472,7 @@ struct SettingsView: View {
                     Task { await models.fetchAnthropic(apiKey: settings.anthropicAPIKey) }
                 }
             }
+            cloudProviderActivationSection(.anthropic)
         }
         .onAppear { anthropicKeyDraft = "" }
     }
@@ -622,24 +655,45 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func prefillCommitControls(_ copy: PrefillCommitCopy) -> some View {
-        Button(copy.buttonTitle) {
-            settings.commitSystemPrompt()
-            controller.prewarmOnDevicePolish()
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                settings.commitSystemPrompt()
+                controller.prewarmOnDevicePolish()
+            } label: {
+                Label(copy.buttonTitle, systemImage: copy.icon)
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity)
+            .disabled(!settings.isSystemPromptStale)
+            .help(copy.help)
+
+            if settings.isSystemPromptStale {
+                Text(copy.staleMessage)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if settings.cleanupPersonalContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(copy.emptyMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(copy.currentMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .disabled(!settings.isSystemPromptStale)
-        if settings.isSystemPromptStale {
-            Text(copy.staleMessage)
-                .font(.caption)
-                .foregroundStyle(.orange)
-        } else if settings.cleanupPersonalContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            Text(copy.emptyMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Text(copy.currentMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    }
+
+    private var recentPolishLogsHelp: String {
+        if !settings.enableDictationLog {
+            return "Turn on the dictation log (Dictation page) first. Recent takes are not written into Save system prompt."
         }
+        if settings.hasUsableCloudPolish {
+            return "Off by default. When on, the last successful takes ride along with this polish request so the model can match names and tone. That adds tokens and latency. They are not saved into your system prompt. With cloud polish, that text also goes to the API."
+        }
+        return "Off by default. When on, the last successful takes ride along with this polish request so the model can match names and tone. On-device models have a small window, so WhisperLocal sends at most three shortened examples. They are not saved into your system prompt. Adds latency."
     }
 
     @ViewBuilder
@@ -742,6 +796,9 @@ struct SettingsView: View {
             let ok = settings.saveOpenAIAPIKey(key)
             if ok, !key.isEmpty {
                 Task { await models.fetchOpenAI(apiKey: key) }
+                if settings.cloudPolishProvider == .none {
+                    applyCloudPolish(.openAI, revealPolish: false)
+                }
             }
             return ok
         }
@@ -749,8 +806,70 @@ struct SettingsView: View {
         let ok = settings.saveAnthropicAPIKey(key)
         if ok, !key.isEmpty {
             Task { await models.fetchAnthropic(apiKey: key) }
+            if settings.cloudPolishProvider == .none {
+                applyCloudPolish(.anthropic, revealPolish: false)
+            }
         }
         return ok
+    }
+
+    /// Turns cloud polish on for this provider and optionally shows the Polish page.
+    private func applyCloudPolish(_ provider: CloudPolishProvider, revealPolish: Bool) {
+        if provider != .none {
+            settings.enableTextCleanup = true
+        }
+        settings.cloudPolishProvider = provider
+        if provider == .none {
+            controller.prewarmOnDevicePolish()
+        } else {
+            GemmaMLXPolisher.shared.unload()
+        }
+        if revealPolish {
+            page = .polish
+        }
+    }
+
+    @ViewBuilder
+    private func cloudProviderActivationSection(_ provider: CloudPolishProvider) -> some View {
+        let isCurrent = settings.cloudPolishProvider == provider
+        let hasKey = provider == .openAI ? settings.hasOpenAIKey : settings.hasAnthropicKey
+        let name = provider.displayName
+
+        Section("Cloud polish") {
+            if isCurrent {
+                Text("Polish is using \(name). The Polish page shows this as the cloud provider.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Show Polish settings") {
+                    page = .polish
+                }
+            } else {
+                Button {
+                    applyCloudPolish(provider, revealPolish: true)
+                } label: {
+                    Label("Use \(name) for cloud polish", systemImage: "checkmark.circle.fill")
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .disabled(!hasKey)
+                if !hasKey {
+                    Text("Save an API key first.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else if settings.cloudPolishProvider != .none {
+                    Text("This switches cloud polish from \(settings.cloudPolishProvider.displayName) to \(name), then opens Polish.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Turns on cloud polish for \(name) and opens the Polish page.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     private func addDictionaryTerm() {
@@ -901,15 +1020,31 @@ private enum PrefillCommitCopy {
 
     var buttonTitle: String {
         switch self {
-        case .systemPrompt: return "Set system prompt"
+        case .systemPrompt: return "Save system prompt"
         case .dictionary: return "Update dictionary"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .systemPrompt: return "square.and.arrow.down"
+        case .dictionary: return "square.and.arrow.down"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .systemPrompt:
+            return "Applies About you, Examples, and Exceptions to polish. Until you save, dictation uses the previous prompt."
+        case .dictionary:
+            return "Applies dictionary edits to polish. Until you update, dictation uses the previous list."
         }
     }
 
     var staleMessage: String {
         switch self {
         case .systemPrompt:
-            return "Unsaved drafts — polish still uses the last Set system prompt."
+            return "Unsaved drafts — polish still uses the last saved system prompt."
         case .dictionary:
             return "Unsaved changes — polish still uses the last update."
         }

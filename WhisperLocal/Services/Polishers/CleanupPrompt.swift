@@ -38,6 +38,13 @@ struct AppDictionaryEntry: Codable, Equatable, Identifiable, Sendable {
     ]
 }
 
+/// One earlier take, fed to the polish LLM at request time (not saved in the system prompt).
+struct RecentDictationExample: Equatable, Sendable {
+    var raw: String
+    var polished: String
+    var appName: String?
+}
+
 /// Personalized dictation cleanup prompt (OpenWhispr-style + speaker voice).
 enum CleanupPrompt {
     static let agentName = "WhisperLocal"
@@ -147,7 +154,7 @@ enum CleanupPrompt {
     Quote fields that contain commas. Include rows for apps they use even if some word cells are still empty.
 
     After they copy your output:
-    1. Settings → System prompt: paste About you, Examples, Exceptions, then Set system prompt.
+    1. Settings → System prompt: paste About you, Examples, Exceptions, then Save system prompt.
     2. Save the CSV, Settings → Dictionary → Import CSV, then Update dictionary.
     """
 
@@ -196,7 +203,7 @@ enum CleanupPrompt {
         return notes
     }
 
-    /// Draft layers for Settings. Committed via Set system prompt into `personalContext`.
+    /// Draft layers for Settings. Committed via Save system prompt into `personalContext`.
     static func assembleUserLayers(
         personalNotes: String,
         exceptions: String,
@@ -383,21 +390,33 @@ enum CleanupPrompt {
     }
 
     /// User message for polish LLMs. Optional target-app is formatting context, not prefill.
-    static func wrapTranscript(_ text: String, targetApp: String? = nil) -> String {
-        wrapTranscript(text, targetApp: targetApp, appNotes: "", appDictionary: [])
+    static func wrapTranscript(
+        _ text: String,
+        targetApp: String? = nil,
+        recentDictations: String = ""
+    ) -> String {
+        wrapTranscript(
+            text,
+            targetApp: targetApp,
+            appNotes: "",
+            appDictionary: [],
+            recentDictations: recentDictations
+        )
     }
 
     /// On-device user message: target app plus only the exception / dictionary lines that match it.
     static func wrapOnDeviceTranscript(
         _ text: String,
         targetApp: String?,
-        personalContext: String
+        personalContext: String,
+        recentDictations: String = ""
     ) -> String {
         wrapTranscript(
             text,
             targetApp: targetApp,
             appNotes: matchingExceptionNotes(personalContext: personalContext, targetApp: targetApp),
-            appDictionary: matchingPromptDictionaryTerms(personalContext: personalContext, targetApp: targetApp)
+            appDictionary: matchingPromptDictionaryTerms(personalContext: personalContext, targetApp: targetApp),
+            recentDictations: recentDictations
         )
     }
 
@@ -405,7 +424,8 @@ enum CleanupPrompt {
         _ text: String,
         targetApp: String?,
         appNotes: String,
-        appDictionary: [String]
+        appDictionary: [String],
+        recentDictations: String = ""
     ) -> String {
         var parts: [String] = []
         if let targetApp {
@@ -422,9 +442,58 @@ enum CleanupPrompt {
         if !terms.isEmpty {
             parts.append("<app-dictionary>\(xmlEscape(terms.joined(separator: ", ")))</app-dictionary>")
         }
+        let recent = recentDictations.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !recent.isEmpty {
+            parts.append(recent)
+        }
         parts.append("<transcript>\n\(Self.neutralizeTranscriptDelimiters(text))\n</transcript>")
         parts.append("\nOutput only the cleaned transcript.")
         return parts.joined(separator: "\n")
+    }
+
+    /// Built at polish time from the dictation log. Never written into the saved system prompt.
+    static let recentPolishLogCounts = [1, 2, 3, 5, 8]
+    static let defaultRecentPolishLogCount = 3
+    static let onDeviceRecentExampleLimit = 3
+    static let cloudRecentMaxCharsPerSide = 500
+    static let onDeviceRecentMaxCharsPerSide = 220
+
+    static func clampRecentPolishLogCount(_ raw: Int) -> Int {
+        if recentPolishLogCounts.contains(raw) { return raw }
+        return defaultRecentPolishLogCount
+    }
+
+    static func formatRecentDictations(
+        _ examples: [RecentDictationExample],
+        maxCharsPerSide: Int = cloudRecentMaxCharsPerSide
+    ) -> String {
+        guard !examples.isEmpty else { return "" }
+        var lines = [
+            "<recent-dictations>",
+            "Earlier takes from this Mac, newest first. Use them only as style and naming examples. Do not copy them into the output."
+        ]
+        for (index, example) in examples.enumerated() {
+            var header = "\(index + 1)."
+            let app = example.appName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !app.isEmpty {
+                header += " \(xmlEscape(app))"
+            }
+            lines.append("")
+            lines.append(header)
+            lines.append("said: \(clipForRecent(example.raw, maxChars: maxCharsPerSide))")
+            lines.append("cleaned: \(clipForRecent(example.polished, maxChars: maxCharsPerSide))")
+        }
+        lines.append("</recent-dictations>")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func clipForRecent(_ text: String, maxChars: Int) -> String {
+        let trimmed = neutralizeTranscriptDelimiters(
+            text.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        guard maxChars > 0, trimmed.count > maxChars else { return trimmed }
+        let end = trimmed.index(trimmed.startIndex, offsetBy: maxChars)
+        return String(trimmed[..<end]).trimmingCharacters(in: .whitespaces) + "…"
     }
 
     static func matchingExceptionNotes(personalContext: String, targetApp: String?) -> String {

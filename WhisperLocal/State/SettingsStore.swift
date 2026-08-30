@@ -119,6 +119,9 @@ final class SettingsStore: ObservableObject {
     @Published var anthropicModel: String { didSet { persist(anthropicModel, key: "anthropicModel") } }
     @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
     @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
+    /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
+    @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
+    @Published var recentPolishLogCountRaw: Int { didSet { persist(recentPolishLogCountRaw, key: "recentPolishLogCount") } }
     @Published var promptCommitForced: Bool { didSet { persist(promptCommitForced, key: "promptCommitForced") } }
     @Published private(set) var hasOpenAIKey = false
     @Published private(set) var openAIKeySuffix: String?
@@ -138,6 +141,16 @@ final class SettingsStore: ObservableObject {
     var localPolishEngine: LocalPolishEngine {
         get { LocalPolishEngine(rawValue: localPolishEngineRaw) ?? .appleIntelligence }
         set { localPolishEngineRaw = newValue.rawValue }
+    }
+
+    var recentPolishLogCount: Int {
+        get { CleanupPrompt.clampRecentPolishLogCount(recentPolishLogCountRaw) }
+        set { recentPolishLogCountRaw = CleanupPrompt.clampRecentPolishLogCount(newValue) }
+    }
+
+    /// Opt-in recent takes in the polish user message. Requires the dictation log.
+    var shouldIncludeRecentPolishLogs: Bool {
+        includeRecentPolishLogs && enableDictationLog
     }
 
     /// Cloud picker is OpenAI or Anthropic. On-device LLM polish is skipped in this mode.
@@ -253,7 +266,7 @@ final class SettingsStore: ObservableObject {
         cloudPolishProviderRaw = defaults.string(forKey: "cloudPolishProvider") ?? CloudPolishProvider.none.rawValue
         localPolishEngineRaw = Self.migratedLocalPolishEngine(from: defaults)
         enableTextCleanup = defaults.object(forKey: "enableTextCleanup") as? Bool ?? true
-        enableHeuristicCleanup = defaults.object(forKey: "enableHeuristicCleanup") as? Bool ?? true
+        enableHeuristicCleanup = defaults.object(forKey: "enableHeuristicCleanup") as? Bool ?? false
         hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
         dictionaryWordsRaw = defaults.string(forKey: "dictionaryWords") ?? ""
         dictionaryFullyEditable = defaults.bool(forKey: "dictionaryFullyEditable")
@@ -271,11 +284,15 @@ final class SettingsStore: ObservableObject {
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
+        includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
+        recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int
+            ?? CleanupPrompt.defaultRecentPolishLogCount
         promptCommitForced = defaults.bool(forKey: "promptCommitForced")
         if defaults.string(forKey: "localPolishEngine") != localPolishEngineRaw {
             UserDefaults.standard.set(localPolishEngineRaw, forKey: "localPolishEngine")
         }
         migrateFactoryASRDefault()
+        migrateFactoryHeuristicOff()
         migrateDictionaryStorage()
         migratePersonalContext()
         migrateSystemPromptLayers()
@@ -283,6 +300,14 @@ final class SettingsStore: ObservableObject {
         migratePersonalExamples()
         ensurePresetApps()
         refreshAPIKeyCache()
+    }
+
+    /// One-time: factory heuristic cleanup used to be on. LLM polish is the default path now.
+    private func migrateFactoryHeuristicOff() {
+        let key = "heuristicCleanupFactoryMigratedOff"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        enableHeuristicCleanup = false
     }
 
     /// One-time: the old factory ASR was Whisper Small. Move that default to Apple Speech.

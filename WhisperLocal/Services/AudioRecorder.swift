@@ -30,9 +30,6 @@ final class AudioRecorder: ObservableObject {
 
     private let targetSampleRate: Double = 16_000
     private let prerollCapacity = Int(16_000 * 0.6)
-    /// Keep AirPods in the input profile so the next take does not pay the Bluetooth reconnect tax.
-    private let idleStopNanoseconds: UInt64 = 45_000_000_000
-    private let livePeakThreshold: Float = 0.0006
     /// If the mic stays gated-silent, still flip ready after this much HAL audio.
     private let readyFallbackSamples = Int(16_000 * 1.2)
     private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "audio")
@@ -78,20 +75,29 @@ final class AudioRecorder: ObservableObject {
         idleStopTask?.cancel()
         idleStopTask = nil
 
+        // Preroll covers *engine-start* latency (Bluetooth profile switch). A warm,
+        // already-live mic is not dropping words — prepending would capture whatever
+        // you were saying before the key, and lengthen every ASR call.
+        let inputWasReady = isInputReady
         lock.lock()
         let alreadyCapturing = isCapturing
         captured.removeAll(keepingCapacity: true)
         captured.reserveCapacity(16_000 * 60)
-        // Preroll is ambient from before this take. If a previous take never stopped,
-        // preroll is frozen at *that* take's start — do not glue it onto this one.
-        if !alreadyCapturing, !preroll.isEmpty {
+        let prepended: Int
+        if !alreadyCapturing, !inputWasReady, !preroll.isEmpty {
             captured.append(contentsOf: preroll)
+            prepended = preroll.count
+        } else {
+            prepended = 0
         }
         preroll.removeAll(keepingCapacity: true)
         preroll.reserveCapacity(prerollCapacity)
         isCapturing = true
         latestLevel = 0
         lock.unlock()
+        if prepended > 0 {
+            logger.info("Prepended \(prepended, privacy: .public) preroll frames")
+        }
 
         if isEngineLive {
             isRecording = true
@@ -237,6 +243,16 @@ final class AudioRecorder: ObservableObject {
                 "Mic reconfigured \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch"
             )
         }
+        // A profile switch is the moment the stream becomes live. Re-arm the
+        // liveness latch so we do not keep "ready" from pre-switch silence.
+        lock.lock()
+        didAnnounceInputReady = false
+        samplesSinceEngineStart = 0
+        preroll.removeAll(keepingCapacity: true)
+        lock.unlock()
+        isInputReady = false
+        engineStartedAt = Date()
+
         installTap(
             on: engine,
             outputFormat: outputFormat,
@@ -250,12 +266,20 @@ final class AudioRecorder: ObservableObject {
                 logger.error("Mic restart after reconfigure failed: \(error.localizedDescription, privacy: .public)")
             }
         }
+        if !isRecording {
+            scheduleIdleStop()
+        }
     }
 
     private func scheduleIdleStop() {
         idleStopTask?.cancel()
+        let route = AudioInputRoute.current()
+        let hold = AudioIdleHold.nanoseconds(for: route)
+        logger.info(
+            "Mic idle hold \(hold / 1_000_000_000, privacy: .public)s (\(route.logReason, privacy: .public))"
+        )
         idleStopTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: idleStopNanoseconds)
+            try? await Task.sleep(nanoseconds: hold)
             guard !Task.isCancelled, !isRecording else { return }
             teardown()
         }
@@ -297,11 +321,10 @@ final class AudioRecorder: ObservableObject {
         lock.unlock()
     }
 
-    nonisolated private func announceInputReadyIfNeeded(peak: Float, appended: Int) {
+    nonisolated private func announceInputReadyIfNeeded(live: Bool, peak: Float, appended: Int) {
         lock.lock()
         samplesSinceEngineStart += appended
         let already = didAnnounceInputReady
-        let live = peak >= livePeakThreshold
         let fallback = samplesSinceEngineStart >= readyFallbackSamples
         let shouldAnnounce = !already && (live || fallback)
         if shouldAnnounce {
@@ -326,32 +349,33 @@ final class AudioRecorder: ObservableObject {
 
         var appended = 0
         var peak: Float = 0
+        var live = false
         let converterUsable = converter != nil && abs(buffer.format.sampleRate - converterSourceRate) < 1
         if converterUsable, let converter {
-            (appended, peak) = convertAndAppend(buffer, outputFormat: outputFormat, converter: converter)
+            (appended, peak, live) = convertAndAppend(buffer, outputFormat: outputFormat, converter: converter)
         }
         if appended == 0 {
             let mono = Self.monoFloats(from: buffer)
             let resampled = Self.resample(mono, from: buffer.format.sampleRate, to: outputFormat.sampleRate)
             guard !resampled.isEmpty else { return }
-            peak = Self.peakAbsolute(resampled)
+            (peak, live) = Self.peakAndLive(resampled)
             store(resampled)
             appended = resampled.count
             publishLevelIfCapturing(resampled)
         }
-        announceInputReadyIfNeeded(peak: peak, appended: appended)
+        announceInputReadyIfNeeded(live: live, peak: peak, appended: appended)
     }
 
-    /// Returns (16 kHz frames appended, peak amplitude).
+    /// Returns (16 kHz frames appended, peak amplitude, any sample ≠ 0).
     nonisolated private func convertAndAppend(
         _ buffer: AVAudioPCMBuffer,
         outputFormat: AVAudioFormat,
         converter: AVAudioConverter
-    ) -> (Int, Float) {
+    ) -> (Int, Float, Bool) {
         let ratio = outputFormat.sampleRate / max(buffer.format.sampleRate, 1)
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
         guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else {
-            return (0, 0)
+            return (0, 0, false)
         }
 
         var error: NSError?
@@ -368,15 +392,15 @@ final class AudioRecorder: ObservableObject {
 
         converter.convert(to: converted, error: &error, withInputFrom: inputBlock)
         guard error == nil, converted.frameLength > 0, let channel = converted.floatChannelData?[0] else {
-            return (0, 0)
+            return (0, 0, false)
         }
 
         let count = Int(converted.frameLength)
         let pointer = UnsafeBufferPointer(start: channel, count: count)
-        let peak = Self.peakAbsolute(pointer)
+        let (peak, live) = Self.peakAndLive(pointer)
         store(pointer)
         publishLevelIfCapturing(pointer)
-        return (count, peak)
+        return (count, peak, live)
     }
 
     nonisolated private func store(_ samples: [Float]) {
@@ -421,17 +445,19 @@ final class AudioRecorder: ObservableObject {
         lock.unlock()
     }
 
-    nonisolated private static func peakAbsolute(_ samples: [Float]) -> Float {
-        samples.withUnsafeBufferPointer { peakAbsolute($0) }
+    nonisolated private static func peakAndLive(_ samples: [Float]) -> (Float, Bool) {
+        samples.withUnsafeBufferPointer { peakAndLive($0) }
     }
 
-    nonisolated private static func peakAbsolute(_ samples: UnsafeBufferPointer<Float>) -> Float {
+    nonisolated private static func peakAndLive(_ samples: UnsafeBufferPointer<Float>) -> (Float, Bool) {
         var peak: Float = 0
+        var live = false
         for s in samples {
+            if s != 0 { live = true }
             let a = abs(s)
             if a > peak { peak = a }
         }
-        return peak
+        return (peak, live)
     }
 
     nonisolated private static func monoFloats(from buffer: AVAudioPCMBuffer) -> [Float] {

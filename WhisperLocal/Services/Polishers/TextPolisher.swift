@@ -6,17 +6,18 @@ protocol TextPolisher: Sendable {
         _ text: String,
         dictionary: [String],
         personalContext: String,
-        targetApp: String?
+        targetApp: String?,
+        recentDictations: String
     ) async throws -> String
 }
 
 extension TextPolisher {
     func polish(_ text: String, dictionary: [String]) async throws -> String {
-        try await polish(text, dictionary: dictionary, personalContext: "", targetApp: nil)
+        try await polish(text, dictionary: dictionary, personalContext: "", targetApp: nil, recentDictations: "")
     }
 
     func polish(_ text: String, dictionary: [String], personalContext: String) async throws -> String {
-        try await polish(text, dictionary: dictionary, personalContext: personalContext, targetApp: nil)
+        try await polish(text, dictionary: dictionary, personalContext: personalContext, targetApp: nil, recentDictations: "")
     }
 }
 
@@ -140,6 +141,8 @@ struct PolishPipeline: Sendable {
     /// Extra terms for heuristic cleanup only (per-app dictionary). LLM keeps `dictionary` so prefill stays stable.
     var heuristicDictionary: [String]? = nil
     var personalContext: String = ""
+    /// Request-time style examples from the dictation log. Empty unless the user opted in.
+    var recentDictations: String = ""
 
     func run(_ raw: String, targetApp: String? = nil) async -> PolishResult {
         guard enableTextCleanup else {
@@ -161,7 +164,8 @@ struct PolishPipeline: Sendable {
             text,
             dictionary: heuristicDictionary ?? dictionary,
             personalContext: personalContext,
-            targetApp: targetApp
+            targetApp: targetApp,
+            recentDictations: ""
            ) {
             text = polished
             stages.append(heuristic.name)
@@ -179,7 +183,8 @@ struct PolishPipeline: Sendable {
                     text,
                     dictionary: dictionary,
                     personalContext: personalContext,
-                    targetApp: targetApp
+                    targetApp: targetApp,
+                    recentDictations: recentDictations
                 )
                 stages.append(localLLM.name)
             } catch {
@@ -196,7 +201,8 @@ struct PolishPipeline: Sendable {
                     text,
                     dictionary: dictionary,
                     personalContext: personalContext,
-                    targetApp: targetApp
+                    targetApp: targetApp,
+                    recentDictations: recentDictations
                 )
                 stages.append(cloud.name)
                 // Cloud success clears earlier local-LLM failure note

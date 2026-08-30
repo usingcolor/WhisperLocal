@@ -83,9 +83,15 @@ final class DictationController: ObservableObject {
         recorder.$isInputReady
             .receive(on: RunLoop.main)
             .sink { [weak self] ready in
-                guard let self, ready, self.phase == .waitingForMic else { return }
-                self.phase = .recording
-                self.hud.update(phase: .recording)
+                guard let self else { return }
+                if ready, self.phase == .waitingForMic {
+                    self.phase = .recording
+                    self.hud.update(phase: .recording)
+                } else if !ready, self.phase == .recording {
+                    // Route change (Bluetooth profile switch) — wait for the new stream.
+                    self.phase = .waitingForMic
+                    self.hud.update(phase: .waitingForMic)
+                }
             }
             .store(in: &cancellables)
     }
@@ -211,7 +217,7 @@ final class DictationController: ObservableObject {
             return
         }
 
-        // Hold duration, not sample count — a warm mic prepends ~600 ms of preroll.
+        // Hold duration, not sample count — a cold mic can prepend preroll.
         let held = recordingBeganAt.map { Date().timeIntervalSince($0) } ?? 0
         recordingBeganAt = nil
         if held < 0.28 {
@@ -383,7 +389,24 @@ final class DictationController: ObservableObject {
             enableHeuristicCleanup: settings.enableHeuristicCleanup,
             dictionary: global,
             heuristicDictionary: CleanupPrompt.mergedDictionary(global + extraHeuristicTerms),
-            personalContext: settings.cleanupPersonalContext
+            personalContext: settings.cleanupPersonalContext,
+            recentDictations: recentDictationsForPolish()
+        )
+    }
+
+    /// Request-time only. Never written into Settings → System prompt.
+    private func recentDictationsForPolish() -> String {
+        guard settings.shouldIncludeRecentPolishLogs else { return "" }
+        let examples = log.recentPolishExamples(limit: settings.recentPolishLogCount)
+        if settings.hasUsableCloudPolish {
+            return CleanupPrompt.formatRecentDictations(
+                examples,
+                maxCharsPerSide: CleanupPrompt.cloudRecentMaxCharsPerSide
+            )
+        }
+        return CleanupPrompt.formatRecentDictations(
+            Array(examples.prefix(CleanupPrompt.onDeviceRecentExampleLimit)),
+            maxCharsPerSide: CleanupPrompt.onDeviceRecentMaxCharsPerSide
         )
     }
 

@@ -56,6 +56,7 @@ struct SettingsView: View {
     @State private var customAppName = ""
     @State private var customAppKind = TargetAppContext.Kind.other
     @State private var dictionaryFileNote: String?
+    @State private var promptCopyNote: String?
 
     var body: some View {
         NavigationSplitView {
@@ -86,8 +87,6 @@ struct SettingsView: View {
         .frame(minWidth: 720, minHeight: 500)
         .background(SettingsWindowChrome())
         .onAppear {
-            openAIKeyDraft = settings.openAIAPIKey
-            anthropicKeyDraft = settings.anthropicAPIKey
             if !controller.transcription.isReady, !controller.transcription.isLoadingModel {
                 Task { await controller.transcription.ensureModel(named: settings.asrModel) }
             }
@@ -285,6 +284,22 @@ struct SettingsView: View {
     private var promptPane: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Draft with an LLM")
+                        .font(.headline)
+                    Text("Copy a setup prompt, paste it into ChatGPT or Claude, and it will interview you, then output About you, Examples, Exceptions, and a dictionary CSV to import.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Copy setup prompt") {
+                        copySettingsGeneratorPrompt()
+                    }
+                    if let promptCopyNote {
+                        Text(promptCopyNote)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
                 promptEditor(
                     title: "About you",
                     caption: "Who you are and how you write. Included in every polish. Keep this short — app-specific rules belong in Exceptions and Dictionary.",
@@ -373,7 +388,8 @@ struct SettingsView: View {
                 APIKeyField(
                     prompt: "sk-…",
                     draft: $openAIKeyDraft,
-                    savedKey: settings.openAIAPIKey,
+                    hasSavedKey: settings.hasOpenAIKey,
+                    savedKeySuffix: settings.openAIKeySuffix,
                     onSave: { store(openAI: true) },
                     onClear: {
                         openAIKeyDraft = ""
@@ -388,13 +404,13 @@ struct SettingsView: View {
                     modelID: $settings.openAIModel,
                     isLoading: models.isLoadingOpenAI,
                     status: models.openAIStatus,
-                    canUpdate: !settings.openAIAPIKey.isEmpty
+                    canUpdate: settings.hasOpenAIKey
                 ) {
                     Task { await models.fetchOpenAI(apiKey: settings.openAIAPIKey) }
                 }
             }
         }
-        .onAppear { openAIKeyDraft = settings.openAIAPIKey }
+        .onAppear { openAIKeyDraft = "" }
     }
 
     private var anthropicPane: some View {
@@ -403,7 +419,8 @@ struct SettingsView: View {
                 APIKeyField(
                     prompt: "sk-ant-…",
                     draft: $anthropicKeyDraft,
-                    savedKey: settings.anthropicAPIKey,
+                    hasSavedKey: settings.hasAnthropicKey,
+                    savedKeySuffix: settings.anthropicKeySuffix,
                     onSave: { store(openAI: false) },
                     onClear: {
                         anthropicKeyDraft = ""
@@ -418,13 +435,13 @@ struct SettingsView: View {
                     modelID: $settings.anthropicModel,
                     isLoading: models.isLoadingAnthropic,
                     status: models.anthropicStatus,
-                    canUpdate: !settings.anthropicAPIKey.isEmpty
+                    canUpdate: settings.hasAnthropicKey
                 ) {
                     Task { await models.fetchAnthropic(apiKey: settings.anthropicAPIKey) }
                 }
             }
         }
-        .onAppear { anthropicKeyDraft = settings.anthropicAPIKey }
+        .onAppear { anthropicKeyDraft = "" }
     }
 
     private var dictionaryPane: some View {
@@ -503,8 +520,11 @@ struct SettingsView: View {
                 Button("Import CSV…", action: importDictionaryCSV)
                 Button("Export CSV…", action: exportDictionaryCSV)
                 Button("Copy template", action: copyDictionaryTemplate)
+                Button("Copy setup prompt") {
+                    copySettingsGeneratorPrompt()
+                }
             }
-            Text("Export a CSV, have an LLM fill words, then import. Click Update dictionary after you change words.")
+            Text("Copy setup prompt asks an LLM to draft About you and this CSV. Copy template is an empty CSV. Import, then Update dictionary.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let dictionaryFileNote {
@@ -721,14 +741,14 @@ struct SettingsView: View {
             let key = openAIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
             let ok = settings.saveOpenAIAPIKey(key)
             if ok, !key.isEmpty {
-                Task { await models.fetchOpenAI(apiKey: settings.openAIAPIKey) }
+                Task { await models.fetchOpenAI(apiKey: key) }
             }
             return ok
         }
         let key = anthropicKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let ok = settings.saveAnthropicAPIKey(key)
         if ok, !key.isEmpty {
-            Task { await models.fetchAnthropic(apiKey: settings.anthropicAPIKey) }
+            Task { await models.fetchAnthropic(apiKey: key) }
         }
         return ok
     }
@@ -761,6 +781,23 @@ struct SettingsView: View {
         let name = customAppName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
         addAppDictionary(AppDictionaryEntry(appName: name, kind: customAppKind.rawValue))
+    }
+
+    private func copySettingsGeneratorPrompt() {
+        let text = CleanupPrompt.settingsGeneratorPrompt(
+            personalNotes: settings.cleanupPersonalNotes,
+            examples: settings.cleanupPersonalExamples,
+            exceptions: settings.cleanupExceptions,
+            dictionaryCSV: DictionaryCSV.export(
+                globalWords: settings.dictionaryWords,
+                apps: settings.appDictionaries,
+                exceptions: settings.cleanupExceptions
+            )
+        )
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        promptCopyNote = "Copied. Paste into ChatGPT, Claude, or another LLM."
+        dictionaryFileNote = "Setup prompt copied. Paste the LLM’s CSV via Import CSV, then Update dictionary."
     }
 
     private func copyDictionaryTemplate() {
@@ -910,7 +947,8 @@ private enum DictionaryDestination: Hashable, Identifiable {
 private struct APIKeyField: View {
     let prompt: String
     @Binding var draft: String
-    let savedKey: String
+    let hasSavedKey: Bool
+    let savedKeySuffix: String?
     let onSave: () -> Bool
     let onClear: () -> Void
 
@@ -930,7 +968,7 @@ private struct APIKeyField: View {
             }
             Text(statusLine)
                 .font(.caption)
-                .foregroundStyle(savedKey.isEmpty ? Color.orange : Color.secondary)
+                .foregroundStyle(hasSavedKey ? Color.secondary : Color.orange)
             if let saveNote {
                 Text(saveNote)
                     .font(.caption)
@@ -952,17 +990,17 @@ private struct APIKeyField: View {
                     saveNote = nil
                     onClear()
                 })
-                .disabled(savedKey.isEmpty && draft.isEmpty)
+                .disabled(!hasSavedKey && draft.isEmpty)
             }
         }
     }
 
     private var statusLine: String {
-        if savedKey.isEmpty {
+        if !hasSavedKey {
             return "No key saved yet."
         }
-        if savedKey.count >= 4 {
-            return "Key saved in Keychain · ends with \(savedKey.suffix(4))"
+        if let suffix = savedKeySuffix, !suffix.isEmpty {
+            return "Key saved in Keychain · ends with \(suffix)"
         }
         return "Key saved in Keychain."
     }

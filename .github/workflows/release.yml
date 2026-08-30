@@ -22,11 +22,16 @@ jobs:
       - name: Build DMG
         run: bash scripts/make-dmg.sh
 
+      - name: Checksum DMG
+        run: shasum -a 256 dist/*.dmg > dist/SHA256SUMS
+
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
           name: WhisperLocal-dmg
-          path: dist/*.dmg
+          path: |
+            dist/*.dmg
+            dist/SHA256SUMS
 
       - name: Publish GitHub Release
         if: github.repository == 'usingcolor/WhisperLocal' && startsWith(github.ref, 'refs/tags/v')
@@ -35,7 +40,7 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
-          gh release create "$tag" dist/*.dmg \
+          gh release create "$tag" dist/*.dmg dist/SHA256SUMS \
             --title "WhisperLocal ${version}" \
             --notes "$(printf '%s\n' \
               'Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applications.' \

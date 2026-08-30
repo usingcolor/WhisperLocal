@@ -15,6 +15,10 @@ enum AppUpdateFeed {
         var dmgURL: URL
         var dmgName: String
         var dmgBytes: Int
+        /// SHA-256 of the DMG from a sibling `SHA256SUMS` asset, if the release published one.
+        var sha256: String?
+        /// GitHub asset URL for `SHA256SUMS`. Fetched by the updater; missing is non-fatal.
+        var sha256SumsURL: URL?
     }
 
     struct SemanticVersion: Comparable, Equatable {
@@ -71,13 +75,16 @@ enum AppUpdateFeed {
             pageURL: page,
             dmgURL: asset.url,
             dmgName: asset.name,
-            dmgBytes: asset.size
+            dmgBytes: asset.size,
+            sha256: nil,
+            sha256SumsURL: pickSHA256SUMS(from: assets)
         )
     }
 
     static func pickDMG(from assets: [[String: Any]]) -> (name: String, url: URL, size: Int)? {
         let dmgs = assets.compactMap { asset -> (name: String, url: URL, size: Int)? in
-            let name = asset["name"] as? String ?? ""
+            let rawName = asset["name"] as? String ?? ""
+            let name = URL(fileURLWithPath: rawName).lastPathComponent
             guard name.lowercased().hasSuffix(".dmg") else { return nil }
             guard name.lowercased().hasPrefix("whisperlocal") else { return nil }
             guard let urlString = asset["browser_download_url"] as? String,
@@ -107,6 +114,48 @@ enum AppUpdateFeed {
             return path.contains("/\(owner.lowercased())/\(repo.lowercased())/")
         }
         return true
+    }
+
+    static func pickSHA256SUMS(from assets: [[String: Any]]) -> URL? {
+        for asset in assets {
+            let rawName = asset["name"] as? String ?? ""
+            let base = URL(fileURLWithPath: rawName).lastPathComponent.lowercased()
+            guard base == "sha256sums" || base == "sha256sums.txt" else { continue }
+            guard let urlString = asset["browser_download_url"] as? String,
+                  let url = URL(string: urlString),
+                  isTrustedDownloadURL(url) else { continue }
+            return url
+        }
+        return nil
+    }
+
+    /// `shasum -a 256` lines: `<64 hex><spaces-or-star><filename>`. Malformed lines are skipped.
+    static func parseSHA256SUMS(_ text: String, for fileName: String) -> String? {
+        let wanted = URL(fileURLWithPath: fileName).lastPathComponent.lowercased()
+        guard !wanted.isEmpty else { return nil }
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+            guard let parsed = sha256SumLine(line) else { continue }
+            let listed = URL(fileURLWithPath: parsed.file).lastPathComponent.lowercased()
+            if listed == wanted {
+                return parsed.digest
+            }
+        }
+        return nil
+    }
+
+    private static func sha256SumLine(_ line: String) -> (digest: String, file: String)? {
+        let parts = line.split(maxSplits: 1, whereSeparator: { $0.isWhitespace })
+        guard parts.count == 2 else { return nil }
+        let digest = String(parts[0]).lowercased()
+        guard digest.count == 64, digest.allSatisfy(\.isHexDigit) else { return nil }
+        var file = String(parts[1]).trimmingCharacters(in: .whitespaces)
+        if file.hasPrefix("*") {
+            file.removeFirst()
+        }
+        guard !file.isEmpty else { return nil }
+        return (digest, file)
     }
 
     enum FeedError: LocalizedError {

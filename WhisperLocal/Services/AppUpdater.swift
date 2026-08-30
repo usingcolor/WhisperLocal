@@ -1,5 +1,7 @@
 import AppKit
+import CryptoKit
 import Foundation
+import Security
 
 /// Fetches the public GitHub Release DMG and replaces `/Applications/WhisperLocal.app`.
 /// UserDefaults and Keychain are outside the bundle, so personal settings stay put.
@@ -89,7 +91,28 @@ final class AppUpdater: ObservableObject {
         guard (200..<300).contains(code) else {
             throw UpdateError.http(code)
         }
-        return try AppUpdateFeed.parseRelease(from: data)
+        return try await attachChecksum(try AppUpdateFeed.parseRelease(from: data))
+    }
+
+    /// Missing `SHA256SUMS` is non-fatal (releases before pinning). A listed file that will not parse is ignored.
+    private func attachChecksum(_ release: AppUpdateFeed.Release) async -> AppUpdateFeed.Release {
+        guard let url = release.sha256SumsURL else { return release }
+        var request = URLRequest(url: url)
+        request.setValue("WhisperLocal/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 20
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            guard (200..<300).contains(code),
+                  let text = String(data: data, encoding: .utf8) else {
+                return release
+            }
+            var updated = release
+            updated.sha256 = AppUpdateFeed.parseSHA256SUMS(text, for: release.dmgName)
+            return updated
+        } catch {
+            return release
+        }
     }
 
     private func promptForCurrentStatus() {
@@ -131,8 +154,18 @@ final class AppUpdater: ObservableObject {
         let mount = work.appendingPathComponent("mount", isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-            let dmg = work.appendingPathComponent(release.dmgName)
-            try await download(from: release.dmgURL, to: dmg, expectedBytes: release.dmgBytes)
+            let dmgName = URL(fileURLWithPath: release.dmgName).lastPathComponent
+            guard dmgName.lowercased().hasSuffix(".dmg"),
+                  dmgName != ".", dmgName != "..", !dmgName.isEmpty else {
+                throw UpdateError.untrustedURL
+            }
+            let dmg = work.appendingPathComponent(dmgName)
+            try await download(
+                from: release.dmgURL,
+                to: dmg,
+                expectedBytes: release.dmgBytes,
+                expectedSHA256: release.sha256
+            )
             status = .installing
             try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
             try attach(dmg: dmg, mount: mount)
@@ -168,7 +201,12 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    private func download(from url: URL, to destination: URL, expectedBytes: Int) async throws {
+    private func download(
+        from url: URL,
+        to destination: URL,
+        expectedBytes: Int,
+        expectedSHA256: String?
+    ) async throws {
         guard AppUpdateFeed.isTrustedDownloadURL(url) else {
             throw UpdateError.untrustedURL
         }
@@ -190,6 +228,24 @@ final class AppUpdater: ObservableObject {
         if expectedBytes > 0, size != expectedBytes {
             throw UpdateError.dmgSizeMismatch(expected: expectedBytes, actual: size)
         }
+        if let expectedSHA256, !expectedSHA256.isEmpty {
+            let actual = try sha256Hex(of: destination)
+            if actual != expectedSHA256.lowercased() {
+                throw UpdateError.digestMismatch
+            }
+        }
+    }
+
+    private func sha256Hex(of url: URL) throws -> String {
+        var hasher = SHA256()
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        while true {
+            let chunk = handle.readData(ofLength: 1_048_576)
+            if chunk.isEmpty { break }
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private func attach(dmg: URL, mount: URL) throws {
@@ -221,10 +277,23 @@ final class AppUpdater: ObservableObject {
               bundle.bundleIdentifier == "com.usingcolor.WhisperLocal" else {
             throw UpdateError.wrongBundle
         }
+        // Ad-hoc signing has no stable publisher identity. This only rejects a bundle
+        // whose code directory no longer matches its signature (corruption or
+        // post-signing tampering). It does not authenticate who produced the release.
+        var staticCode: SecStaticCode?
+        let status = SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode)
+        guard status == errSecSuccess, let staticCode else {
+            throw UpdateError.invalidSignature
+        }
+        let validity = SecStaticCodeCheckValidity(staticCode, [], nil)
+        guard validity == errSecSuccess else {
+            throw UpdateError.invalidSignature
+        }
     }
 
     /// `ditto` into a sibling then rename, so a mid-copy failure does not leave a half-written app.
-    /// Quarantine is left in place — Gatekeeper is the backstop until Developer ID notarization.
+    /// `LSFileQuarantineEnabled` marks this process's downloads, so Gatekeeper assesses the
+    /// installed app. We do not strip quarantine. Ad-hoc builds still need Open Anyway.
     private func spawnInstaller(dmg: URL, mount: URL, sourceApp: URL, destination: URL) throws {
         try FileManager.default.createDirectory(
             at: UpdateInstallLog.directory,
@@ -251,6 +320,11 @@ final class AppUpdater: ObservableObject {
           trap - ERR
           echo "UPDATE_FAILED ${1:-}"
           /usr/bin/hdiutil detach "$mount" -quiet || true
+          if [[ ! -e "$dest" && -d "$old" ]]; then
+            /bin/mv "$old" "$dest" || true
+          else
+            /bin/rm -rf "$old" || true
+          fi
           /usr/bin/open "$dest" || true
           /bin/rm -rf "$work" "$new" || true
           exit 1
@@ -345,6 +419,8 @@ final class AppUpdater: ObservableObject {
         case wrongBundle
         case destinationNotWritable
         case dmgSizeMismatch(expected: Int, actual: Int)
+        case digestMismatch
+        case invalidSignature
         case commandFailed(String, String)
 
         var errorDescription: String? {
@@ -357,10 +433,14 @@ final class AppUpdater: ObservableObject {
                 return "The downloaded file was too small to be a WhisperLocal DMG."
             case .dmgSizeMismatch(let expected, let actual):
                 return "The downloaded DMG was \(actual) bytes; GitHub listed \(expected)."
+            case .digestMismatch:
+                return "The downloaded DMG did not match the published SHA-256 checksum."
             case .missingAppOnDMG:
                 return "The disk image did not contain WhisperLocal.app."
             case .wrongBundle:
                 return "The disk image app is not com.usingcolor.WhisperLocal."
+            case .invalidSignature:
+                return "The update’s code signature is invalid or the bundle was modified after signing."
             case .destinationNotWritable:
                 return "Cannot write /Applications/WhisperLocal.app. Check that the app lives in Applications and is not locked."
             case .commandFailed(let command, let err):

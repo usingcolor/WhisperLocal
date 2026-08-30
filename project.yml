@@ -14,6 +14,8 @@ settings:
     VALID_ARCHS: arm64
     EXCLUDED_ARCHS: x86_64
     # Sign locally in Xcode (Signing & Capabilities → Team). Do not commit a team ID.
+    # Hardened Runtime + ad-hoc signing often makes Accessibility stay "Missing".
+    ENABLE_HARDENED_RUNTIME: NO
     CODE_SIGN_STYLE: Automatic
     CODE_SIGN_IDENTITY: "Apple Development"
     PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal
@@ -63,7 +65,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: WhisperLocal/App/WhisperLocal.entitlements
         PRODUCT_NAME: WhisperLocal
         MARKETING_VERSION: "0.1.4"
-        CURRENT_PROJECT_VERSION: "7"
+        CURRENT_PROJECT_VERSION: "29"
         GENERATE_INFOPLIST_FILE: false
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"

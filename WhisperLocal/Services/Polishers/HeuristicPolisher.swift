@@ -177,8 +177,24 @@ struct HeuristicPolisher: TextPolisher {
 
     // MARK: - Repetition / whitespace
 
+    private static let keptDoubles: Set<String> = ["had", "that"]
+
     private func collapseRepeatedWords(_ text: String) -> String {
-        replacing(#"\b(\w+)(\s+\1\b)+"#, in: text, with: "$1")
+        guard let regex = try? NSRegularExpression(
+            pattern: #"\b(\w+)(\s+\1\b)+"#,
+            options: .caseInsensitive
+        ) else { return text }
+        let ns = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        var result = text
+        for match in matches.reversed() {
+            guard let wordRange = Range(match.range(at: 1), in: result),
+                  let fullRange = Range(match.range, in: result) else { continue }
+            let word = String(result[wordRange]).lowercased()
+            if Self.keptDoubles.contains(word) { continue }
+            result.replaceSubrange(fullRange, with: String(result[wordRange]))
+        }
+        return result
     }
 
     private func collapseRepeatedBigrams(_ text: String) -> String {
@@ -263,14 +279,27 @@ struct HeuristicPolisher: TextPolisher {
         guard let last = core.last else { return line }
         if ".!?:;".contains(last) { return core }
 
-        let firstWord = core.split(whereSeparator: { $0.isWhitespace || $0 == "'" }).first
-            .map(String.init)?.lowercased() ?? ""
-        let questionStarters: Set<String> = [
-            "who", "what", "when", "where", "why", "how",
+        let words = core.split(whereSeparator: { $0.isWhitespace || $0 == "'" }).map(String.init)
+        let firstWord = words.first?.lowercased() ?? ""
+        let questionWords: Set<String> = ["who", "what", "when", "where", "why", "how"]
+        if questionWords.contains(firstWord) {
+            return core + "?"
+        }
+        let auxiliaries: Set<String> = [
             "is", "are", "do", "does", "did", "can", "could",
             "would", "will", "should", "may", "might"
         ]
-        return core + (questionStarters.contains(firstWord) ? "?" : ".")
+        let questionSubjects: Set<String> = [
+            "you", "i", "we", "they", "he", "she", "it",
+            "there", "that", "this", "the", "my", "your",
+            "our", "their", "his", "her", "its", "these", "those", "a", "an"
+        ]
+        if auxiliaries.contains(firstWord),
+           let second = words.dropFirst().first?.lowercased(),
+           questionSubjects.contains(second) {
+            return core + "?"
+        }
+        return core + "."
     }
 
     // MARK: - Regex

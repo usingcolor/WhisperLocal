@@ -53,6 +53,7 @@ struct WhisperLocalApp: App {
             return "exclamationmark.triangle"
         }
         switch phase {
+        case .waitingForMic: return "ellipsis.circle"
         case .recording: return "mic.fill"
         case .processing, .polishing, .inserting: return "ellipsis.circle"
         case .success, .successNote: return "checkmark.circle"

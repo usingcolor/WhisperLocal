@@ -5,6 +5,8 @@ import Combine
 
 enum DictationPhase: Equatable {
     case idle
+    /// Engine is up; waiting for the first HAL buffer (Bluetooth profile switch).
+    case waitingForMic
     case recording
     case processing
     case polishing
@@ -17,6 +19,7 @@ enum DictationPhase: Equatable {
     var label: String {
         switch self {
         case .idle: return "Ready"
+        case .waitingForMic: return "Waiting for mic…"
         case .recording: return "Listening…"
         case .processing: return "Transcribing…"
         case .polishing: return "Polishing…"
@@ -55,6 +58,8 @@ final class DictationController: ObservableObject {
     private var recordingBeganAt: Date?
     /// MenuBarExtra onAppear also calls start(); only load speech once.
     private var didBootstrapSpeech = false
+    /// Bumped at the start of each take so a late success-sleeper cannot idle a newer session.
+    private var sessionGeneration = 0
 
     private init() {
         transcription.objectWillChange
@@ -73,6 +78,14 @@ final class DictationController: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        recorder.$isInputReady
+            .receive(on: RunLoop.main)
+            .sink { [weak self] ready in
+                guard let self, ready, self.phase == .waitingForMic else { return }
+                self.phase = .recording
+                self.hud.update(phase: .recording)
             }
             .store(in: &cancellables)
     }
@@ -99,6 +112,9 @@ final class DictationController: ObservableObject {
         Task {
             await transcription.ensureModel(named: settings.asrModel)
             prewarmOnDevicePolish()
+            if permissions.microphoneGranted {
+                recorder.prewarm()
+            }
         }
     }
 
@@ -118,7 +134,7 @@ final class DictationController: ObservableObject {
         case .hold:
             beginRecording()
         case .tap:
-            if phase == .recording {
+            if phase == .recording || phase == .waitingForMic {
                 finishRecording()
             } else {
                 beginRecording()
@@ -153,12 +169,18 @@ final class DictationController: ObservableObject {
         }
 
         do {
+            sessionGeneration += 1
             dictationTargetApp = TargetAppContext.captureFrontmost()
             try recorder.start()
             recordingBeganAt = Date()
-            phase = .recording
             hotKey.markSessionActive(true)
-            hud.show(phase: .recording, levelPublisher: recorder)
+            if recorder.isInputReady {
+                phase = .recording
+                hud.show(phase: .recording, levelPublisher: recorder)
+            } else {
+                phase = .waitingForMic
+                hud.show(phase: .waitingForMic, levelPublisher: recorder)
+            }
         } catch {
             phase = .error(error.localizedDescription)
             hotKey.markSessionActive(false)
@@ -177,7 +199,7 @@ final class DictationController: ObservableObject {
     }
 
     private func finishRecording() {
-        guard phase == .recording else { return }
+        guard phase == .recording || phase == .waitingForMic else { return }
         let samples = recorder.stop()
         hotKey.markSessionActive(false)
 
@@ -189,21 +211,21 @@ final class DictationController: ObservableObject {
             return
         }
 
-        // Ignore accidental taps / empty holds
-        if samples.count < Int(16_000 * 0.25) {
-            let held = recordingBeganAt.map { Date().timeIntervalSince($0) } ?? 0
-            recordingBeganAt = nil
+        // Hold duration, not sample count — a warm mic prepends ~600 ms of preroll.
+        let held = recordingBeganAt.map { Date().timeIntervalSince($0) } ?? 0
+        recordingBeganAt = nil
+        if held < 0.28 {
             dictationTargetApp = nil
-            if held >= 0.5 {
-                phase = .error("No microphone input")
-                hud.flashError("No microphone input")
-            } else {
-                phase = .idle
-                hud.hide()
-            }
+            phase = .idle
+            hud.hide()
             return
         }
-        recordingBeganAt = nil
+        if Self.peakAbsolute(samples) < 0.003 {
+            dictationTargetApp = nil
+            phase = .error("No microphone input")
+            hud.flashError("No microphone input")
+            return
+        }
 
         phase = .processing
         hud.update(phase: .processing)
@@ -287,6 +309,7 @@ final class DictationController: ObservableObject {
                     errorMessage: nil,
                     audioSeconds: audioSeconds
                 ))
+                let generation = sessionGeneration
                 if result.cleanupFailed, let note = result.cleanupNote {
                     hud.flashSuccess(note: note)
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
@@ -294,6 +317,7 @@ final class DictationController: ObservableObject {
                     hud.flashSuccess()
                     try? await Task.sleep(nanoseconds: 800_000_000)
                 }
+                guard generation == sessionGeneration else { return }
                 phase = .idle
                 hud.hide()
             } else {
@@ -392,6 +416,15 @@ final class DictationController: ObservableObject {
     private var isErrorPhase: Bool {
         if case .error = phase { return true }
         return false
+    }
+
+    private static func peakAbsolute(_ samples: [Float]) -> Float {
+        var peak: Float = 0
+        for sample in samples {
+            let magnitude = abs(sample)
+            if magnitude > peak { peak = magnitude }
+        }
+        return peak
     }
 
     var readyStatusLine: String {

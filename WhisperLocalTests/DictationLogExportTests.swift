@@ -92,5 +92,8 @@ final class TextInserterSanitizeTests: XCTestCase {
     func testUnverifiedInsertMethodIsDistinctFromConfirmedAccessibility() {
         XCTAssertEqual(InsertionMethod.accessibility.rawValue, "accessibility")
         XCTAssertEqual(InsertionMethod.accessibilityUnverified.rawValue, "accessibility-unverified")
+        XCTAssertEqual(InsertionMethod.clipboard.rawValue, "clipboard")
+        XCTAssertEqual(InsertionMethod.clipboardUnverified.rawValue, "clipboard-unverified")
+        XCTAssertNotEqual(InsertionMethod.clipboard.rawValue, InsertionMethod.clipboardUnverified.rawValue)
     }
 }

@@ -146,7 +146,7 @@ final class AppleSpeechASR {
             try? await analyzer.setContext(context)
         }
 
-        let url = try Self.writeTempAudio(samples: samples)
+        let url = try Self.writeTempAudio(samples: Self.padLeadingSilence(samples))
         defer { Self.removeTempAudio(url) }
 
         let file = try AVAudioFile(forReading: url)
@@ -191,6 +191,24 @@ final class AppleSpeechASR {
             }
         }
         return (finals.isEmpty ? all : finals).joined(separator: " ")
+    }
+
+    /// Apple Speech often drops the first phonemes when a clip starts on speech.
+    /// Keep existing quiet lead-in; otherwise prepend 200 ms of silence.
+    private static func padLeadingSilence(_ samples: [Float]) -> [Float] {
+        let padCount = 3_200
+        let probeCount = min(samples.count, 1_600)
+        guard probeCount > 0 else { return samples }
+        var peak: Float = 0
+        for index in 0..<probeCount {
+            peak = max(peak, abs(samples[index]))
+        }
+        if peak < 0.008 { return samples }
+        var padded = [Float](repeating: 0, count: padCount + samples.count)
+        for index in 0..<samples.count {
+            padded[padCount + index] = samples[index]
+        }
+        return padded
     }
 
     private static func writeTempAudio(samples: [Float]) throws -> URL {

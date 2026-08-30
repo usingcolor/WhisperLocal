@@ -8,21 +8,28 @@ final class RecordingHUDController: ObservableObject {
 
     private var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
+    private var levelTimer: Timer?
 
     func show(phase: DictationPhase, levelPublisher: AudioRecorder) {
         hideTask?.cancel()
+        levelTimer?.invalidate()
         self.phase = phase
         ensurePanel()
         positionOnActiveScreen()
         panel?.orderFrontRegardless()
 
-        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak levelPublisher] timer in
+        levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak levelPublisher] timer in
+            guard let levelPublisher else {
+                timer.invalidate()
+                return
+            }
+            let level = levelPublisher.snapshotLevel()
             Task { @MainActor in
-                guard let self, let levelPublisher, self.panel?.isVisible == true else {
+                guard let self, self.panel?.isVisible == true else {
                     timer.invalidate()
                     return
                 }
-                self.audioLevel = levelPublisher.audioLevel
+                self.audioLevel = level
             }
         }
     }
@@ -51,6 +58,8 @@ final class RecordingHUDController: ObservableObject {
 
     func hide() {
         hideTask?.cancel()
+        levelTimer?.invalidate()
+        levelTimer = nil
         panel?.orderOut(nil)
         phase = .idle
         audioLevel = 0
@@ -120,7 +129,7 @@ struct RecordingHUDView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(2)
-                if case .recording = controller.phase {
+                if controller.phase == .recording {
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.white.opacity(0.15))
@@ -146,6 +155,10 @@ struct RecordingHUDView: View {
     @ViewBuilder
     private var statusIcon: some View {
         switch controller.phase {
+        case .waitingForMic:
+            ProgressView()
+                .controlSize(.small)
+                .tint(.white)
         case .recording:
             Circle()
                 .fill(Color.red)

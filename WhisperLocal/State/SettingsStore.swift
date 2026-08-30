@@ -120,6 +120,10 @@ final class SettingsStore: ObservableObject {
     @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
     @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
     @Published var promptCommitForced: Bool { didSet { persist(promptCommitForced, key: "promptCommitForced") } }
+    @Published private(set) var hasOpenAIKey = false
+    @Published private(set) var openAIKeySuffix: String?
+    @Published private(set) var hasAnthropicKey = false
+    @Published private(set) var anthropicKeySuffix: String?
 
     var asrModel: ASRModelOption {
         get { ASRModelOption(rawValue: asrModelRaw) ?? .defaultModel }
@@ -144,8 +148,8 @@ final class SettingsStore: ObservableObject {
     var hasUsableCloudPolish: Bool {
         switch cloudPolishProvider {
         case .none: return false
-        case .openAI: return !openAIAPIKey.isEmpty
-        case .anthropic: return !anthropicAPIKey.isEmpty
+        case .openAI: return hasOpenAIKey
+        case .anthropic: return hasAnthropicKey
         }
     }
 
@@ -278,6 +282,7 @@ final class SettingsStore: ObservableObject {
         migrateShorterPersonalNotes()
         migratePersonalExamples()
         ensurePresetApps()
+        refreshAPIKeyCache()
     }
 
     /// One-time: the old factory ASR was Whisper Small. Move that default to Apple Speech.
@@ -567,8 +572,36 @@ final class SettingsStore: ObservableObject {
         } else {
             ok = KeychainHelper.save(account: account, value: value)
         }
+        if ok {
+            applyAPIKeyCache(account: account, value: value)
+        }
         objectWillChange.send()
         return ok
+    }
+
+    private func refreshAPIKeyCache() {
+        applyAPIKeyCache(account: "openai_api_key", value: KeychainHelper.load(account: "openai_api_key") ?? "")
+        applyAPIKeyCache(account: "anthropic_api_key", value: KeychainHelper.load(account: "anthropic_api_key") ?? "")
+    }
+
+    private func applyAPIKeyCache(account: String, value: String) {
+        let suffix = Self.keySuffix(value)
+        switch account {
+        case "openai_api_key":
+            hasOpenAIKey = suffix != nil
+            openAIKeySuffix = suffix
+        case "anthropic_api_key":
+            hasAnthropicKey = suffix != nil
+            anthropicKeySuffix = suffix
+        default:
+            break
+        }
+    }
+
+    private static func keySuffix(_ key: String) -> String? {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.suffix(4))
     }
 }
 

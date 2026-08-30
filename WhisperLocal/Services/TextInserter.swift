@@ -8,6 +8,8 @@ enum InsertionMethod: String {
     /// AXSet returned success but the field could not be confirmed.
     case accessibilityUnverified = "accessibility-unverified"
     case clipboard
+    /// ⌘V was posted but the field could not be confirmed (terminals, Electron).
+    case clipboardUnverified = "clipboard-unverified"
     case failed
 }
 
@@ -191,14 +193,14 @@ final class TextInserter {
             break
         }
 
-        let ok = await insertViaClipboard(
+        let method = await insertViaClipboard(
             sanitized,
             into: frontApp,
             preferSlowTiming: useClipboardFirst
         )
         return InsertionResult(
-            success: ok,
-            method: ok ? .clipboard : .failed,
+            success: method != .failed,
+            method: method,
             appName: appName
         )
     }
@@ -315,13 +317,19 @@ final class TextInserter {
         _ text: String,
         into targetApp: NSRunningApplication?,
         preferSlowTiming: Bool
-    ) async -> Bool {
+    ) async -> InsertionMethod {
         let pasteboard = NSPasteboard.general
         let saved = snapshot(pasteboard)
 
         pasteboard.clearContents()
-        let wrote = pasteboard.setString(text, forType: .string)
-        guard wrote else { return false }
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        // Well-behaved clipboard managers skip items marked concealed/transient.
+        // Universal Clipboard and history stores that honor nspasteboard.org will not keep dictation.
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        let wrote = pasteboard.writeObjects([item])
+        guard wrote else { return .failed }
 
         await focusTargetApp(targetApp)
 
@@ -333,8 +341,21 @@ final class TextInserter {
         // Electron / terminals need longer before it's safe to restore the clipboard.
         let restoreNs: UInt64 = preferSlowTiming ? 700_000_000 : 450_000_000
         try? await Task.sleep(nanoseconds: restoreNs)
+        let confirmed = clipboardInsertVisible(text)
         restore(saved, to: pasteboard)
-        return true
+        return confirmed ? .clipboard : .clipboardUnverified
+    }
+
+    private func clipboardInsertVisible(_ text: String) -> Bool {
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        let focusStatus = AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        )
+        guard focusStatus == .success, let focusedRef else { return false }
+        return accessibilityInsertVisible(on: focusedRef as! AXUIElement, text: text)
     }
 
     private func focusTargetApp(_ app: NSRunningApplication?) async {

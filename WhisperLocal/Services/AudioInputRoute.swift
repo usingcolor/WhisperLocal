@@ -61,15 +61,14 @@ struct AudioInputRoute: Equatable {
         return hardwareStem(inputUID) == hardwareStem(outputUID)
     }
 
+    /// Strip a known I/O role suffix only. A generic "last colon" cut collides
+    /// colon-separated Bluetooth addresses (`00:11:…:55` vs `00:11:…:66`).
     static func hardwareStem(_ uid: String) -> String {
         let lower = uid.lowercased()
         for suffix in [":input", ":output", ":in", ":out"] {
             if lower.hasSuffix(suffix) {
                 return String(lower.dropLast(suffix.count))
             }
-        }
-        if let colon = lower.lastIndex(of: ":") {
-            return String(lower[..<colon])
         }
         return lower
     }
@@ -167,5 +166,6 @@ private func uid(of deviceID: AudioDeviceID) -> String? {
     var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
     let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &cfUID)
     guard status == noErr, let cfUID else { return nil }
-    return cfUID.takeUnretainedValue() as String
+    // kAudioDevicePropertyDeviceUID returns a +1 CFString.
+    return cfUID.takeRetainedValue() as String
 }

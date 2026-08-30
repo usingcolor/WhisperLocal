@@ -17,6 +17,9 @@ final class AudioRecorder: ObservableObject {
     private var sleepObserver: NSObjectProtocol?
     private var idleStopTask: Task<Void, Never>?
     private var engineStartedAt: Date?
+    /// Snapshot for idle-hold length. Refreshed when the engine starts or the
+    /// graph reconfigures — not on every take, so `stop()` stays off coreaudiod.
+    private var cachedInputRoute: AudioInputRoute?
 
     private let lock = NSLock()
     /// Filled on the audio tap thread; `stop()` reads it after capturing ends.
@@ -189,6 +192,7 @@ final class AudioRecorder: ObservableObject {
             stopEngineHardware()
             throw AudioRecorderError.engineStartFailed(error as NSError)
         }
+        refreshCachedInputRoute()
 
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -252,6 +256,7 @@ final class AudioRecorder: ObservableObject {
         lock.unlock()
         isInputReady = false
         engineStartedAt = Date()
+        refreshCachedInputRoute()
 
         installTap(
             on: engine,
@@ -271,9 +276,20 @@ final class AudioRecorder: ObservableObject {
         }
     }
 
+    private func inputRouteForIdleHold() -> AudioInputRoute {
+        if let cachedInputRoute { return cachedInputRoute }
+        let route = AudioInputRoute.current()
+        cachedInputRoute = route
+        return route
+    }
+
+    private func refreshCachedInputRoute() {
+        cachedInputRoute = AudioInputRoute.current()
+    }
+
     private func scheduleIdleStop() {
         idleStopTask?.cancel()
-        let route = AudioInputRoute.current()
+        let route = inputRouteForIdleHold()
         let hold = AudioIdleHold.nanoseconds(for: route)
         logger.info(
             "Mic idle hold \(hold / 1_000_000_000, privacy: .public)s (\(route.logReason, privacy: .public))"
@@ -306,6 +322,7 @@ final class AudioRecorder: ObservableObject {
         converter = nil
         outputFormat = nil
         engineStartedAt = nil
+        cachedInputRoute = nil
     }
 
     private func teardown() {

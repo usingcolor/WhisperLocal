@@ -303,11 +303,15 @@ final class SettingsStore: ObservableObject {
     }
 
     /// One-time: factory heuristic cleanup used to be on. LLM polish is the default path now.
+    /// Explicit on/off is left alone — only installs that never stored a value are moved off.
+    /// (`didSet` does not fire during `init`, so a missing key means the toggle was never touched.)
     private func migrateFactoryHeuristicOff() {
         let key = "heuristicCleanupFactoryMigratedOff"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
-        enableHeuristicCleanup = false
+        if UserDefaults.standard.object(forKey: "enableHeuristicCleanup") == nil {
+            enableHeuristicCleanup = false
+        }
     }
 
     /// One-time: the old factory ASR was Whisper Small. Move that default to Apple Speech.

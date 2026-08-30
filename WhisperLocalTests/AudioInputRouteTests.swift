@@ -73,6 +73,32 @@ final class AudioInputRouteUIDTests: XCTestCase {
         XCTAssertFalse(AudioInputRoute.devicesShareHardware(inputUID: "", outputUID: ""))
     }
 
+    func testColonSeparatedMACAddressesAreDifferentDevices() {
+        XCTAssertFalse(AudioInputRoute.devicesShareHardware(
+            inputUID: "00:11:22:33:44:55",
+            outputUID: "00:11:22:33:44:66"
+        ))
+        XCTAssertEqual(AudioInputRoute.hardwareStem("00:11:22:33:44:55"), "00:11:22:33:44:55")
+    }
+
+    func testDashSeparatedMACAddressesAreDifferentDevices() {
+        XCTAssertFalse(AudioInputRoute.devicesShareHardware(
+            inputUID: "00-11-22-33-44-55",
+            outputUID: "00-11-22-33-44-66"
+        ))
+    }
+
+    func testColonMACWithInputOutputSuffixesAreTheSameRadio() {
+        XCTAssertTrue(AudioInputRoute.devicesShareHardware(
+            inputUID: "00:11:22:33:44:55:input",
+            outputUID: "00:11:22:33:44:55:output"
+        ))
+        XCTAssertEqual(
+            AudioInputRoute.hardwareStem("00:11:22:33:44:55:input"),
+            "00:11:22:33:44:55"
+        )
+    }
+
     func testSeparateHFPAndA2DPDevicesCountAsAlsoPlaying() {
         XCTAssertTrue(AudioInputRoute.bluetoothInputIsAlsoOutput(
             inputID: 12,

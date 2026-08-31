@@ -11,6 +11,38 @@ if [[ "$(uname -m)" != "arm64" ]]; then
   exit 1
 fi
 
+codesign_identity="${CODESIGN_IDENTITY:--}"
+notarize="${NOTARIZE:-0}"
+signed_release=0
+if [[ "$codesign_identity" != "-" ]]; then
+  signed_release=1
+fi
+
+if [[ "$notarize" == "1" ]]; then
+  if [[ "$signed_release" != "1" ]]; then
+    echo "error: NOTARIZE=1 requires a Developer ID CODESIGN_IDENTITY." >&2
+    exit 1
+  fi
+  for name in NOTARYTOOL_KEY_PATH NOTARYTOOL_KEY_ID NOTARYTOOL_ISSUER_ID APPLE_TEAM_ID; do
+    if [[ -z "${!name:-}" ]]; then
+      echo "error: NOTARIZE=1 requires $name." >&2
+      exit 1
+    fi
+  done
+  if [[ ! -f "$NOTARYTOOL_KEY_PATH" ]]; then
+    echo "error: NOTARYTOOL_KEY_PATH does not exist: $NOTARYTOOL_KEY_PATH" >&2
+    exit 1
+  fi
+elif [[ "$notarize" != "0" ]]; then
+  echo "error: NOTARIZE must be 0 or 1." >&2
+  exit 1
+fi
+
+codesign_keychain_args=()
+if [[ -n "${CODESIGN_KEYCHAIN:-}" ]]; then
+  codesign_keychain_args=(--keychain "$CODESIGN_KEYCHAIN")
+fi
+
 version="$(python3 - <<'PY'
 import re, pathlib
 text = pathlib.Path("project.yml").read_text()
@@ -27,7 +59,33 @@ echo "==> Generating Xcode project"
 xcodegen generate
 
 derived="${root}/build/DerivedData"
-echo "==> Building WhisperLocal ${version} (Release, arm64, ad-hoc signed)"
+if [[ "$signed_release" == "1" ]]; then
+  echo "==> Building WhisperLocal ${version} (Release, arm64, Developer ID)"
+  hardened_runtime=YES
+  build_signing_args=(
+    "CODE_SIGN_IDENTITY=$codesign_identity"
+    "CODE_SIGN_STYLE=Manual"
+    "CODE_SIGNING_ALLOWED=YES"
+    "DEVELOPMENT_TEAM=${APPLE_TEAM_ID:-}"
+    "ENABLE_HARDENED_RUNTIME=$hardened_runtime"
+  )
+  if [[ -n "${CODESIGN_KEYCHAIN:-}" ]]; then
+    build_signing_args+=(
+      "OTHER_CODE_SIGN_FLAGS=--keychain $CODESIGN_KEYCHAIN --timestamp"
+    )
+  else
+    build_signing_args+=("OTHER_CODE_SIGN_FLAGS=--timestamp")
+  fi
+else
+  echo "==> Building WhisperLocal ${version} (Release, arm64, ad-hoc signed)"
+  hardened_runtime=NO
+  build_signing_args=(
+    "CODE_SIGN_IDENTITY=-"
+    "CODE_SIGNING_ALLOWED=YES"
+    "DEVELOPMENT_TEAM="
+    "ENABLE_HARDENED_RUNTIME=$hardened_runtime"
+  )
+fi
 xcodebuild \
   -scheme WhisperLocal \
   -configuration Release \
@@ -39,9 +97,7 @@ xcodebuild \
   VALID_ARCHS=arm64 \
   EXCLUDED_ARCHS=x86_64 \
   ONLY_ACTIVE_ARCH=YES \
-  CODE_SIGN_IDENTITY="-" \
-  CODE_SIGNING_ALLOWED=YES \
-  DEVELOPMENT_TEAM= \
+  "${build_signing_args[@]}" \
   build
 
 app="${derived}/Build/Products/Release/WhisperLocal.app"
@@ -56,18 +112,81 @@ if [[ "$id" != "com.usingcolor.WhisperLocal" ]]; then
   exit 1
 fi
 
-echo "==> Ad-hoc codesign"
-codesign --force --deep --sign - \
-  --entitlements WhisperLocal/App/WhisperLocal.entitlements \
-  "$app"
-codesign --verify --verbose=2 "$app"
-
 stage="$(mktemp -d "${TMPDIR:-/tmp}/whisperlocal-dmg.XXXXXX")"
 cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT
+payload="${stage}/payload"
+mkdir -p "$payload"
 
-ditto "$app" "${stage}/WhisperLocal.app"
-ln -s /Applications "${stage}/Applications"
+if [[ "$signed_release" == "1" ]]; then
+  echo "==> Verifying Developer ID codesign"
+else
+  echo "==> Ad-hoc codesign"
+  codesign --force --deep --sign - \
+    --entitlements WhisperLocal/App/WhisperLocal.entitlements \
+    "$app"
+fi
+codesign --verify --deep --strict --verbose=2 "$app"
+
+if [[ "$signed_release" == "1" ]]; then
+  signature_info="$(codesign --display --verbose=4 "$app" 2>&1)"
+  printf '%s\n' "$signature_info"
+  if ! grep -q '^Authority=Developer ID Application:' <<<"$signature_info"; then
+    echo "error: app is not signed by a Developer ID Application certificate." >&2
+    exit 1
+  fi
+  if ! grep -Eq '^flags=.*\(runtime\)' <<<"$signature_info"; then
+    echo "error: app signature does not enable the hardened runtime." >&2
+    exit 1
+  fi
+  if ! grep -q '^Timestamp=' <<<"$signature_info"; then
+    echo "error: app signature does not include a secure timestamp." >&2
+    exit 1
+  fi
+  if [[ -n "${APPLE_TEAM_ID:-}" ]] &&
+     ! grep -q "^TeamIdentifier=${APPLE_TEAM_ID}$" <<<"$signature_info"; then
+    echo "error: signed app TeamIdentifier does not match APPLE_TEAM_ID." >&2
+    exit 1
+  fi
+fi
+
+notarize_and_wait() {
+  local submission="$1"
+  local label="$2"
+  local result="${stage}/${label}-notary-result.json"
+
+  echo "==> Submitting $label to Apple notarization"
+  xcrun notarytool submit "$submission" \
+    --key "$NOTARYTOOL_KEY_PATH" \
+    --key-id "$NOTARYTOOL_KEY_ID" \
+    --issuer "$NOTARYTOOL_ISSUER_ID" \
+    --wait \
+    --output-format json | tee "$result"
+  python3 - "$result" <<'PY'
+import json
+import pathlib
+import sys
+
+result = json.loads(pathlib.Path(sys.argv[1]).read_text())
+if result.get("status") != "Accepted":
+    raise SystemExit(
+        f"error: Apple notarization status was {result.get('status', 'unknown')!r}, not 'Accepted'."
+    )
+PY
+}
+
+if [[ "$notarize" == "1" ]]; then
+  app_archive="${stage}/WhisperLocal.zip"
+  echo "==> Archiving app for notarization"
+  ditto -c -k --keepParent "$app" "$app_archive"
+  notarize_and_wait "$app_archive" app
+  echo "==> Stapling notarization ticket to app"
+  xcrun stapler staple "$app"
+  xcrun stapler validate "$app"
+fi
+
+ditto "$app" "${payload}/WhisperLocal.app"
+ln -s /Applications "${payload}/Applications"
 
 dist="${root}/dist"
 mkdir -p "$dist"
@@ -77,10 +196,28 @@ rm -f "$dmg"
 echo "==> Creating $dmg"
 hdiutil create \
   -volname "WhisperLocal" \
-  -srcfolder "$stage" \
+  -srcfolder "$payload" \
   -ov \
   -format UDZO \
   "$dmg"
+
+if [[ "$signed_release" == "1" ]]; then
+  echo "==> Signing DMG"
+  codesign --force \
+    --timestamp \
+    --sign "$codesign_identity" \
+    "${codesign_keychain_args[@]}" \
+    "$dmg"
+  codesign --verify --verbose=2 "$dmg"
+fi
+
+if [[ "$notarize" == "1" ]]; then
+  notarize_and_wait "$dmg" dmg
+  echo "==> Stapling notarization ticket to DMG"
+  xcrun stapler staple "$dmg"
+  xcrun stapler validate "$dmg"
+  codesign --verify --verbose=2 "$dmg"
+fi
 
 echo "==> Done: $dmg"
 ls -lh "$dmg"

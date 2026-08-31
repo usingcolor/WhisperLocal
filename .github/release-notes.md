@@ -1,6 +1,6 @@
 Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applications.
 
-First launch: System Settings → Privacy & Security → Open Anyway. This build is ad-hoc signed, not Apple-notarized, so Gatekeeper warns once.
+Official release DMGs are Developer ID signed and Apple-notarized, so they open normally under Gatekeeper. Unofficial ad-hoc builds may require manual approval in System Settings → Privacy & Security.
 
 Then grant Microphone and Accessibility. Default ASR is Apple Speech on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
 

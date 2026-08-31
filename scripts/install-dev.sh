@@ -53,6 +53,8 @@ fi
 echo "==> Installing $dest (public app left alone)"
 osascript -e 'quit app "WhisperLocal Dev"' >/dev/null 2>&1 || true
 sleep 0.4
+# Replace rather than merge so stale icons/resources do not linger.
+rm -rf "$dest"
 ditto "$app" "$dest"
 open "$dest"
 echo "==> Done: $dest"

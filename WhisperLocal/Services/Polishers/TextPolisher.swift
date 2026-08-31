@@ -233,8 +233,11 @@ struct PolishPipeline: Sendable {
 enum VocalFillerFilter {
     static func strip(_ text: String) -> String {
         var result = text
+        // "mm" doubles as the millimetre unit. Keep it after a number ("5 mm", "3.5 mm",
+        // "50mm"); strip it only where it reads as a vocalized pause.
         result = result.replacingOccurrences(
-            of: #"\b(um+|uh+|uhm|er|erm|ah+|eh+|hm+|mm+|mhm)\b[.,!?…]*"#,
+            of: #"\b(?:um+|uh+|uhm|er|erm|ah+|eh+|hm+|mhm)\b[.,!?…]*"#
+                + #"|(?<!\d)(?<!\d )(?<!\d\t)\bmm+\b[.,!?…]*"#,
             with: " ",
             options: [.regularExpression, .caseInsensitive]
         )

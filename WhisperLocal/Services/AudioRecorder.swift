@@ -438,7 +438,7 @@ final class AudioRecorder: ObservableObject {
     }
 
     nonisolated private func publishLevelIfCapturing(_ samples: [Float]) {
-        publishLevelIfCapturing(UnsafeBufferPointer(start: samples, count: samples.count))
+        samples.withUnsafeBufferPointer { publishLevelIfCapturing($0) }
     }
 
     nonisolated private func publishLevelIfCapturing(_ samples: UnsafeBufferPointer<Float>) {

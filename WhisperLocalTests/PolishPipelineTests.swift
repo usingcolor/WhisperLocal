@@ -7,6 +7,19 @@ final class VocalFillerFilterTests: XCTestCase {
         XCTAssertEqual(VocalFillerFilter.strip("Hmm. Let's start"), "Let's start")
         XCTAssertEqual(VocalFillerFilter.strip("I like coffee"), "I like coffee")
     }
+
+    func testKeepsMillimetreUnitAfterANumber() {
+        XCTAssertEqual(VocalFillerFilter.strip("the gap is 5 mm"), "the gap is 5 mm")
+        XCTAssertEqual(VocalFillerFilter.strip("shot it on a 50 mm lens"), "shot it on a 50 mm lens")
+        XCTAssertEqual(VocalFillerFilter.strip("a 3.5 mm jack"), "a 3.5 mm jack")
+        XCTAssertEqual(VocalFillerFilter.strip("shot it on a 50mm lens"), "shot it on a 50mm lens")
+    }
+
+    func testStillStripsMMAsAVocalizedPause() {
+        XCTAssertEqual(VocalFillerFilter.strip("mm I see what you mean"), "I see what you mean")
+        XCTAssertEqual(VocalFillerFilter.strip("well, mm, I think so"), "well, I think so")
+        XCTAssertEqual(VocalFillerFilter.strip("mhm that works"), "that works")
+    }
 }
 
 final class PolishPipelineTests: XCTestCase {

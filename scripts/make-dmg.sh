@@ -62,9 +62,29 @@ derived="${root}/build/DerivedData"
 if [[ "$signed_release" == "1" ]]; then
   echo "==> Building WhisperLocal ${version} (Release, arm64, Developer ID)"
   hardened_runtime=YES
+  build_signing_args=(
+    "CODE_SIGN_IDENTITY=$codesign_identity"
+    "CODE_SIGN_STYLE=Manual"
+    "CODE_SIGNING_ALLOWED=YES"
+    "DEVELOPMENT_TEAM=${APPLE_TEAM_ID:-}"
+    "ENABLE_HARDENED_RUNTIME=$hardened_runtime"
+  )
+  if [[ -n "${CODESIGN_KEYCHAIN:-}" ]]; then
+    build_signing_args+=(
+      "OTHER_CODE_SIGN_FLAGS=--keychain $CODESIGN_KEYCHAIN --timestamp"
+    )
+  else
+    build_signing_args+=("OTHER_CODE_SIGN_FLAGS=--timestamp")
+  fi
 else
   echo "==> Building WhisperLocal ${version} (Release, arm64, ad-hoc signed)"
   hardened_runtime=NO
+  build_signing_args=(
+    "CODE_SIGN_IDENTITY=-"
+    "CODE_SIGNING_ALLOWED=YES"
+    "DEVELOPMENT_TEAM="
+    "ENABLE_HARDENED_RUNTIME=$hardened_runtime"
+  )
 fi
 xcodebuild \
   -scheme WhisperLocal \
@@ -77,10 +97,7 @@ xcodebuild \
   VALID_ARCHS=arm64 \
   EXCLUDED_ARCHS=x86_64 \
   ONLY_ACTIVE_ARCH=YES \
-  CODE_SIGN_IDENTITY="-" \
-  CODE_SIGNING_ALLOWED=YES \
-  DEVELOPMENT_TEAM= \
-  ENABLE_HARDENED_RUNTIME="$hardened_runtime" \
+  "${build_signing_args[@]}" \
   build
 
 app="${derived}/Build/Products/Release/WhisperLocal.app"
@@ -102,14 +119,7 @@ payload="${stage}/payload"
 mkdir -p "$payload"
 
 if [[ "$signed_release" == "1" ]]; then
-  echo "==> Developer ID codesign (hardened runtime and secure timestamp)"
-  codesign --force --deep \
-    --options runtime \
-    --timestamp \
-    --sign "$codesign_identity" \
-    "${codesign_keychain_args[@]}" \
-    --entitlements WhisperLocal/App/WhisperLocal.entitlements \
-    "$app"
+  echo "==> Verifying Developer ID codesign"
 else
   echo "==> Ad-hoc codesign"
   codesign --force --deep --sign - \
@@ -123,6 +133,14 @@ if [[ "$signed_release" == "1" ]]; then
   printf '%s\n' "$signature_info"
   if ! grep -q '^Authority=Developer ID Application:' <<<"$signature_info"; then
     echo "error: app is not signed by a Developer ID Application certificate." >&2
+    exit 1
+  fi
+  if ! grep -Eq '^flags=.*\(runtime\)' <<<"$signature_info"; then
+    echo "error: app signature does not enable the hardened runtime." >&2
+    exit 1
+  fi
+  if ! grep -q '^Timestamp=' <<<"$signature_info"; then
+    echo "error: app signature does not include a secure timestamp." >&2
     exit 1
   fi
   if [[ -n "${APPLE_TEAM_ID:-}" ]] &&

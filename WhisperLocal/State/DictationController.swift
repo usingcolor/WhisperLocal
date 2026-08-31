@@ -80,6 +80,24 @@ final class DictationController: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+        settings.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        GemmaMLXPolisher.shared.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        CloudModelCatalog.shared.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
         recorder.$isInputReady
             .receive(on: RunLoop.main)
             .sink { [weak self] ready in
@@ -458,5 +476,57 @@ final class DictationController: ObservableObject {
             return "\(model.shortName) · \(hotkey)"
         }
         return transcription.statusMessage
+    }
+
+    /// Compact polish line for the menu bar: which model is in use, plus load/key state.
+    var polishStatusLine: String {
+        guard settings.enableTextCleanup else {
+            return "Polish: Off"
+        }
+        if settings.isCloudPolishSelected {
+            let provider = settings.cloudPolishProvider
+            let modelName = cloudPolishModelName(provider)
+            if !settings.hasUsableCloudPolish {
+                return "Polish: \(provider.displayName) · add API key"
+            }
+            return "Polish: \(provider.displayName) · \(modelName)"
+        }
+        switch settings.localPolishEngine {
+        case .none:
+            return "Polish: fillers only"
+        case .appleIntelligence:
+            if LocalLLMPolisher.isAvailable {
+                return "Polish: Apple Intelligence"
+            }
+            if LocalLLMPolisher.needsSystemSettings {
+                return "Polish: Apple Intelligence · turn on in System Settings"
+            }
+            return "Polish: Apple Intelligence · unavailable"
+        case .gemma4_e2b:
+            switch GemmaMLXPolisher.shared.status {
+            case .idle:
+                return "Polish: Gemma 4 E2B · not loaded"
+            case .downloading(let fraction):
+                return "Polish: Gemma 4 E2B · \(Int(fraction * 100))%"
+            case .loading:
+                return "Polish: Gemma 4 E2B · loading"
+            case .ready:
+                return "Polish: Gemma 4 E2B"
+            case .failed:
+                return "Polish: Gemma 4 E2B · failed"
+            }
+        }
+    }
+
+    private func cloudPolishModelName(_ provider: CloudPolishProvider) -> String {
+        let catalog = CloudModelCatalog.shared
+        switch provider {
+        case .none:
+            return provider.displayName
+        case .openAI:
+            return catalog.displayName(for: settings.openAIModel, in: catalog.openAIModels)
+        case .anthropic:
+            return catalog.displayName(for: settings.anthropicModel, in: catalog.anthropicModels)
+        }
     }
 }

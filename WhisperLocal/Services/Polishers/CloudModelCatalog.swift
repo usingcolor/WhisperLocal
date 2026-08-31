@@ -234,6 +234,10 @@ final class CloudModelCatalog: ObservableObject {
         return AnthropicModelsPage(models: models, hasMore: hasMore, lastID: lastID)
     }
 
+    func displayName(for id: String, in options: [CloudModelOption]) -> String {
+        options.first(where: { $0.id == id })?.displayName ?? id
+    }
+
     private static func loadCache(key: String) -> [CloudModelOption]? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode([CloudModelOption].self, from: data)

@@ -72,6 +72,7 @@ struct MenuBarContent: View {
 
     var body: some View {
         Text(statusLine)
+        Text(controller.polishStatusLine)
         Text(AppIdentity.isDevBuild
              ? "Version \(AppUpdater.currentVersion) · Dev"
              : "Version \(AppUpdater.currentVersion)")

@@ -12,6 +12,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -29,9 +31,9 @@
 	<key>NSQuitAlwaysKeepsWindows</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>WhisperLocal needs the microphone to transcribe your speech into text. Audio stays on your Mac unless you enable optional cloud polish (which sends transcript text only, never audio).</string>
+	<string>$(PRODUCT_NAME) needs the microphone to transcribe your speech into text. Audio stays on your Mac unless you enable optional cloud polish (which sends transcript text only, never audio).</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>WhisperLocal can use Apple’s on-device speech recognizer to turn what you say into text. Audio stays on this Mac.</string>
+	<string>$(PRODUCT_NAME) can use Apple’s on-device speech recognizer to turn what you say into text. Audio stays on this Mac.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

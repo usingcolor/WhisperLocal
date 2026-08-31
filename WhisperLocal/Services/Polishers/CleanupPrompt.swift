@@ -1,6 +1,6 @@
 import Foundation
 
-/// Extra dictionary terms for one app. Baked into the system prefill; matching terms also help ASR and heuristic cleanup.
+/// Extra dictionary terms for one app. Baked into the system prefill; matching terms also help ASR.
 struct AppDictionaryEntry: Codable, Equatable, Identifiable, Sendable {
     var id: UUID
     var appName: String

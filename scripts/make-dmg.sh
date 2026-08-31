@@ -50,6 +50,12 @@ if [[ ! -d "$app" ]]; then
   exit 1
 fi
 
+id="$(defaults read "$app/Contents/Info" CFBundleIdentifier 2>/dev/null || true)"
+if [[ "$id" != "com.usingcolor.WhisperLocal" ]]; then
+  echo "error: DMG build must be the public bundle, got '$id'" >&2
+  exit 1
+fi
+
 echo "==> Ad-hoc codesign"
 codesign --force --deep --sign - \
   --entitlements WhisperLocal/App/WhisperLocal.entitlements \

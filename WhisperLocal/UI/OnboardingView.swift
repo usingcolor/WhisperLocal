@@ -8,9 +8,11 @@ struct OnboardingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Welcome to WhisperLocal")
+                Text("Welcome to \(AppIdentity.productName)")
                     .font(.title2.bold())
-                Text("Speak with Globe / Fn — polished text appears at your cursor. Audio stays on your Mac by default.")
+                Text(AppIdentity.isDevBuild
+                     ? "Dev build — default hotkey is Right Option. The public app keeps Globe / Fn. Audio stays on your Mac by default."
+                     : "Speak with Globe / Fn — polished text appears at your cursor. Audio stays on your Mac by default.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -51,7 +53,12 @@ struct OnboardingView: View {
 
             GroupBox("How to dictate") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("Default hotkey: Globe / Fn (change in Settings)", systemImage: "keyboard")
+                    Label(
+                        AppIdentity.isDevBuild
+                            ? "Default hotkey: Right Option (change in Settings)"
+                            : "Default hotkey: Globe / Fn (change in Settings)",
+                        systemImage: "keyboard"
+                    )
                     Label("Hold mode: press while speaking, release to finish", systemImage: "hand.raised")
                     Label("Tap mode: press once to start, again to stop", systemImage: "hand.tap")
                     Label("Esc cancels an in-progress dictation", systemImage: "escape")
@@ -72,12 +79,12 @@ struct OnboardingView: View {
                 }
                 Spacer()
                 Button("Open Settings…") {
-                    AppWindowFocus.present(title: "WhisperLocal Settings") {
+                    AppWindowFocus.present(title: AppIdentity.settingsWindowTitle) {
                         openWindow(id: "settings")
                     }
                     controller.showSettings = true
                 }
-                Button(permissions.allGranted ? "Start using WhisperLocal" : "Continue anyway") {
+                Button(permissions.allGranted ? "Start using \(AppIdentity.productName)" : "Continue anyway") {
                     controller.settings.hasCompletedOnboarding = true
                     controller.showOnboarding = false
                 }

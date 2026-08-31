@@ -6,7 +6,7 @@ final class DictationLogExportTests: XCTestCase {
         date: Date(timeIntervalSince1970: 1_720_000_000),
         raw: "um hello, \"world\"",
         polished: "Hello, world.",
-        stages: ["Heuristic", "Apple Intelligence"],
+        stages: ["Fillers", "Apple Intelligence"],
         cleanupNote: "Pasted without AI cleanup",
         appName: "Notes",
         insertMethod: "clipboard",
@@ -44,7 +44,7 @@ final class DictationLogExportTests: XCTestCase {
         XCTAssertTrue(text.contains("um hello, \"world\""))
         XCTAssertTrue(text.contains("Polished:"))
         XCTAssertTrue(text.contains("Hello, world."))
-        XCTAssertTrue(text.contains("Heuristic → Apple Intelligence"))
+        XCTAssertTrue(text.contains("Fillers → Apple Intelligence"))
     }
 
     func testEmptyPlainText() {

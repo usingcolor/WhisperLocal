@@ -1,4 +1,8 @@
 name: WhisperLocal
+configs:
+  Debug: debug
+  Release: release
+  Dev: release
 options:
   bundleIdPrefix: com.usingcolor
   deploymentTarget:
@@ -26,6 +30,11 @@ settings:
       VALID_ARCHS: arm64
       EXCLUDED_ARCHS: x86_64
     Release:
+      ONLY_ACTIVE_ARCH: YES
+      ARCHS: arm64
+      VALID_ARCHS: arm64
+      EXCLUDED_ARCHS: x86_64
+    Dev:
       ONLY_ACTIVE_ARCH: YES
       ARCHS: arm64
       VALID_ARCHS: arm64
@@ -83,6 +92,16 @@ targets:
         ONLY_ACTIVE_ARCH: YES
         EXCLUDED_ARCHS: x86_64
         "EXCLUDED_ARCHS[sdk=macosx*]": x86_64
+      configs:
+        Debug:
+          PRODUCT_NAME: "WhisperLocal Dev"
+          PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal.dev
+        Dev:
+          PRODUCT_NAME: "WhisperLocal Dev"
+          PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal.dev
+        Release:
+          PRODUCT_NAME: WhisperLocal
+          PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal
     dependencies:
       - package: WhisperKit
         product: WhisperKit
@@ -107,7 +126,6 @@ targets:
     platform: macOS
     sources:
       - path: WhisperLocalTests
-      - path: WhisperLocal/Services/Polishers/HeuristicPolisher.swift
       - path: WhisperLocal/Services/Polishers/TextPolisher.swift
       - path: WhisperLocal/Services/Polishers/CleanupPrompt.swift
       - path: WhisperLocal/Services/Polishers/DictionaryCSV.swift
@@ -118,6 +136,7 @@ targets:
       - path: WhisperLocal/Services/AppUpdateFeed.swift
       - path: WhisperLocal/Services/UpdateInstallLog.swift
       - path: WhisperLocal/Services/AudioInputRoute.swift
+      - path: WhisperLocal/App/AppIdentity.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -137,3 +156,13 @@ schemes:
     test:
       targets:
         - WhisperLocalTests
+  WhisperLocalDev:
+    build:
+      targets:
+        WhisperLocal: all
+    run:
+      config: Dev
+    archive:
+      config: Dev
+    profile:
+      config: Dev

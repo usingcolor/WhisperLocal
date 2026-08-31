@@ -11,14 +11,14 @@ struct WhisperLocalApp: App {
             MenuBarContent(controller: controller)
         } label: {
             Label {
-                Text("WhisperLocal")
+                Text(AppIdentity.productName)
             } icon: {
                 Image(systemName: menuBarIcon(for: controller.phase))
             }
         }
         .menuBarExtraStyle(.menu)
 
-        Window("WhisperLocal Settings", id: "settings") {
+        Window(AppIdentity.settingsWindowTitle, id: "settings") {
             SettingsView(controller: controller)
                 .raiseWindowOnAppear()
         }
@@ -58,7 +58,7 @@ struct WhisperLocalApp: App {
         case .processing, .polishing, .inserting: return "ellipsis.circle"
         case .success, .successNote: return "checkmark.circle"
         case .error: return "exclamationmark.triangle"
-        case .idle: return "waveform"
+        case .idle: return AppIdentity.isDevBuild ? "hammer.fill" : "waveform"
         }
     }
 }
@@ -72,14 +72,16 @@ struct MenuBarContent: View {
 
     var body: some View {
         Text(statusLine)
-        Text("Version \(AppUpdater.currentVersion)")
+        Text(AppIdentity.isDevBuild
+             ? "Version \(AppUpdater.currentVersion) · Dev"
+             : "Version \(AppUpdater.currentVersion)")
         Button(updater.menuTitle) {
             Task { await updater.handleMenuClick() }
         }
-        .disabled(updater.isBusy)
+        .disabled(updater.isBusy && !AppIdentity.isDevBuild)
         Divider()
         Button("Settings…") {
-            AppWindowFocus.present(title: "WhisperLocal Settings") {
+            AppWindowFocus.present(title: AppIdentity.settingsWindowTitle) {
                 openWindow(id: "settings")
             }
             controller.showSettings = true
@@ -101,7 +103,7 @@ struct MenuBarContent: View {
             Task { await controller.transcription.ensureModel(named: controller.settings.asrModel, force: true) }
         }
         Divider()
-        Button("Quit WhisperLocal") {
+        Button("Quit \(AppIdentity.productName)") {
             controller.stop()
             NSApplication.shared.terminate(nil)
         }

@@ -1,169 +1,17 @@
 import XCTest
 
-final class HeuristicPolisherTests: XCTestCase {
-    private let polisher = HeuristicPolisher()
-
-    func polish(_ text: String, dictionary: [String] = []) async throws -> String {
-        try await polisher.polish(text, dictionary: dictionary)
-    }
-
-    func testEmpty() async throws {
-        let empty = try await polish("")
-        let blank = try await polish("   ")
-        XCTAssertEqual(empty, "")
-        XCTAssertEqual(blank, "")
-    }
-
-    func testFillersAndCapitalization() async throws {
-        let um = try await polish("um hello there")
-        let so = try await polish("uh so I think we should um go")
-        XCTAssertEqual(um, "Hello there.")
-        XCTAssertEqual(so, "I think we should go.")
-    }
-
+final class VocalFillerFilterTests: XCTestCase {
     func testVocalFillerSounds() {
         XCTAssertEqual(VocalFillerFilter.strip("um hello hmm there uh"), "hello there")
         XCTAssertEqual(VocalFillerFilter.strip("Um, I think, uh, we should go."), "I think, we should go.")
         XCTAssertEqual(VocalFillerFilter.strip("Hmm. Let's start"), "Let's start")
         XCTAssertEqual(VocalFillerFilter.strip("I like coffee"), "I like coffee")
     }
+}
 
-    func testKeepsSemanticLikeAndYouKnow() async throws {
-        let like = try await polish("I like coffee")
-        let know = try await polish("do you know the way")
-        XCTAssertEqual(like, "I like coffee.")
-        XCTAssertEqual(know, "Do you know the way?")
-    }
-
-    func testFillerLike() async throws {
-        let commaLike = try await polish("it was, like, really good")
-        let wasLike = try await polish("it was like really good")
-        XCTAssertEqual(commaLike, "It was really good.")
-        XCTAssertEqual(wasLike, "It was really good.")
-    }
-
-    func testActuallyCorrectionNotAdverb() async throws {
-        let time = try await polish("meet at 5 actually 6")
-        let day = try await polish("slipping to Friday actually Monday")
-        let adverb = try await polish("I actually think that's right")
-        XCTAssertEqual(time, "Meet at 6.")
-        XCTAssertEqual(day, "Slipping to Monday.")
-        XCTAssertEqual(adverb, "I actually think that's right.")
-    }
-
-    func testScratchThatAndIMean() async throws {
-        let scratch = try await polish("send it to John scratch that send it to Sarah")
-        let iMean = try await polish("send it to John I mean Sarah")
-        XCTAssertEqual(scratch, "Send it to Sarah.")
-        XCTAssertEqual(iMean, "Send it to Sarah.")
-    }
-
-    func testSpokenPunctuationAndQuestions() async throws {
-        let spoken = try await polish("hello world period next sentence")
-        let question = try await polish("what time is the meeting")
-        let canYou = try await polish("Can you send that")
-        XCTAssertEqual(spoken, "Hello world. Next sentence.")
-        XCTAssertEqual(question, "What time is the meeting?")
-        XCTAssertEqual(canYou, "Can you send that?")
-    }
-
-    func testNewParagraph() async throws {
-        let text = try await polish("hello new paragraph world")
-        XCTAssertEqual(text, "Hello.\n\nWorld.")
-    }
-
-    func testUtteranceStarters() async throws {
-        let fillerSo = try await polish("so I think we should go")
-        let semanticSo = try await polish("so much better")
-        XCTAssertEqual(fillerSo, "I think we should go.")
-        XCTAssertEqual(semanticSo, "So much better.")
-    }
-
-    func testPronounIDictionaryAndRepeats() async throws {
-        let pronoun = try await polish("i think i can")
-        let dict = try await polish("try whisperkit please", dictionary: ["WhisperKit"])
-        let repeats = try await polish("I I think think we we should")
-        XCTAssertEqual(pronoun, "I think I can.")
-        XCTAssertEqual(dict, "Try WhisperKit please.")
-        XCTAssertEqual(repeats, "I think we should.")
-    }
-
-    func testAuxiliaryWithoutInversionIsNotAQuestion() async throws {
-        let statement = try await polish("will smith is coming to the meeting")
-        XCTAssertEqual(statement, "Will smith is coming to the meeting.")
-    }
-
-    func testAuxiliaryWithInversionIsAQuestion() async throws {
-        let inverted = try await polish("will you send that")
-        XCTAssertEqual(inverted, "Will you send that?")
-    }
-
-    func testKeepsGrammaticalDoubles() async throws {
-        let had = try await polish("i had had enough of that")
-        XCTAssertEqual(had, "I had had enough of that.")
-    }
-
-    func testSpokenPeriodIsNotATimePeriod() async throws {
-        let text = try await polish("the meeting ran over the lunch period and then we left")
-        XCTAssertEqual(text, "The meeting ran over the lunch period and then we left.")
-    }
-
-    func testCodeAdjacentIStaysLowercase() async throws {
-        let text = try await polish("for i in range ten print i")
-        XCTAssertEqual(text, "For i in range ten print i.")
-    }
-
-    func testRepeatedProperNounBigramStays() async throws {
-        let text = try await polish("it was a New York New York kind of day")
-        XCTAssertEqual(text, "It was a New York New York kind of day.")
-    }
-
-    func testTrailingSpokenCommaDoesNotMakeCommaPeriod() async throws {
-        let text = try await polish("the list is apples comma bananas comma")
-        XCTAssertEqual(text, "The list is apples, bananas.")
-    }
-
-    func testSpokenPunctuationDoesNotDestroyNames() async throws {
-        let oxford = try await polish("the Oxford comma is contentious")
-        let csv = try await polish("comma separated values")
-        let colon = try await polish("we should discuss the colon and the semicolon")
-        let key = try await polish("the question mark key is broken")
-        let marks = try await polish("use a full stop instead of an exclamation mark")
-        XCTAssertEqual(oxford, "The Oxford comma is contentious.")
-        XCTAssertEqual(csv, "Comma separated values.")
-        XCTAssertEqual(colon, "We should discuss the colon and the semicolon.")
-        XCTAssertEqual(key, "The question mark key is broken.")
-        XCTAssertEqual(marks, "Use a full stop instead of an exclamation mark.")
-    }
-
-    func testSpokenPunctuationStillConvertsCommands() async throws {
-        let comma = try await polish("send it to Sarah comma then archive")
-        let question = try await polish("send it now question mark")
-        let bang = try await polish("ship it exclamation mark")
-        let paren = try await polish("call foo open paren bar close paren")
-        XCTAssertEqual(comma, "Send it to Sarah, then archive.")
-        XCTAssertEqual(question, "Send it now?")
-        XCTAssertEqual(bang, "Ship it!")
-        XCTAssertEqual(paren, "Call foo (bar).")
-    }
-
-    func testPolishTruncationHelpers() {
-        XCTAssertTrue(PolishOutput.openaiHitLengthCap("length"))
-        XCTAssertFalse(PolishOutput.openaiHitLengthCap("stop"))
-        XCTAssertTrue(PolishOutput.anthropicHitTokenCap("max_tokens"))
-        XCTAssertFalse(PolishOutput.anthropicHitTokenCap("end_turn"))
-        XCTAssertEqual(PolishOutput.maxOutputTokens(for: "hi"), 256)
-        XCTAssertEqual(PolisherError.truncated.pasteNote, "Cleanup was cut short. Pasted without AI cleanup.")
-    }
-
-    func testDictionaryReplacementEscapesTemplates() async throws {
-        let text = try await polish("open $HOME please", dictionary: ["$HOME"])
-        XCTAssertEqual(text, "Open $HOME please.")
-    }
-
-    func testPipelineOfflineCleanupIsSuccess() async {
+final class PolishPipelineTests: XCTestCase {
+    func testPipelineWithoutLLMStillStripsFillers() async {
         let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: nil,
             cloud: nil,
             useLocalLLM: false,
@@ -171,14 +19,13 @@ final class HeuristicPolisherTests: XCTestCase {
             dictionary: []
         )
         let result = await pipeline.run("um hello there")
-        XCTAssertEqual(result.text, "Hello there.")
+        XCTAssertEqual(result.text, "hello there")
         XCTAssertFalse(result.cleanupFailed)
-        XCTAssertEqual(result.stages, ["Heuristic"])
+        XCTAssertEqual(result.stages, ["Fillers"])
     }
 
     func testPipelineCanSkipCleanup() async {
         let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: nil,
             cloud: nil,
             useLocalLLM: false,
@@ -190,15 +37,13 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertEqual(result.stages, ["Raw"])
     }
 
-    func testPipelineCanSkipHeuristicAndStillUseLLM() async {
+    func testPipelineUsesLLMAfterFillers() async {
         let local = ProbePolisher(name: "Gemma 4 E2B")
         let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: local,
             cloud: nil,
             useLocalLLM: true,
             enableTextCleanup: true,
-            enableHeuristicCleanup: false,
             dictionary: []
         )
         let result = await pipeline.run("um hello there")
@@ -208,27 +53,10 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertFalse(result.cleanupFailed)
     }
 
-    func testPipelineHeuristicOffWithoutLLMPastesRaw() async {
-        let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
-            localLLM: nil,
-            cloud: nil,
-            useLocalLLM: false,
-            enableTextCleanup: true,
-            enableHeuristicCleanup: false,
-            dictionary: []
-        )
-        let result = await pipeline.run("um hello there")
-        XCTAssertEqual(result.text, "hello there")
-        XCTAssertFalse(result.cleanupFailed)
-        XCTAssertEqual(result.stages, ["Fillers"])
-    }
-
     func testPipelineSkipsAppleIntelligenceWhenCloudIsOn() async {
         let local = ProbePolisher(name: "Apple Intelligence")
         let cloud = ProbePolisher(name: "OpenAI")
         let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: local,
             cloud: cloud,
             useLocalLLM: true,
@@ -238,14 +66,13 @@ final class HeuristicPolisherTests: XCTestCase {
         let result = await pipeline.run("hello")
         XCTAssertEqual(local.callCount, 0)
         XCTAssertEqual(cloud.callCount, 1)
-        XCTAssertEqual(result.stages, ["Heuristic", "OpenAI"])
+        XCTAssertEqual(result.stages, ["OpenAI"])
         XCTAssertFalse(result.cleanupFailed)
     }
 
     func testPipelineUsesAppleIntelligenceWhenCloudIsOff() async {
         let local = ProbePolisher(name: "Apple Intelligence")
         let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: local,
             cloud: nil,
             useLocalLLM: true,
@@ -254,13 +81,12 @@ final class HeuristicPolisherTests: XCTestCase {
         )
         let result = await pipeline.run("hello")
         XCTAssertEqual(local.callCount, 1)
-        XCTAssertEqual(result.stages, ["Heuristic", "Apple Intelligence"])
+        XCTAssertEqual(result.stages, ["Apple Intelligence"])
     }
 
     func testPipelinePassesTargetAppToLLM() async {
         let local = ProbePolisher(name: "Apple Intelligence")
         let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: local,
             cloud: nil,
             useLocalLLM: true,
@@ -274,12 +100,10 @@ final class HeuristicPolisherTests: XCTestCase {
     func testPipelineStripsFillersTheModelLeftIn() async {
         let local = FillerReinjectingPolisher()
         let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: local,
             cloud: nil,
             useLocalLLM: true,
             enableTextCleanup: true,
-            enableHeuristicCleanup: false,
             dictionary: []
         )
         let result = await pipeline.run("hello there")
@@ -291,12 +115,10 @@ final class HeuristicPolisherTests: XCTestCase {
     func testPipelineTruncationFailOpensWithCutShortNote() async {
         let local = TruncatingPolisher()
         let pipeline = PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: local,
             cloud: nil,
             useLocalLLM: true,
             enableTextCleanup: true,
-            enableHeuristicCleanup: false,
             dictionary: []
         )
         let result = await pipeline.run("hello there")
@@ -304,6 +126,15 @@ final class HeuristicPolisherTests: XCTestCase {
         XCTAssertTrue(result.cleanupFailed)
         XCTAssertEqual(result.cleanupNote, "Cleanup was cut short. Pasted without AI cleanup.")
         XCTAssertEqual(result.stages, ["Apple Intelligence failed"])
+    }
+
+    func testPolishTruncationHelpers() {
+        XCTAssertTrue(PolishOutput.openaiHitLengthCap("length"))
+        XCTAssertFalse(PolishOutput.openaiHitLengthCap("stop"))
+        XCTAssertTrue(PolishOutput.anthropicHitTokenCap("max_tokens"))
+        XCTAssertFalse(PolishOutput.anthropicHitTokenCap("end_turn"))
+        XCTAssertEqual(PolishOutput.maxOutputTokens(for: "hi"), 256)
+        XCTAssertEqual(PolisherError.truncated.pasteNote, "Cleanup was cut short. Pasted without AI cleanup.")
     }
 }
 
@@ -1044,5 +875,16 @@ final class UpdateInstallLogTests: XCTestCase {
 
     func testEmptyLog() {
         XCTAssertEqual(UpdateInstallLog.parse(""), .none)
+    }
+}
+
+final class AppIdentityTests: XCTestCase {
+    func testPublicBundleIsNotDev() {
+        XCTAssertFalse(AppIdentity.isDev(bundleID: AppIdentity.publicBundleID))
+        XCTAssertFalse(AppIdentity.isDev(bundleID: "com.usingcolor.WhisperLocalTests"))
+    }
+
+    func testDevBundleIsDev() {
+        XCTAssertTrue(AppIdentity.isDev(bundleID: AppIdentity.devBundleID))
     }
 }

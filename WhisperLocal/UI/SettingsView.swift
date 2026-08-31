@@ -38,6 +38,11 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     }
 }
 
+private enum PolishWhere: String, Hashable {
+    case onDevice
+    case cloud
+}
+
 struct SettingsView: View {
     @ObservedObject var controller: DictationController
     @ObservedObject private var settings = SettingsStore.shared
@@ -62,8 +67,21 @@ struct SettingsView: View {
         NavigationSplitView {
             List(selection: $page) {
                 ForEach(SettingsPage.allCases) { item in
-                    Label(item.title, systemImage: item.icon)
-                        .tag(item)
+                    Label {
+                        HStack {
+                            Text(item.title)
+                            Spacer(minLength: 4)
+                            if sidebarShowsSavedKey(for: item) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                    .imageScale(.small)
+                                    .accessibilityLabel("API key saved")
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: item.icon)
+                    }
+                    .tag(item)
                 }
             }
             .listStyle(.sidebar)
@@ -81,7 +99,7 @@ struct SettingsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .navigationTitle("WhisperLocal Settings")
+            .navigationTitle(AppIdentity.settingsWindowTitle)
             .navigationSubtitle(page.title)
         }
         .frame(minWidth: 720, minHeight: 500)
@@ -101,6 +119,14 @@ struct SettingsView: View {
 
     private var dictationPane: some View {
         settingsForm {
+            if AppIdentity.isDevBuild {
+                Section {
+                    Text("This is the Dev app. It does not replace /Applications/WhisperLocal.app. Default hotkey is Right Option so Globe / Fn stays on the public copy. Grant Microphone, Accessibility, and Input Monitoring for WhisperLocal Dev separately.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Section {
                 Picker("Hotkey", selection: $hotKey.selectedKey) {
                     ForEach(HotKeyManager.KeyChoice.allCases) { key in
@@ -193,102 +219,36 @@ struct SettingsView: View {
         settingsForm {
             Section {
                 Toggle("Enable text cleanup", isOn: $settings.enableTextCleanup)
-                Text("One on-device model or cloud polish — not both. If AI cleanup fails, text is still pasted. Um / uh / hmm are always dropped while this is on.")
+                Text("Polish with Apple Intelligence, Gemma, or cloud. If the model fails, text is still pasted. Um / uh / hmm are always dropped while this is on.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("How dictation is polished") {
+                polishInUseBanner
+                Text("This is the polish that runs after speech-to-text. Choose one option — it stays in effect until you choose the other.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle("Heuristic cleanup", isOn: $settings.enableHeuristicCleanup)
-                    .disabled(!settings.enableTextCleanup)
-                Text("Optional extra pass before the model. Off by default — Apple Intelligence or cloud usually handles this. Turn on for spoken punctuation and self-corrections without an LLM. Um / uh / hmm are still stripped.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Picker("On-device polish", selection: Binding(
-                    get: { settings.localPolishEngine },
-                    set: { settings.localPolishEngine = $0 }
-                )) {
-                    ForEach(LocalPolishEngine.allCases) { engine in
-                        Text(engine.displayName).tag(engine)
-                    }
-                }
-                .disabled(!settings.enableTextCleanup || settings.isCloudPolishSelected)
-                .onChange(of: settings.localPolishEngine) { _, engine in
-                    switch engine {
-                    case .gemma4_e2b:
-                        if settings.shouldUseLocalLLMPolish {
-                            GemmaMLXPolisher.shared.prewarm()
-                        }
-                    case .appleIntelligence:
-                        GemmaMLXPolisher.shared.unload()
-                        if settings.shouldUseLocalLLMPolish {
-                            LocalLLMPolisher.shared.prewarm(
-                                personalContext: settings.cleanupPersonalContext,
-                                dictionary: settings.dictionaryWords
-                            )
-                        }
-                    case .none:
-                        GemmaMLXPolisher.shared.unload()
-                    }
+                polishModeCard(
+                    .onDevice,
+                    title: "On this Mac",
+                    subtitle: "Apple Intelligence or Gemma. Text stays on this Mac."
+                ) {
+                    onDevicePolishControls
                 }
 
-                if settings.isCloudPolishSelected {
-                    Text("Cloud polish replaces the on-device model. Turn cloud off to use Apple Intelligence or Gemma again.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    switch settings.localPolishEngine {
-                    case .none:
-                        Text(settings.enableHeuristicCleanup
-                             ? "On-device LLM polish is off. Heuristic cleanup still runs."
-                             : "On-device LLM and heuristic cleanup are off. Fillers like um / uh / hmm are still stripped; the rest is raw ASR unless cloud polish is on.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    case .appleIntelligence:
-                        Text(LocalLLMPolisher.statusMessage)
-                            .font(.caption)
-                            .foregroundStyle(LocalLLMPolisher.isAvailable ? Color.secondary : Color.orange)
-                        if LocalLLMPolisher.needsSystemSettings {
-                            Button("Open Apple Intelligence Settings") {
-                                LocalLLMPolisher.openAppleIntelligenceSettings()
-                            }
-                        }
-                    case .gemma4_e2b:
-                        gemmaStatusRow
-                    }
+                polishModeCard(
+                    .cloud,
+                    title: "Cloud",
+                    subtitle: "OpenAI or Anthropic. Transcript text is sent; audio is not."
+                ) {
+                    cloudPolishControls
                 }
+            }
 
-                Picker("Cloud polish", selection: Binding(
-                    get: { settings.cloudPolishProvider },
-                    set: { settings.cloudPolishProvider = $0 }
-                )) {
-                    ForEach(CloudPolishProvider.allCases) { provider in
-                        Text(provider.displayName).tag(provider)
-                    }
-                }
-                .disabled(!settings.enableTextCleanup)
-                .onChange(of: settings.cloudPolishProvider) { _, provider in
-                    applyCloudPolish(provider, revealPolish: false)
-                }
-
-                if settings.enableTextCleanup {
-                    switch settings.cloudPolishProvider {
-                    case .none:
-                        HStack {
-                            Button("Set up OpenAI…") { page = .openai }
-                            Button("Set up Anthropic…") { page = .anthropic }
-                        }
-                    case .openAI:
-                        Button(settings.hasOpenAIKey ? "OpenAI settings…" : "Add OpenAI API key…") {
-                            page = .openai
-                        }
-                    case .anthropic:
-                        Button(settings.hasAnthropicKey ? "Anthropic settings…" : "Add Anthropic API key…") {
-                            page = .anthropic
-                        }
-                    }
-                }
-
-                Text("Audio never leaves your Mac. Cloud polish sends transcript text only when enabled and a key is saved.")
+            Section {
+                Text("Audio never leaves your Mac. Cloud polish sends transcript text only when Cloud is selected and a key is saved.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -310,6 +270,256 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var selectedPolishWhere: PolishWhere {
+        settings.isCloudPolishSelected ? .cloud : .onDevice
+    }
+
+    private var polishWhereBinding: Binding<PolishWhere> {
+        Binding(
+            get: { selectedPolishWhere },
+            set: { destination in
+                switch destination {
+                case .onDevice:
+                    applyCloudPolish(.none, revealPolish: false)
+                case .cloud:
+                    applyCloudPolish(settings.preferredCloudProvider, revealPolish: false)
+                }
+            }
+        )
+    }
+
+    private var polishInUseBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: polishInUseSymbol)
+                .foregroundStyle(polishInUseTint)
+                .font(.title2)
+                .frame(width: 28, alignment: .center)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(polishInUseTitle)
+                    .font(.body.weight(.semibold))
+                Text(polishInUseDetail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            polishInUseTint.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(polishInUseTitle)
+        .accessibilityValue(polishInUseDetail)
+    }
+
+    private var polishInUseSymbol: String {
+        if !settings.enableTextCleanup { return "pause.circle.fill" }
+        return settings.isCloudPolishSelected ? "cloud.fill" : "laptopcomputer"
+    }
+
+    private var polishInUseTint: Color {
+        if !settings.enableTextCleanup { return .orange }
+        return settings.isCloudPolishSelected ? .blue : .green
+    }
+
+    private var polishInUseTitle: String {
+        if !settings.enableTextCleanup {
+            return "Not polishing"
+        }
+        if settings.isCloudPolishSelected {
+            return "In use: Cloud · \(settings.cloudPolishProvider.displayName)"
+        }
+        return "In use: On this Mac · \(settings.localPolishEngine.shortName)"
+    }
+
+    private var polishInUseDetail: String {
+        if !settings.enableTextCleanup {
+            return "Turn on text cleanup to polish dictation. The choice below is saved but not running."
+        }
+        if settings.isCloudPolishSelected {
+            return "Every dictation is polished with \(settings.cloudPolishProvider.displayName) until you choose On this Mac."
+        }
+        switch settings.localPolishEngine {
+        case .none:
+            return "No on-device LLM. Choose Cloud below if you want OpenAI or Anthropic to polish instead."
+        case .appleIntelligence, .gemma4_e2b:
+            return "Every dictation is polished on this Mac until you choose Cloud."
+        }
+    }
+
+    private func polishModeCard<Content: View>(
+        _ destination: PolishWhere,
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let selected = selectedPolishWhere == destination
+        return VStack(alignment: .leading, spacing: 10) {
+            Button {
+                polishWhereBinding.wrappedValue = destination
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: selected ? "circle.inset.filled" : "circle")
+                        .font(.body)
+                        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                        .frame(width: 20, alignment: .center)
+                        .padding(.top, 1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 8) {
+                            Text(title)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            if selected, settings.enableTextCleanup {
+                                Text("In use")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 2)
+                                    .background(Color.accentColor, in: Capsule())
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!settings.enableTextCleanup)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityLabel(title)
+            .accessibilityValue(selected ? "In use" : "Not in use")
+            .accessibilityHint("Sets how dictation is polished")
+
+            if !selected, settings.enableTextCleanup {
+                Text("Click to polish dictation this way.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 30)
+            }
+
+            content()
+                .disabled(!selected || !settings.enableTextCleanup)
+                .opacity(selected && settings.enableTextCleanup ? 1 : 0.4)
+                .padding(.leading, 30)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            (selected && settings.enableTextCleanup ? Color.accentColor : Color.secondary)
+                .opacity(selected && settings.enableTextCleanup ? 0.10 : 0.06),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(
+                    selected && settings.enableTextCleanup
+                        ? Color.accentColor.opacity(0.45)
+                        : Color.secondary.opacity(0.18)
+                )
+        )
+    }
+
+    @ViewBuilder
+    private var onDevicePolishControls: some View {
+        Picker("On-device model", selection: Binding(
+            get: { settings.localPolishEngine },
+            set: { settings.localPolishEngine = $0 }
+        )) {
+            ForEach(LocalPolishEngine.allCases) { engine in
+                Text(engine.displayName).tag(engine)
+            }
+        }
+        .onChange(of: settings.localPolishEngine) { _, engine in
+            switch engine {
+            case .gemma4_e2b:
+                if settings.shouldUseLocalLLMPolish {
+                    GemmaMLXPolisher.shared.prewarm()
+                }
+            case .appleIntelligence:
+                GemmaMLXPolisher.shared.unload()
+                if settings.shouldUseLocalLLMPolish {
+                    LocalLLMPolisher.shared.prewarm(
+                        personalContext: settings.cleanupPersonalContext,
+                        dictionary: settings.dictionaryWords
+                    )
+                }
+            case .none:
+                GemmaMLXPolisher.shared.unload()
+            }
+        }
+
+        switch settings.localPolishEngine {
+        case .none:
+            Text("No on-device LLM. Fillers like um / uh / hmm are still stripped. Switch to Cloud to polish with OpenAI or Anthropic.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .appleIntelligence:
+            Text(LocalLLMPolisher.statusMessage)
+                .font(.caption)
+                .foregroundStyle(LocalLLMPolisher.isAvailable ? Color.secondary : Color.orange)
+            if LocalLLMPolisher.needsSystemSettings {
+                Button("Open Apple Intelligence Settings") {
+                    LocalLLMPolisher.openAppleIntelligenceSettings()
+                }
+            }
+        case .gemma4_e2b:
+            gemmaStatusRow
+        }
+    }
+
+    @ViewBuilder
+    private var cloudPolishControls: some View {
+        Picker("Provider", selection: Binding(
+            get: { displayedCloudProvider },
+            set: { applyCloudPolish($0, revealPolish: false) }
+        )) {
+            ForEach(CloudPolishProvider.cloudCases) { option in
+                Text(option.displayName).tag(option)
+            }
+        }
+
+        switch displayedCloudProvider {
+        case .none:
+            EmptyView()
+        case .openAI:
+            Button(settings.hasOpenAIKey ? "OpenAI settings…" : "Add OpenAI API key…") {
+                page = .openai
+            }
+            Text(cloudKeyStatusLine(
+                hasKey: settings.hasOpenAIKey,
+                suffix: settings.openAIKeySuffix
+            ))
+            .font(.caption)
+            .foregroundStyle(settings.hasOpenAIKey ? Color.secondary : Color.orange)
+        case .anthropic:
+            Button(settings.hasAnthropicKey ? "Anthropic settings…" : "Add Anthropic API key…") {
+                page = .anthropic
+            }
+            Text(cloudKeyStatusLine(
+                hasKey: settings.hasAnthropicKey,
+                suffix: settings.anthropicKeySuffix
+            ))
+            .font(.caption)
+            .foregroundStyle(settings.hasAnthropicKey ? Color.secondary : Color.orange)
+        }
+    }
+
+    private var displayedCloudProvider: CloudPolishProvider {
+        if settings.isCloudPolishSelected, settings.cloudPolishProvider != .none {
+            return settings.cloudPolishProvider
+        }
+        return settings.preferredCloudProvider
     }
 
     private var promptPane: some View {
@@ -421,6 +631,7 @@ struct SettingsView: View {
                     draft: $openAIKeyDraft,
                     hasSavedKey: settings.hasOpenAIKey,
                     savedKeySuffix: settings.openAIKeySuffix,
+                    loadSavedKey: { settings.openAIAPIKey },
                     onSave: { store(openAI: true) },
                     onClear: {
                         openAIKeyDraft = ""
@@ -442,7 +653,6 @@ struct SettingsView: View {
             }
             cloudProviderActivationSection(.openAI)
         }
-        .onAppear { openAIKeyDraft = "" }
     }
 
     private var anthropicPane: some View {
@@ -453,6 +663,7 @@ struct SettingsView: View {
                     draft: $anthropicKeyDraft,
                     hasSavedKey: settings.hasAnthropicKey,
                     savedKeySuffix: settings.anthropicKeySuffix,
+                    loadSavedKey: { settings.anthropicAPIKey },
                     onSave: { store(openAI: false) },
                     onClear: {
                         anthropicKeyDraft = ""
@@ -474,7 +685,6 @@ struct SettingsView: View {
             }
             cloudProviderActivationSection(.anthropic)
         }
-        .onAppear { anthropicKeyDraft = "" }
     }
 
     private var dictionaryPane: some View {
@@ -790,6 +1000,22 @@ struct SettingsView: View {
         }
     }
 
+    private func sidebarShowsSavedKey(for page: SettingsPage) -> Bool {
+        switch page {
+        case .openai: return settings.hasOpenAIKey
+        case .anthropic: return settings.hasAnthropicKey
+        default: return false
+        }
+    }
+
+    private func cloudKeyStatusLine(hasKey: Bool, suffix: String?) -> String {
+        guard hasKey else { return "No API key saved yet." }
+        if let suffix, !suffix.isEmpty {
+            return "API key is saved in Keychain · ends with \(suffix)"
+        }
+        return "API key is saved in Keychain."
+    }
+
     private func store(openAI: Bool) -> Bool {
         if openAI {
             let key = openAIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -837,7 +1063,7 @@ struct SettingsView: View {
 
         Section("Cloud polish") {
             if isCurrent {
-                Text("Polish is using \(name). The Polish page shows this as the cloud provider.")
+                Text("Polish is using \(name). That is the active polish setting. On the Polish page, choose On this Mac if you want Apple Intelligence or Gemma instead.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Show Polish settings") {
@@ -1084,80 +1310,232 @@ private struct APIKeyField: View {
     @Binding var draft: String
     let hasSavedKey: Bool
     let savedKeySuffix: String?
+    let loadSavedKey: () -> String
     let onSave: () -> Bool
     let onClear: () -> Void
 
     @State private var showKey = false
     @State private var saveNote: String?
+    @State private var saveNoteIsError = false
+
+    private var trimmedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Empty draft + saved key: show a filled mask, not a blank field.
+    private var showsSavedMask: Bool {
+        hasSavedKey && !showKey && trimmedDraft.isEmpty
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if showKey {
+        VStack(alignment: .leading, spacing: 10) {
+            statusBanner
+
+            if showsSavedMask {
+                maskedKeyPreview
+            } else if showKey {
                 TextField(prompt, text: $draft)
                     .font(.body.monospaced())
                     .textFieldStyle(.roundedBorder)
+                    .textSelection(.enabled)
             } else {
                 SecureField(prompt, text: $draft)
                     .font(.body.monospaced())
                     .textFieldStyle(.roundedBorder)
+                    .textContentType(.password)
             }
-            Text(statusLine)
-                .font(.caption)
-                .foregroundStyle(hasSavedKey ? Color.secondary : Color.orange)
+
+            if let fieldHint {
+                Text(fieldHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if let saveNote {
                 Text(saveNote)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(saveNoteIsError ? Color.orange : Color.green)
             }
-            Text("The key stays in the Keychain. Audio never leaves this Mac.")
+
+            Text("The key stays in the Keychain on this Mac. Audio never leaves this Mac.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
             HStack {
                 Button("Paste") {
                     pasteFromClipboard()
                 }
-                Button(showKey ? "Hide key" : "Show key") {
-                    showKey.toggle()
+                Button(showKey ? "Hide API key" : "Show API key") {
+                    toggleReveal()
                 }
+                .disabled(!hasSavedKey && trimmedDraft.isEmpty)
                 Button("Save key", action: save)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("Remove key", role: .destructive, action: {
-                    saveNote = nil
-                    onClear()
-                })
-                .disabled(!hasSavedKey && draft.isEmpty)
+                    .disabled(trimmedDraft.isEmpty)
+                Button("Remove key", role: .destructive, action: remove)
+                    .disabled(!hasSavedKey && draft.isEmpty)
+            }
+        }
+        .onAppear {
+            if hasSavedKey, !showKey {
+                draft = ""
+            }
+        }
+        .onChange(of: hasSavedKey) { _, saved in
+            if !saved {
+                showKey = false
+            } else if !showKey {
+                draft = ""
             }
         }
     }
 
-    private var statusLine: String {
+    private var fieldHint: String? {
+        if showsSavedMask {
+            return "Click Show API key to see the full key, or Paste a new one to replace it."
+        }
+        if !trimmedDraft.isEmpty, !showKey, hasSavedKey {
+            return "Unsaved replacement. Click Save key to store it."
+        }
+        if !trimmedDraft.isEmpty, showKey, hasSavedKey {
+            return "This is the saved key. Edit it and click Save key to replace it."
+        }
+        if !trimmedDraft.isEmpty, !hasSavedKey {
+            return "Click Save key to store this in Keychain."
+        }
+        return nil
+    }
+
+    private var maskedKeyPreview: some View {
+        HStack(spacing: 6) {
+            Text(APIKeyMask.preview(suffix: savedKeySuffix))
+                .font(.body.monospaced())
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.green.opacity(0.45))
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Saved API key")
+        .accessibilityValue(savedKeySuffix.map { "Ends with \($0)" } ?? "Hidden")
+    }
+
+    private var statusBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: hasSavedKey ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(hasSavedKey ? Color.green : Color.orange)
+                .font(.title2)
+                .frame(width: 28, alignment: .center)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(hasSavedKey ? "API key is saved" : "No API key saved")
+                    .font(.body.weight(.semibold))
+                Text(statusDetail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            (hasSavedKey ? Color.green : Color.orange).opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(hasSavedKey ? "API key is saved" : "No API key saved")
+        .accessibilityValue(statusDetail)
+    }
+
+    private var statusDetail: String {
         if !hasSavedKey {
-            return "No key saved yet."
+            return "Paste a key and click Save key. WhisperLocal stores it in Keychain."
         }
         if let suffix = savedKeySuffix, !suffix.isEmpty {
-            return "Key saved in Keychain · ends with \(suffix)"
+            return "Stored in Keychain on this Mac · ends with \(suffix)"
         }
-        return "Key saved in Keychain."
+        return "Stored in Keychain on this Mac."
+    }
+
+    private func toggleReveal() {
+        if showKey {
+            hideRevealedKey()
+            return
+        }
+        if trimmedDraft.isEmpty {
+            let stored = loadSavedKey()
+            if stored.isEmpty {
+                saveNoteIsError = true
+                saveNote = hasSavedKey
+                    ? "Could not read the key from Keychain."
+                    : "No API key to show."
+                return
+            }
+            draft = stored
+        }
+        showKey = true
+        saveNote = nil
+    }
+
+    private func hideRevealedKey() {
+        showKey = false
+        saveNote = nil
+        if hasSavedKey {
+            let stored = loadSavedKey()
+            if trimmedDraft.isEmpty || trimmedDraft == stored {
+                draft = ""
+            }
+        }
     }
 
     private func pasteFromClipboard() {
         let pasted = NSPasteboard.general.string(forType: .string)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !pasted.isEmpty else {
+            saveNoteIsError = true
             saveNote = "Clipboard is empty."
             return
         }
         draft = pasted
+        showKey = true
         saveNote = nil
     }
 
     private func save() {
         let ok = onSave()
         if ok {
-            saveNote = nil
+            showKey = false
+            draft = ""
+            saveNoteIsError = false
+            saveNote = "Saved to Keychain."
         } else {
+            saveNoteIsError = true
             saveNote = "Keychain did not store the key. Try again, or check Keychain Access."
         }
+    }
+
+    private func remove() {
+        showKey = false
+        onClear()
+        draft = ""
+        saveNoteIsError = false
+        saveNote = "Key removed from Keychain."
+    }
+}
+
+private enum APIKeyMask {
+    static func preview(suffix: String?, bulletCount: Int = 20) -> String {
+        let bullets = String(repeating: "•", count: max(8, bulletCount))
+        guard let suffix, !suffix.isEmpty else { return bullets }
+        return bullets + suffix
     }
 }
 

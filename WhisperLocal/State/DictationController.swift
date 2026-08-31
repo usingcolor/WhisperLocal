@@ -281,7 +281,7 @@ final class DictationController: ObservableObject {
                 phase = .polishing
                 hud.update(phase: .polishing)
             }
-            let result = await makePipeline(extraHeuristicTerms: extraTerms).run(raw, targetApp: targetApp)
+            let result = await makePipeline().run(raw, targetApp: targetApp)
             var output = result.text
             if settings.insertTrailingSpace, !output.hasSuffix(" ") {
                 output += " "
@@ -363,7 +363,7 @@ final class DictationController: ObservableObject {
         }
     }
 
-    private func makePipeline(extraHeuristicTerms: [String] = []) -> PolishPipeline {
+    private func makePipeline() -> PolishPipeline {
         var cloud: (any TextPolisher)?
         switch settings.cloudPolishProvider {
         case .none:
@@ -379,16 +379,12 @@ final class DictationController: ObservableObject {
             }
         }
 
-        let global = CleanupPrompt.mergedDictionary(settings.dictionaryWords)
         return PolishPipeline(
-            heuristic: HeuristicPolisher(),
             localLLM: onDevicePolisher(),
             cloud: cloud,
             useLocalLLM: settings.shouldRunOnDevicePolish,
             enableTextCleanup: settings.enableTextCleanup,
-            enableHeuristicCleanup: settings.enableHeuristicCleanup,
-            dictionary: global,
-            heuristicDictionary: CleanupPrompt.mergedDictionary(global + extraHeuristicTerms),
+            dictionary: CleanupPrompt.mergedDictionary(settings.dictionaryWords),
             personalContext: settings.cleanupPersonalContext,
             recentDictations: recentDictationsForPolish()
         )

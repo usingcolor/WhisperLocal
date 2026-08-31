@@ -44,7 +44,7 @@ final class DictationLogStore: ObservableObject {
     init() {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        let folder = dir.appendingPathComponent("WhisperLocal", isDirectory: true)
+        let folder = dir.appendingPathComponent(AppIdentity.supportFolderName, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         fileURL = folder.appendingPathComponent("dictation-log.json")
         entries = Self.load(from: fileURL)

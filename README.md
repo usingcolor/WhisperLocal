@@ -63,7 +63,7 @@ The defaults assume macOS 26. Older versions still work, with more setup:
 | Your macOS | Transcription | Cleanup |
 |---|---|---|
 | **26 or later** | Apple Speech, built in — nothing to download | Apple Intelligence, on-device — nothing to download |
-| **14 – 15** | Whisper `small.en`, downloaded on first use | Fillers stripped; turn on heuristic, Gemma 4 (~2.7 GB), or a cloud API key for more cleanup |
+| **14 – 15** | Whisper `small.en`, downloaded on first use | Fillers stripped; turn on Gemma 4 (~2.7 GB) or a cloud API key for LLM polish |
 
 Everything below the defaults is optional and switchable in Settings.
 
@@ -72,7 +72,7 @@ Everything below the defaults is optional and switchable in Settings.
 - Menu-bar agent — no Dock icon, no window to manage
 - Global hotkey, hold-to-talk or tap-to-toggle; **Esc** cancels
 - On-device English transcription: Apple Speech, or WhisperKit (`tiny.en` / `base.en` / `small.en` / Large v3 Turbo), or NVIDIA Parakeet TDT 0.6B v2
-- On-device cleanup: optional heuristics, then Apple Intelligence or Gemma 4 E2B IT
+- On-device cleanup: Apple Intelligence or Gemma 4 E2B IT
 - Optional OpenAI or Anthropic cleanup — **transcript text only**, keys stored in the Keychain
 - Editable custom instructions, per-app rules, and a personal dictionary for names and jargon
 - Fail-open: if cleanup fails or times out, the previous stage is pasted anyway — you never lose a dictation
@@ -86,7 +86,7 @@ Everything below the defaults is optional and switchable in Settings.
 ```
 hold hotkey → record 16 kHz audio
            → Apple Speech            (default; or WhisperKit / Parakeet)
-           → heuristic cleanup       (optional; fillers, self-corrections, spoken punctuation, dictionary)
+           → filler strip            (um / uh / hmm)
            → Apple Intelligence      (default; or Gemma 4 E2B IT; skipped when cloud cleanup is on)
            → OpenAI / Anthropic      (optional; replaces the on-device model)
            → insert at cursor
@@ -103,8 +103,7 @@ On-device cleanup waits up to 20 s; cloud cleanup waits up to 30 s. A timeout pa
 | Setting | Default |
 |---|---|
 | Speech model | Apple Speech (macOS 26); falls back to Whisper `small.en`. Also `tiny.en`, `base.en`, Large v3 Turbo, Parakeet TDT 0.6B v2 |
-| Text cleanup | On |
-| Heuristic cleanup | Off — optional extra pass before the model |
+| Text cleanup | On — LLM polish (on-device or cloud). Um / uh / hmm are stripped. |
 | On-device cleanup | Apple Intelligence, or Gemma 4 E2B IT; skipped automatically while cloud cleanup is on |
 | Cloud cleanup | Off (OpenAI / Anthropic; pick a model in Settings) |
 | Recent dictations in polish | Off. Optional; you choose 1–8 previous takes. Not written into the system prompt. |
@@ -118,7 +117,7 @@ API keys live in the Keychain under `com.usingcolor.WhisperLocal`.
 
 | | What leaves your Mac |
 |---|---|
-| **Default setup** | **Nothing.** Transcription, heuristic cleanup, and on-device cleanup all stay local. |
+| **Default setup** | **Nothing.** Transcription and on-device cleanup all stay local. |
 | Cloud cleanup, if you turn it on | Transcript **text** only, to OpenAI or Anthropic. Never audio. If you also turn on recent dictations in polish, those earlier takes (text) go with the request. |
 | Audio | Never uploaded. Apple Speech writes a private temp `.caf` per take and deletes it right after; Whisper and Parakeet stay in memory. |
 | Microphone indicator | After you let go, the input graph stays open briefly so the next take starts faster. Built-in mics drop it after about 2 seconds. A Bluetooth headset used only as input can stay open up to 45 seconds — the orange Control Center dot stays lit. If those headphones are also playing audio, the graph drops after 2 seconds so they can leave the hands-free profile. Nothing is recorded or uploaded during that idle hold. |
@@ -134,7 +133,7 @@ Security reports: see [SECURITY.md](SECURITY.md). Please don't file them as publ
 
 Contributions are genuinely welcome, and this project is easier to work on than most Mac apps.
 
-**The test suite is fast and needs nothing.** 103 tests run in about a tenth of a second — no microphone, no model download, no network, no API key:
+**The test suite is fast and needs nothing.** Unit tests run in about a tenth of a second — no microphone, no model download, no network, no API key:
 
 ```bash
 brew install xcodegen   # once
@@ -147,7 +146,7 @@ Most of the interesting logic — text cleanup, prompt assembly, dictionary hand
 ### Good places to start
 
 - **"WhisperLocal pastes wrong in *my* app."** Insertion quirks are handled by hand-maintained lists in [`TextInserter.swift`](WhisperLocal/Services/TextInserter.swift). Adding an app is often a one-line change. Bug reports here are just as useful as patches — tell us the app and what happened.
-- **Cleanup that gets it wrong.** [`HeuristicPolisher.swift`](WhisperLocal/Services/Polishers/HeuristicPolisher.swift) is pure, self-contained, and heavily tested. If it mangles a phrase you dictate often, that's a great first issue — paste what you said and what you expected.
+- **Cleanup that gets it wrong.** Polish is LLM-only (plus a small um / uh / hmm strip). The prompt lives in [`CleanupPrompt.swift`](WhisperLocal/Services/Polishers/CleanupPrompt.swift). If a phrase you dictate often is mangled, that's a great first issue — paste what you said and what you expected.
 - **Languages other than English.** Currently English-only by design. Broadening this is a real, well-scoped project.
 - **Documentation.** If something here confused you, that's a bug in this file.
 
@@ -169,7 +168,7 @@ WhisperLocalTests/
 project.yml    XcodeGen spec — regenerate after adding or moving files
 ```
 
-Cleanup pipeline: `HeuristicPolisher` → `LocalLLMPolisher` (Apple Foundation Models) or `GemmaMLXPolisher` (MLX) → optional `OpenAIPolisher` / `AnthropicPolisher`. The shared prompt lives in `CleanupPrompt.swift`.
+Cleanup pipeline: filler strip → `LocalLLMPolisher` (Apple Foundation Models) or `GemmaMLXPolisher` (MLX) → optional `OpenAIPolisher` / `AnthropicPolisher`. The shared prompt lives in `CleanupPrompt.swift`.
 
 ## Build from source
 
@@ -197,6 +196,14 @@ xcodebuild -scheme WhisperLocal -configuration Release \
 Build a Release DMG with `bash scripts/make-dmg.sh`. Re-run `xcodegen generate` after changing `project.yml` or moving files.
 
 Speech models are not in this repo — Whisper and Parakeet download from Hugging Face into the engine cache on first use.
+
+### Public app and Dev app on one Mac
+
+Release installs as `/Applications/WhisperLocal.app` (`com.usingcolor.WhisperLocal`). Debug / `Dev` builds use `/Applications/WhisperLocal Dev.app` (`com.usingcolor.WhisperLocal.dev`) so they can run together: separate settings, dictation log, and TCC prompts. API keys stay in the same Keychain service. The Dev app does not run Check for Updates (that would replace the public copy). Dev defaults the hotkey to Right Option so Globe / Fn stays on the public app.
+
+```bash
+DEVELOPMENT_TEAM=YourTeamID bash scripts/install-dev.sh
+```
 
 ### Signing and Accessibility
 

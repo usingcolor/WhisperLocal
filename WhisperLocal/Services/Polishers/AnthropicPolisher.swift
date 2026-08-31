@@ -1,9 +1,12 @@
 import Foundation
+import os
 
 struct AnthropicPolisher: TextPolisher {
     let name = "Anthropic"
     let apiKey: String
     let model: String
+
+    private static let logger = Logger(subsystem: AppIdentity.keychainService, category: "anthropic")
 
     func polish(
         _ text: String,
@@ -16,11 +19,19 @@ struct AnthropicPolisher: TextPolisher {
 
         let system = CleanupPrompt.system(dictionary: dictionary, personalContext: personalContext)
 
+        // Explicit breakpoint on the system prompt only. Top-level automatic cache_control
+        // would mark the unique transcript and miss on every take.
         let body: [String: Any] = [
             "model": model,
             "max_tokens": PolishOutput.maxOutputTokens(for: text),
             "temperature": 0.2,
-            "system": system,
+            "system": [
+                [
+                    "type": "text",
+                    "text": system,
+                    "cache_control": ["type": "ephemeral"]
+                ]
+            ],
             "messages": [
                 ["role": "user", "content": CleanupPrompt.wrapTranscript(
                     text,
@@ -49,10 +60,26 @@ struct AnthropicPolisher: TextPolisher {
         if PolishOutput.anthropicHitTokenCap(json?["stop_reason"] as? String) {
             throw PolisherError.truncated
         }
+        logCacheUsage(json?["usage"] as? [String: Any])
         let contentBlocks = json?["content"] as? [[String: Any]]
         let textBlock = contentBlocks?.first(where: { ($0["type"] as? String) == "text" })
         let content = (textBlock?["text"] as? String).map(PolishOutput.sanitize)
         guard let content, !content.isEmpty else { throw PolisherError.emptyResponse }
         return content
+    }
+
+    private func logCacheUsage(_ usage: [String: Any]?) {
+        let created = intValue(usage?["cache_creation_input_tokens"])
+        let read = intValue(usage?["cache_read_input_tokens"])
+        let input = intValue(usage?["input_tokens"])
+        Self.logger.info(
+            "Anthropic cache write=\(created, privacy: .public) read=\(read, privacy: .public) input=\(input, privacy: .public) model=\(self.model, privacy: .public)"
+        )
+    }
+
+    private func intValue(_ value: Any?) -> Int {
+        if let number = value as? Int { return number }
+        if let number = value as? NSNumber { return number.intValue }
+        return 0
     }
 }

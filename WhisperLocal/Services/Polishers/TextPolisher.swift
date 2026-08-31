@@ -127,19 +127,15 @@ struct PolishResult: Sendable {
     let cleanupNote: String?
 }
 
-/// Chains polishers: optional heuristic first, then either one on-device LLM or cloud polish.
+/// Chains polishers: filler strip, then either one on-device LLM or cloud polish.
 /// Cloud replaces the on-device LLM so dictation is not delayed by both.
 /// Failures never drop the transcript — OpenWhispr-style paste-on-cleanup-failure.
 struct PolishPipeline: Sendable {
-    let heuristic: HeuristicPolisher
     let localLLM: (any TextPolisher)?
     let cloud: (any TextPolisher)?
     let useLocalLLM: Bool
     let enableTextCleanup: Bool
-    var enableHeuristicCleanup: Bool = true
     let dictionary: [String]
-    /// Extra terms for heuristic cleanup only (per-app dictionary). LLM keeps `dictionary` so prefill stays stable.
-    var heuristicDictionary: [String]? = nil
     var personalContext: String = ""
     /// Request-time style examples from the dictation log. Empty unless the user opted in.
     var recentDictations: String = ""
@@ -158,18 +154,6 @@ struct PolishPipeline: Sendable {
         var stages: [String] = []
         var cleanupFailed = false
         var cleanupNote: String?
-
-        if enableHeuristicCleanup,
-           let polished = try? await heuristic.polish(
-            text,
-            dictionary: heuristicDictionary ?? dictionary,
-            personalContext: personalContext,
-            targetApp: targetApp,
-            recentDictations: ""
-           ) {
-            text = polished
-            stages.append(heuristic.name)
-        }
 
         text = applyFillerFilter(text, stages: &stages)
 
@@ -217,7 +201,7 @@ struct PolishPipeline: Sendable {
 
         text = applyFillerFilter(text, stages: &stages)
 
-        // Heuristic-only path is still "cleaned" — only flag when an LLM step was expected.
+        // Filler-only path is still cleaned — only flag when an LLM step was expected.
         if !llmAttempted {
             cleanupFailed = false
             cleanupNote = nil
@@ -241,5 +225,24 @@ struct PolishPipeline: Sendable {
             stages.append("Fillers")
         }
         return cleaned
+    }
+}
+
+/// Drops vocalized pauses / sound effects that ASR writes as words.
+/// Runs with text cleanup even when no LLM is selected, and again after the model.
+enum VocalFillerFilter {
+    static func strip(_ text: String) -> String {
+        var result = text
+        result = result.replacingOccurrences(
+            of: #"\b(um+|uh+|uhm|er|erm|ah+|eh+|hm+|mm+|mhm)\b[.,!?…]*"#,
+            with: " ",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        result = result.replacingOccurrences(of: #",[ \t]*,+"#, with: ",", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"^[ \t,;:]+"#, with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"[ \t,;:]+$"#, with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"\s+([,.;!?])"#, with: "$1", options: .regularExpression)
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -33,6 +33,9 @@ final class AppUpdater: ObservableObject {
     }
 
     var menuTitle: String {
+        if AppIdentity.isDevBuild {
+            return "Updates (public app only)"
+        }
         switch status {
         case .idle:
             return "Check for Updates…"
@@ -54,6 +57,16 @@ final class AppUpdater: ObservableObject {
     private let installURL = URL(fileURLWithPath: "/Applications/WhisperLocal.app")
 
     func handleMenuClick() async {
+        if AppIdentity.isDevBuild {
+            alert(
+                title: "Updates are for the public app",
+                message: """
+                This is WhisperLocal Dev (\(installURL.path) is not touched). \
+                Use Check for Updates from WhisperLocal, or install a GitHub Release, to update the public copy.
+                """
+            )
+            return
+        }
         switch status {
         case .available(let release):
             confirmAndInstall(release)
@@ -148,6 +161,7 @@ final class AppUpdater: ObservableObject {
     }
 
     private func install(_ release: AppUpdateFeed.Release) async {
+        if AppIdentity.isDevBuild { return }
         status = .downloading
         let work = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperLocalUpdate-\(UUID().uuidString)", isDirectory: true)

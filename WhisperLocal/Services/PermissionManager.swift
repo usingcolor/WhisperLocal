@@ -146,7 +146,7 @@ final class PermissionManager: ObservableObject {
             return "Accessibility is granted for this running copy."
         }
         return """
-        Enable WhisperLocal in System Settings → Privacy & Security → Accessibility. \
+        Enable \(AppIdentity.productName) in System Settings → Privacy & Security → Accessibility. \
         If the toggle is already ON but this still says Missing: turn it OFF, remove the old entry, \
         open this app from \(runningAppPath), enable it again, then Quit & Reopen.
         """
@@ -157,8 +157,8 @@ final class PermissionManager: ObservableObject {
             return "Input Monitoring is granted. The dictation hotkey can be heard in other apps."
         }
         return """
-        Enable WhisperLocal in System Settings → Privacy & Security → Input Monitoring. \
-        Without it, Globe/Fn or Right Command is only seen while WhisperLocal itself is focused. \
+        Enable \(AppIdentity.productName) in System Settings → Privacy & Security → Input Monitoring. \
+        Without it, Globe/Fn or Right Command is only seen while \(AppIdentity.productName) itself is focused. \
         After enabling, Quit & Reopen.
         """
     }

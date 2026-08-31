@@ -85,7 +85,7 @@ final class HotKeyManager: ObservableObject {
            let key = KeyChoice(rawValue: raw) {
             selectedKey = key
         } else {
-            selectedKey = .fn
+            selectedKey = AppIdentity.isDevBuild ? .rightOption : .fn
         }
 
         if let raw = UserDefaults.standard.string(forKey: "hotkeyMode"),

@@ -5,7 +5,7 @@ enum UpdateInstallLog {
     static var directory: URL {
         let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        return library.appendingPathComponent("Logs/WhisperLocal", isDirectory: true)
+        return library.appendingPathComponent("Logs/\(AppIdentity.logsFolderName)", isDirectory: true)
     }
 
     static var fileURL: URL {

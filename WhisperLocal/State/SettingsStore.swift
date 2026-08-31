@@ -77,6 +77,9 @@ enum CloudPolishProvider: String, CaseIterable, Identifiable, Codable {
         case .anthropic: return "Anthropic"
         }
     }
+
+    /// OpenAI and Anthropic — the cloud picker, without Off.
+    static var cloudCases: [CloudPolishProvider] { [.openAI, .anthropic] }
 }
 
 enum LocalPolishEngine: String, CaseIterable, Identifiable, Codable {
@@ -93,6 +96,14 @@ enum LocalPolishEngine: String, CaseIterable, Identifiable, Codable {
         case .gemma4_e2b: return "Gemma 4 E2B IT (MLX)"
         }
     }
+
+    var shortName: String {
+        switch self {
+        case .none: return "Off"
+        case .appleIntelligence: return "Apple Intelligence"
+        case .gemma4_e2b: return "Gemma 4 E2B"
+        }
+    }
 }
 
 @MainActor
@@ -101,9 +112,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var asrModelRaw: String { didSet { persist(asrModelRaw, key: "asrModel") } }
     @Published var cloudPolishProviderRaw: String { didSet { persist(cloudPolishProviderRaw, key: "cloudPolishProvider") } }
+    /// Last OpenAI/Anthropic choice so switching Cloud back on restores the provider.
+    @Published var lastCloudPolishProviderRaw: String { didSet { persist(lastCloudPolishProviderRaw, key: "lastCloudPolishProvider") } }
     @Published var localPolishEngineRaw: String { didSet { persist(localPolishEngineRaw, key: "localPolishEngine") } }
     @Published var enableTextCleanup: Bool { didSet { persist(enableTextCleanup, key: "enableTextCleanup") } }
-    @Published var enableHeuristicCleanup: Bool { didSet { persist(enableHeuristicCleanup, key: "enableHeuristicCleanup") } }
     @Published var hasCompletedOnboarding: Bool { didSet { persist(hasCompletedOnboarding, key: "hasCompletedOnboarding") } }
     @Published var dictionaryWordsRaw: String { didSet { persist(dictionaryWordsRaw, key: "dictionaryWords") } }
     @Published var dictionaryFullyEditable: Bool { didSet { persist(dictionaryFullyEditable, key: "dictionaryFullyEditable") } }
@@ -135,7 +147,23 @@ final class SettingsStore: ObservableObject {
 
     var cloudPolishProvider: CloudPolishProvider {
         get { CloudPolishProvider(rawValue: cloudPolishProviderRaw) ?? .none }
-        set { cloudPolishProviderRaw = newValue.rawValue }
+        set {
+            cloudPolishProviderRaw = newValue.rawValue
+            if newValue != .none {
+                lastCloudPolishProviderRaw = newValue.rawValue
+            }
+        }
+    }
+
+    /// Provider to restore when the user switches Polish with back to Cloud.
+    var preferredCloudProvider: CloudPolishProvider {
+        switch CloudPolishProvider(rawValue: lastCloudPolishProviderRaw) {
+        case .openAI: return .openAI
+        case .anthropic: return .anthropic
+        default:
+            if hasAnthropicKey && !hasOpenAIKey { return .anthropic }
+            return .openAI
+        }
     }
 
     var localPolishEngine: LocalPolishEngine {
@@ -263,10 +291,18 @@ final class SettingsStore: ObservableObject {
     private init() {
         let defaults = UserDefaults.standard
         asrModelRaw = defaults.string(forKey: "asrModel") ?? ASRModelOption.defaultModel.rawValue
-        cloudPolishProviderRaw = defaults.string(forKey: "cloudPolishProvider") ?? CloudPolishProvider.none.rawValue
+        let cloudRaw = defaults.string(forKey: "cloudPolishProvider") ?? CloudPolishProvider.none.rawValue
+        cloudPolishProviderRaw = cloudRaw
+        if let storedLast = defaults.string(forKey: "lastCloudPolishProvider"),
+           CloudPolishProvider.cloudCases.map(\.rawValue).contains(storedLast) {
+            lastCloudPolishProviderRaw = storedLast
+        } else if CloudPolishProvider.cloudCases.map(\.rawValue).contains(cloudRaw) {
+            lastCloudPolishProviderRaw = cloudRaw
+        } else {
+            lastCloudPolishProviderRaw = ""
+        }
         localPolishEngineRaw = Self.migratedLocalPolishEngine(from: defaults)
         enableTextCleanup = defaults.object(forKey: "enableTextCleanup") as? Bool ?? true
-        enableHeuristicCleanup = defaults.object(forKey: "enableHeuristicCleanup") as? Bool ?? false
         hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
         dictionaryWordsRaw = defaults.string(forKey: "dictionaryWords") ?? ""
         dictionaryFullyEditable = defaults.bool(forKey: "dictionaryFullyEditable")
@@ -292,7 +328,6 @@ final class SettingsStore: ObservableObject {
             UserDefaults.standard.set(localPolishEngineRaw, forKey: "localPolishEngine")
         }
         migrateFactoryASRDefault()
-        migrateFactoryHeuristicOff()
         migrateDictionaryStorage()
         migratePersonalContext()
         migrateSystemPromptLayers()
@@ -300,18 +335,6 @@ final class SettingsStore: ObservableObject {
         migratePersonalExamples()
         ensurePresetApps()
         refreshAPIKeyCache()
-    }
-
-    /// One-time: factory heuristic cleanup used to be on. LLM polish is the default path now.
-    /// Explicit on/off is left alone — only installs that never stored a value are moved off.
-    /// (`didSet` does not fire during `init`, so a missing key means the toggle was never touched.)
-    private func migrateFactoryHeuristicOff() {
-        let key = "heuristicCleanupFactoryMigratedOff"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        UserDefaults.standard.set(true, forKey: key)
-        if UserDefaults.standard.object(forKey: "enableHeuristicCleanup") == nil {
-            enableHeuristicCleanup = false
-        }
     }
 
     /// One-time: the old factory ASR was Whisper Small. Move that default to Apple Speech.
@@ -635,7 +658,7 @@ final class SettingsStore: ObservableObject {
 }
 
 enum KeychainHelper {
-    private static let service = "com.usingcolor.WhisperLocal"
+    private static let service = AppIdentity.keychainService
     private static let logger = Logger(subsystem: service, category: "keychain")
 
     /// Returns false when the Keychain refused the write. Callers must not assume a

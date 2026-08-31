@@ -150,6 +150,17 @@ struct RecordingHUDView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            if AppIdentity.isDevBuild {
+                Text("DEV")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.95), in: Capsule())
+                    .padding(8)
+            }
+        }
     }
 
     @ViewBuilder

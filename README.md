@@ -42,9 +42,33 @@ If you want Windows or Linux, streaming transcription, or a large model catalog,
 
 Apple Silicon only. Grab the DMG from [Releases](https://github.com/usingcolor/WhisperLocal/releases/latest) — no Xcode and no git clone required.
 
+> **macOS will block the first launch, and that is expected.**
+> Releases are ad-hoc signed, not Apple-notarized. Notarization requires the Apple
+> Developer Program at $99/year, which this project does not pay for. The steps below
+> get you past it in about ten seconds. If you would rather not bypass Gatekeeper at
+> all, [build from source](#build-from-source) instead — a locally built app is never
+> quarantined, so nothing blocks it.
+
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
-2. Open **WhisperLocal**. Official releases are Developer ID signed and Apple-notarized.
-3. Grant **Microphone** and **Accessibility** when asked. Unofficial ad-hoc builds may require approval in **System Settings → Privacy & Security**.
+2. Open **WhisperLocal**. macOS will refuse and say it cannot verify the developer.
+3. Go to **System Settings → Privacy & Security**, scroll to **Security**, and click
+   **Open Anyway** next to the WhisperLocal message. Confirm, and it launches.
+4. Grant **Microphone** and **Accessibility** when asked.
+
+Right-click → **Open** no longer works on macOS 15 and later; use **Open Anyway** above.
+
+**If macOS says "WhisperLocal is damaged and can't be opened"** there is no Open Anyway
+button for that message. Clear the quarantine flag, then open it normally:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
+```
+
+Verify what you downloaded against the `SHA256SUMS` published with each release:
+
+```bash
+shasum -a 256 ~/Downloads/WhisperLocal-*-arm64.dmg
+```
 
 WhisperLocal lives in the menu bar — there's no Dock icon and no window to keep open. **Check for Updates** is in the menu.
 
@@ -171,6 +195,11 @@ project.yml    XcodeGen spec — regenerate after adding or moving files
 Cleanup pipeline: filler strip → `LocalLLMPolisher` (Apple Foundation Models) or `GemmaMLXPolisher` (MLX) → optional `OpenAIPolisher` / `AnthropicPolisher`. The shared prompt lives in `CleanupPrompt.swift`.
 
 ## Build from source
+
+Building it yourself sidesteps Gatekeeper entirely — an app you compiled locally never
+gets a quarantine flag, so macOS does not block it. The trade is setup cost: Xcode is a
+large download and the first build resolves around fifteen Swift packages, including MLX.
+For most people the [DMG](#download) is the faster route.
 
 You need an Apple Silicon Mac, **Xcode 26 or later**, and [XcodeGen](https://github.com/yonaskolb/XcodeGen). Xcode 26 is required because mlx-swift 0.31.6 needs Swift 6.3 tools — Xcode 16.4 ships Swift 6.1 and cannot resolve the package.
 

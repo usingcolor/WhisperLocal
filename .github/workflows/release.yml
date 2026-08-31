@@ -50,9 +50,18 @@ jobs:
 
           if (( ${#missing[@]} > 0 )); then
             echo "enabled=0" >> "$GITHUB_OUTPUT"
-            echo "::warning::Developer ID signing disabled; missing secrets: ${missing[*]}"
-            echo "### Release signing" >> "$GITHUB_STEP_SUMMARY"
-            echo "Built with the ad-hoc fallback because one or more Apple secrets were unavailable." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::UNSIGNED RELEASE: ad-hoc only, not notarized. Gatekeeper will block first launch. Missing secrets: ${missing[*]}"
+            {
+              echo "### ⚠️ Release signing: AD-HOC (not notarized)"
+              echo
+              echo "This DMG is **ad-hoc signed**. macOS will block the first launch and users"
+              echo "must approve it under System Settings → Privacy & Security."
+              echo
+              echo "Missing secrets: \`${missing[*]}\`"
+              echo
+              echo "The release notes published with this build say so. To ship notarized"
+              echo "builds instead, add all six secrets and re-tag — no code changes needed."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -137,9 +146,43 @@ jobs:
         if: github.repository == 'usingcolor/WhisperLocal' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNED: ${{ steps.signing.outputs.enabled }}
         run: |
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
+          notes="${RUNNER_TEMP}/release-notes.md"
+          signing="${RUNNER_TEMP}/signing-section.md"
+
+          # Generated from what this build actually did, so the notes can never
+          # claim a signing state the artifact does not have.
+          if [[ "${SIGNED:-0}" == "1" ]]; then
+            cat > "$signing" <<'SIGNED_EOF'
+          This DMG is Developer ID signed, Apple-notarized, and stapled, so it opens normally under Gatekeeper.
+          SIGNED_EOF
+          else
+            cat > "$signing" <<'ADHOC_EOF'
+          This DMG is ad-hoc signed and **not** Apple-notarized, so macOS blocks the first launch. That is expected: notarization needs the $99/year Apple Developer Program, which this project does not pay for.
+
+          To open it: **System Settings → Privacy & Security → Security → Open Anyway**. Right-click → Open no longer works on macOS 15+. If macOS instead says the app is "damaged", clear the quarantine flag:
+
+              xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
+
+          Prefer not to bypass Gatekeeper? Build from source — a locally built app is never quarantined. See the README.
+
+          Verify your download against `SHA256SUMS`, published with this release.
+          ADHOC_EOF
+          fi
+
+          python3 - "$signing" > "$notes" <<'PY_EOF'
+          import pathlib, sys
+          body = pathlib.Path(".github/release-notes.md").read_text()
+          section = pathlib.Path(sys.argv[1]).read_text().strip()
+          token = "{{SIGNING_SECTION}}"
+          if token not in body:
+              sys.exit("error: release-notes.md is missing the " + token + " placeholder")
+          sys.stdout.write(body.replace(token, section))
+          PY_EOF
+
           gh release create "$tag" dist/*.dmg dist/SHA256SUMS \
             --title "WhisperLocal ${version}" \
-            --notes-file .github/release-notes.md
+            --notes-file "$notes"

@@ -152,7 +152,7 @@ final class AppUpdater: ObservableObject {
 
         Custom instructions, dictionary, and other Settings stay on this Mac. They are not inside the app bundle.
 
-        The public build is ad-hoc signed, not notarized. macOS may ask you to allow it under System Settings → Privacy & Security after install. Do not expect the update to launch silently. You may need to approve Accessibility again.
+        Official releases are Developer ID signed and Apple-notarized. Unofficial fallback builds may require manual approval in System Settings → Privacy & Security. You may need to approve Accessibility again after an update.
         """
         alert.addButton(withTitle: "Install")
         alert.addButton(withTitle: "Cancel")
@@ -291,9 +291,10 @@ final class AppUpdater: ObservableObject {
               bundle.bundleIdentifier == "com.usingcolor.WhisperLocal" else {
             throw UpdateError.wrongBundle
         }
-        // Ad-hoc signing has no stable publisher identity. This only rejects a bundle
-        // whose code directory no longer matches its signature (corruption or
-        // post-signing tampering). It does not authenticate who produced the release.
+        // This rejects a bundle whose code directory no longer matches its signature
+        // (corruption or post-signing tampering). Gatekeeper authenticates and assesses
+        // the notarized Developer ID release after the quarantined app is installed.
+        // Ad-hoc fallback releases have no stable publisher identity.
         var staticCode: SecStaticCode?
         let status = SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode)
         guard status == errSecSuccess, let staticCode else {
@@ -307,7 +308,8 @@ final class AppUpdater: ObservableObject {
 
     /// `ditto` into a sibling then rename, so a mid-copy failure does not leave a half-written app.
     /// `LSFileQuarantineEnabled` marks this process's downloads, so Gatekeeper assesses the
-    /// installed app. We do not strip quarantine. Ad-hoc builds still need Open Anyway.
+    /// installed app. We do not strip quarantine. Notarized releases pass that assessment;
+    /// ad-hoc fallback builds still need manual approval.
     private func spawnInstaller(dmg: URL, mount: URL, sourceApp: URL, destination: URL) throws {
         try FileManager.default.createDirectory(
             at: UpdateInstallLog.directory,

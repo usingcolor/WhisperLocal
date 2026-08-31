@@ -43,8 +43,8 @@ If you want Windows or Linux, streaming transcription, or a large model catalog,
 Apple Silicon only. Grab the DMG from [Releases](https://github.com/usingcolor/WhisperLocal/releases/latest) — no Xcode and no git clone required.
 
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
-2. First launch: **System Settings → Privacy & Security → Open Anyway**. The build is ad-hoc signed and not Apple-notarized, so Gatekeeper warns once.
-3. Grant **Microphone** and **Accessibility** when asked.
+2. Open **WhisperLocal**. Official releases are Developer ID signed and Apple-notarized.
+3. Grant **Microphone** and **Accessibility** when asked. Unofficial ad-hoc builds may require approval in **System Settings → Privacy & Security**.
 
 WhisperLocal lives in the menu bar — there's no Dock icon and no window to keep open. **Check for Updates** is in the menu.
 
@@ -193,7 +193,7 @@ xcodebuild -scheme WhisperLocal -configuration Release \
   build
 ```
 
-Build a Release DMG with `bash scripts/make-dmg.sh`. Re-run `xcodegen generate` after changing `project.yml` or moving files.
+Build an ad-hoc signed Release DMG with `bash scripts/make-dmg.sh`. Re-run `xcodegen generate` after changing `project.yml` or moving files. The release workflow opts into Developer ID signing and notarization only when its Apple repository secrets are available.
 
 Speech models are not in this repo — Whisper and Parakeet download from Hugging Face into the engine cache on first use.
 

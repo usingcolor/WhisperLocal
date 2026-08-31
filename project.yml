@@ -73,8 +73,8 @@ targets:
         INFOPLIST_FILE: WhisperLocal/App/Info.plist
         CODE_SIGN_ENTITLEMENTS: WhisperLocal/App/WhisperLocal.entitlements
         PRODUCT_NAME: WhisperLocal
-        MARKETING_VERSION: "0.1.7"
-        CURRENT_PROJECT_VERSION: "10"
+        MARKETING_VERSION: "0.1.8"
+        CURRENT_PROJECT_VERSION: "11"
         GENERATE_INFOPLIST_FILE: false
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"

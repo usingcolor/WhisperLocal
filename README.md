@@ -24,7 +24,7 @@ Your audio never leaves the Mac. Transcription and cleanup both run on-device by
 <!-- TODO: replace with a ~5s screen recording: hold Globe/Fn → HUD appears → cleaned text lands in a text field. -->
 <!-- <p align="center"><img src="assets/demo.gif" alt="WhisperLocal in use" width="720"></p> -->
 
-> Early preview (`0.1.7`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
+> Early preview (`0.1.8`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
 
 ## Why not the dictation already built into macOS?
 

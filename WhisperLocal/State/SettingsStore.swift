@@ -134,6 +134,8 @@ final class SettingsStore: ObservableObject {
     /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
     @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
     @Published var recentPolishLogCountRaw: Int { didSet { persist(recentPolishLogCountRaw, key: "recentPolishLogCount") } }
+    /// Spoken Shift+hotkey context. In memory only; this flag is the on/off for the feature.
+    @Published var enableSessionContext: Bool { didSet { persist(enableSessionContext, key: "enableSessionContext") } }
     @Published var promptCommitForced: Bool { didSet { persist(promptCommitForced, key: "promptCommitForced") } }
     @Published private(set) var hasOpenAIKey = false
     @Published private(set) var openAIKeySuffix: String?
@@ -323,6 +325,7 @@ final class SettingsStore: ObservableObject {
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int
             ?? CleanupPrompt.defaultRecentPolishLogCount
+        enableSessionContext = defaults.object(forKey: "enableSessionContext") as? Bool ?? true
         promptCommitForced = defaults.bool(forKey: "promptCommitForced")
         if defaults.string(forKey: "localPolishEngine") != localPolishEngineRaw {
             UserDefaults.standard.set(localPolishEngineRaw, forKey: "localPolishEngine")

@@ -13,8 +13,9 @@ struct AnthropicPolisher: TextPolisher {
         dictionary: [String],
         personalContext: String = "",
         targetApp: String? = nil,
-        recentDictations: String = ""
-    ) async throws -> String {
+        recentDictations: String = "",
+        sessionIntent: String = ""
+    ) async throws -> PolishedText {
         guard !apiKey.isEmpty else { throw PolisherError.missingAPIKey("Anthropic") }
 
         let system = CleanupPrompt.system(dictionary: dictionary, personalContext: personalContext)
@@ -36,7 +37,8 @@ struct AnthropicPolisher: TextPolisher {
                 ["role": "user", "content": CleanupPrompt.wrapTranscript(
                     text,
                     targetApp: targetApp,
-                    recentDictations: recentDictations
+                    recentDictations: recentDictations,
+                    sessionIntent: sessionIntent
                 )]
             ]
         ]
@@ -65,7 +67,7 @@ struct AnthropicPolisher: TextPolisher {
         let textBlock = contentBlocks?.first(where: { ($0["type"] as? String) == "text" })
         let content = (textBlock?["text"] as? String).map(PolishOutput.sanitize)
         guard let content, !content.isEmpty else { throw PolisherError.emptyResponse }
-        return content
+        return PolishedText(text: content)
     }
 
     private func logCacheUsage(_ usage: [String: Any]?) {

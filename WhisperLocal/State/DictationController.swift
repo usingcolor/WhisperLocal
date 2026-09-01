@@ -9,6 +9,8 @@ enum DictationPhase: Equatable {
     case waitingForMic
     case recording
     case processing
+    /// Shift+hotkey: storing a spoken session context, not pasting.
+    case settingContext
     case polishing
     case inserting
     case success
@@ -22,6 +24,7 @@ enum DictationPhase: Equatable {
         case .waitingForMic: return "Waiting for mic…"
         case .recording: return "Listening…"
         case .processing: return "Transcribing…"
+        case .settingContext: return "Setting context…"
         case .polishing: return "Polishing…"
         case .inserting: return "Inserting…"
         case .success: return "Done"
@@ -53,6 +56,8 @@ final class DictationController: ObservableObject {
 
     private var cancelRequested = false
     private var cancellables = Set<AnyCancellable>()
+    /// Spoken polish context for this launch. Never written to disk.
+    @Published private(set) var sessionContext: SessionContext?
     /// Frontmost app when dictation started. Passed to polish LLMs as formatting context.
     private var dictationTargetApp: TargetAppContext?
     private var recordingBeganAt: Date?
@@ -60,6 +65,8 @@ final class DictationController: ObservableObject {
     private var didBootstrapSpeech = false
     /// Bumped at the start of each take so a late success-sleeper cannot idle a newer session.
     private var sessionGeneration = 0
+    /// Snapshot of Shift+hotkey for this take. Never inferred from transcript content.
+    private var isIntentTake = false
 
     private init() {
         transcription.objectWillChange
@@ -116,7 +123,9 @@ final class DictationController: ObservableObject {
 
     func start() {
         hotKey.onPress = { [weak self] in
-            Task { @MainActor in self?.handleHotkeyPress() }
+            guard let self else { return }
+            let intent = self.hotKey.intentModifierHeld
+            Task { @MainActor in self.handleHotkeyPress(intentModifierHeld: intent) }
         }
         hotKey.onRelease = { [weak self] in
             Task { @MainActor in self?.handleHotkeyRelease() }
@@ -150,18 +159,20 @@ final class DictationController: ObservableObject {
 
     // MARK: - Hotkey routing (hold vs tap)
 
-    private func handleHotkeyPress() {
+    private func handleHotkeyPress(intentModifierHeld: Bool) {
         // Ignore while processing/inserting (OpenWhispr pattern).
-        if phase == .processing || phase == .polishing || phase == .inserting { return }
+        if phase == .processing || phase == .settingContext || phase == .polishing || phase == .inserting {
+            return
+        }
 
         switch hotKey.mode {
         case .hold:
-            beginRecording()
+            beginRecording(intentModifierHeld: intentModifierHeld)
         case .tap:
             if phase == .recording || phase == .waitingForMic {
                 finishRecording()
             } else {
-                beginRecording()
+                beginRecording(intentModifierHeld: intentModifierHeld)
             }
         }
     }
@@ -171,9 +182,10 @@ final class DictationController: ObservableObject {
         finishRecording()
     }
 
-    private func beginRecording() {
+    private func beginRecording(intentModifierHeld: Bool) {
         guard phase == .idle || phase == .success || isErrorPhase else { return }
         cancelRequested = false
+        isIntentTake = settings.enableSessionContext && settings.enableTextCleanup && intentModifierHeld
         permissions.refresh()
 
         guard permissions.microphoneGranted else {
@@ -214,6 +226,7 @@ final class DictationController: ObservableObject {
 
     private func cancelRecording() {
         cancelRequested = true
+        isIntentTake = false
         dictationTargetApp = nil
         recordingBeganAt = nil
         recorder.cancel()
@@ -229,6 +242,7 @@ final class DictationController: ObservableObject {
 
         if cancelRequested {
             dictationTargetApp = nil
+            isIntentTake = false
             recordingBeganAt = nil
             phase = .idle
             hud.hide()
@@ -240,12 +254,14 @@ final class DictationController: ObservableObject {
         recordingBeganAt = nil
         if held < 0.28 {
             dictationTargetApp = nil
+            isIntentTake = false
             phase = .idle
             hud.hide()
             return
         }
         if Self.peakAbsolute(samples) < 0.003 {
             dictationTargetApp = nil
+            isIntentTake = false
             phase = .error("No microphone input")
             hud.flashError("No microphone input")
             return
@@ -262,7 +278,9 @@ final class DictationController: ObservableObject {
     private func process(samples: [Float]) async {
         let audioSeconds = Double(samples.count) / 16_000
         let targetApp = dictationTargetApp?.promptLine
+        let intentTake = isIntentTake
         dictationTargetApp = nil
+        isIntentTake = false
         lastTranscript = ""
         lastPolished = ""
         lastStages = []
@@ -291,6 +309,11 @@ final class DictationController: ObservableObject {
                 return
             }
 
+            if intentTake {
+                await storeSessionContext(from: raw)
+                return
+            }
+
             hud.update(phase: .processing)
             if settings.enableTextCleanup && (
                 settings.shouldRunOnDevicePolish
@@ -307,6 +330,7 @@ final class DictationController: ObservableObject {
             lastPolished = output
             lastStages = result.stages
             lastCleanupNote = result.cleanupNote
+            rememberSessionContextUse(relevant: result.contextRelevant)
 
             // Always paste when we have text — even if LLM cleanup failed.
             phase = .inserting
@@ -404,8 +428,58 @@ final class DictationController: ObservableObject {
             enableTextCleanup: settings.enableTextCleanup,
             dictionary: CleanupPrompt.mergedDictionary(settings.dictionaryWords),
             personalContext: settings.cleanupPersonalContext,
-            recentDictations: recentDictationsForPolish()
+            recentDictations: recentDictationsForPolish(),
+            sessionIntent: liveSessionIntent()
         )
+    }
+
+    /// Request-time only. Never written into Settings → System prompt.
+    private func liveSessionIntent(now: Date = Date()) -> String {
+        guard settings.enableSessionContext else { return "" }
+        guard let context = sessionContext else { return "" }
+        if context.isExpired(now: now) {
+            sessionContext = nil
+            return ""
+        }
+        return context.text
+    }
+
+    private func storeSessionContext(from raw: String) async {
+        phase = .settingContext
+        hud.update(phase: .settingContext)
+        let stripped = VocalFillerFilter.strip(raw)
+        guard let context = SessionContext.make(text: stripped) else {
+            phase = .error("Heard nothing")
+            hud.flashError("Heard nothing")
+            return
+        }
+        sessionContext = context
+        lastPolished = context.text
+        lastStages = ["Session context"]
+        let generation = sessionGeneration
+        hud.flashSuccess(note: context.text)
+        try? await Task.sleep(nanoseconds: 1_600_000_000)
+        guard generation == sessionGeneration else { return }
+        phase = .idle
+        hud.hide()
+    }
+
+    private func rememberSessionContextUse(relevant: Bool?, now: Date = Date()) {
+        guard settings.enableSessionContext, let context = sessionContext else { return }
+        if context.isExpired(now: now) {
+            sessionContext = nil
+            return
+        }
+        let used = context.registerUse(now: now)
+        if let relevant {
+            sessionContext = used.registerJudgment(relevant: relevant)
+        } else {
+            sessionContext = used
+        }
+    }
+
+    func clearSessionContext() {
+        sessionContext = nil
     }
 
     /// Request-time only. Never written into Settings → System prompt.
@@ -516,6 +590,18 @@ final class DictationController: ObservableObject {
                 return "Polish: Gemma 4 E2B · failed"
             }
         }
+    }
+
+    /// Active spoken context for the menu bar. Hidden when empty or idle-expired.
+    var sessionContextLine: String? {
+        guard settings.enableSessionContext else { return nil }
+        guard let context = sessionContext, !context.isExpired(now: Date()) else { return nil }
+        let text = context.text
+        if text.count <= 56 {
+            return "Context: \(text)"
+        }
+        let end = text.index(text.startIndex, offsetBy: 55)
+        return "Context: \(String(text[..<end]).trimmingCharacters(in: .whitespaces))…"
     }
 
     private func cloudPolishModelName(_ provider: CloudPolishProvider) -> String {

@@ -75,10 +75,11 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
         dictionary: [String],
         personalContext: String = "",
         targetApp: String? = nil,
-        recentDictations: String = ""
-    ) async throws -> String {
+        recentDictations: String = "",
+        sessionIntent: String = ""
+    ) async throws -> PolishedText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return trimmed }
+        guard !trimmed.isEmpty else { return PolishedText(text: trimmed) }
 
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
@@ -87,7 +88,8 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
                 dictionary: dictionary,
                 personalContext: personalContext,
                 targetApp: targetApp,
-                recentDictations: recentDictations
+                recentDictations: recentDictations,
+                sessionIntent: sessionIntent
             )
         }
         #endif
@@ -101,6 +103,8 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
 private struct PolishedDictation {
     @Guide(description: "Exactly the cleaned transcript and nothing else. Same speaker voice. No greeting, labels, or answers.")
     var text: String
+    @Guide(description: "True if this transcript plausibly belongs to the stated session context. False only when it is clearly about something else.")
+    var matchesSessionContext: Bool
 }
 
 @available(macOS 26.0, *)
@@ -130,8 +134,9 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         dictionary: [String],
         personalContext: String = "",
         targetApp: String? = nil,
-        recentDictations: String = ""
-    ) async throws -> String {
+        recentDictations: String = "",
+        sessionIntent: String = ""
+    ) async throws -> PolishedText {
         guard SystemLanguageModel.default.isAvailable else {
             throw PolisherError.notAvailable(LocalLLMPolisher.statusMessage)
         }
@@ -142,7 +147,8 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
             text,
             targetApp: targetApp,
             personalContext: personalContext,
-            recentDictations: recentDictations
+            recentDictations: recentDictations,
+            sessionIntent: sessionIntent
         )
         let options = GenerationOptions(
             sampling: .greedy,
@@ -160,17 +166,21 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         }
 
         do {
-            let cleaned = try await withTimeout(timeoutSeconds) {
+            let generated = try await withTimeout(timeoutSeconds) { () -> (String, Bool) in
                 let response = try await session.respond(
                     to: prompt,
                     generating: PolishedDictation.self,
                     options: options
                 )
-                return response.content.text
+                return (response.content.text, response.content.matchesSessionContext)
             }
-            let sanitized = PolishOutput.sanitize(cleaned)
+            let sanitized = PolishOutput.sanitize(generated.0)
             guard !sanitized.isEmpty else { throw PolisherError.emptyResponse }
-            return sanitized
+            let judged = !sessionIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return PolishedText(
+                text: sanitized,
+                contextRelevant: judged ? generated.1 : nil
+            )
         } catch is CancellationError {
             throw PolisherError.notAvailable("On-device polish timed out.")
         } catch let error as PolisherError {

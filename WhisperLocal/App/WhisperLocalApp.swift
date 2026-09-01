@@ -55,7 +55,7 @@ struct WhisperLocalApp: App {
         switch phase {
         case .waitingForMic: return "ellipsis.circle"
         case .recording: return "mic.fill"
-        case .processing, .polishing, .inserting: return "ellipsis.circle"
+        case .processing, .settingContext, .polishing, .inserting: return "ellipsis.circle"
         case .success, .successNote: return "checkmark.circle"
         case .error: return "exclamationmark.triangle"
         case .idle: return AppIdentity.isDevBuild ? "hammer.fill" : "waveform"
@@ -73,6 +73,12 @@ struct MenuBarContent: View {
     var body: some View {
         Text(statusLine)
         Text(controller.polishStatusLine)
+        if let contextLine = controller.sessionContextLine {
+            Text(contextLine)
+            Button("Clear context") {
+                controller.clearSessionContext()
+            }
+        }
         Text(AppIdentity.isDevBuild
              ? "Version \(AppUpdater.currentVersion) · Dev"
              : "Version \(AppUpdater.currentVersion)")

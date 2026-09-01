@@ -141,6 +141,9 @@ struct SettingsView: View {
                 Text(hotKey.mode.helpText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Text("Hold Shift with the hotkey to set a temporary polish context — nothing is pasted. Toggle it under Polish.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Picker("Speech model", selection: Binding(
                     get: { settings.asrModel },
@@ -266,6 +269,12 @@ struct SettingsView: View {
                     .disabled(!settings.enableDictationLog || !settings.enableTextCleanup)
                 }
                 Text(recentPolishLogsHelp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Spoken session context", isOn: $settings.enableSessionContext)
+                    .disabled(!settings.enableTextCleanup)
+                Text(sessionContextHelp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -894,6 +903,14 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var sessionContextHelp: String {
+        let chord = "Shift + \(hotKey.selectedKey.displayName)"
+        if settings.hasUsableCloudPolish {
+            return "Hold \(chord) and speak one sentence about what you are working on. Nothing is pasted. That sentence rides with later polish requests for vocabulary and register, then expires. It is not saved into your system prompt or across launches. With cloud polish, that text also goes to the API."
+        }
+        return "Hold \(chord) and speak one sentence about what you are working on. Nothing is pasted. That sentence rides with later polish requests for vocabulary and register, then expires after a few off-topic takes or 45 minutes idle. It is not saved into your system prompt or across launches."
     }
 
     private var recentPolishLogsHelp: String {

@@ -79,6 +79,8 @@ final class HotKeyManager: ObservableObject {
     private var isHolding = false
     /// True while a hold-session is active (used so Esc can cancel).
     private(set) var isSessionActive = false
+    /// Shift was down on the hotkey press that started this take. Read once in `beginRecording`.
+    private(set) var intentModifierHeld = false
 
     init() {
         if let raw = UserDefaults.standard.string(forKey: "hotkeyChoice"),
@@ -145,6 +147,7 @@ final class HotKeyManager: ObservableObject {
         localKeyMonitor = nil
         isHolding = false
         isSessionActive = false
+        intentModifierHeld = false
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
@@ -163,6 +166,7 @@ final class HotKeyManager: ObservableObject {
         switch mode {
         case .hold:
             if pressed && !isHolding {
+                intentModifierHeld = event.modifierFlags.contains(.shift)
                 isHolding = true
                 isSessionActive = true
                 onPress?()
@@ -173,6 +177,7 @@ final class HotKeyManager: ObservableObject {
         case .tap:
             // Toggle on key-down edge only (ignore release).
             if pressed && !isHolding {
+                intentModifierHeld = event.modifierFlags.contains(.shift)
                 isHolding = true
                 onPress?()
             } else if !pressed && isHolding {

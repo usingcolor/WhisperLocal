@@ -1,5 +1,11 @@
 import Foundation
 
+/// One polish step. `contextRelevant` is set only by Apple Intelligence structured output.
+struct PolishedText: Sendable {
+    var text: String
+    var contextRelevant: Bool? = nil
+}
+
 protocol TextPolisher: Sendable {
     var name: String { get }
     func polish(
@@ -7,17 +13,32 @@ protocol TextPolisher: Sendable {
         dictionary: [String],
         personalContext: String,
         targetApp: String?,
-        recentDictations: String
-    ) async throws -> String
+        recentDictations: String,
+        sessionIntent: String
+    ) async throws -> PolishedText
 }
 
 extension TextPolisher {
-    func polish(_ text: String, dictionary: [String]) async throws -> String {
-        try await polish(text, dictionary: dictionary, personalContext: "", targetApp: nil, recentDictations: "")
+    func polish(_ text: String, dictionary: [String]) async throws -> PolishedText {
+        try await polish(
+            text,
+            dictionary: dictionary,
+            personalContext: "",
+            targetApp: nil,
+            recentDictations: "",
+            sessionIntent: ""
+        )
     }
 
-    func polish(_ text: String, dictionary: [String], personalContext: String) async throws -> String {
-        try await polish(text, dictionary: dictionary, personalContext: personalContext, targetApp: nil, recentDictations: "")
+    func polish(_ text: String, dictionary: [String], personalContext: String) async throws -> PolishedText {
+        try await polish(
+            text,
+            dictionary: dictionary,
+            personalContext: personalContext,
+            targetApp: nil,
+            recentDictations: "",
+            sessionIntent: ""
+        )
     }
 }
 
@@ -125,6 +146,8 @@ struct PolishResult: Sendable {
     /// True when an LLM cleanup step was expected but failed — caller should still paste.
     let cleanupFailed: Bool
     let cleanupNote: String?
+    /// Apple Intelligence judgment against `<session-intent>`. Nil if not judged.
+    let contextRelevant: Bool?
 }
 
 /// Chains polishers: filler strip, then either one on-device LLM or cloud polish.
@@ -139,6 +162,8 @@ struct PolishPipeline: Sendable {
     var personalContext: String = ""
     /// Request-time style examples from the dictation log. Empty unless the user opted in.
     var recentDictations: String = ""
+    /// Spoken, temporary context. User message only — never the system prefill.
+    var sessionIntent: String = ""
 
     func run(_ raw: String, targetApp: String? = nil) async -> PolishResult {
         guard enableTextCleanup else {
@@ -146,7 +171,8 @@ struct PolishPipeline: Sendable {
                 text: raw.trimmingCharacters(in: .whitespacesAndNewlines),
                 stages: ["Raw"],
                 cleanupFailed: false,
-                cleanupNote: nil
+                cleanupNote: nil,
+                contextRelevant: nil
             )
         }
 
@@ -154,6 +180,7 @@ struct PolishPipeline: Sendable {
         var stages: [String] = []
         var cleanupFailed = false
         var cleanupNote: String?
+        var contextRelevant: Bool?
 
         text = applyFillerFilter(text, stages: &stages)
 
@@ -163,13 +190,16 @@ struct PolishPipeline: Sendable {
         if useLocalLLM, let localLLM, cloud == nil {
             llmAttempted = true
             do {
-                text = try await localLLM.polish(
+                let polished = try await localLLM.polish(
                     text,
                     dictionary: dictionary,
                     personalContext: personalContext,
                     targetApp: targetApp,
-                    recentDictations: recentDictations
+                    recentDictations: recentDictations,
+                    sessionIntent: sessionIntent
                 )
+                text = polished.text
+                contextRelevant = polished.contextRelevant
                 stages.append(localLLM.name)
             } catch {
                 stages.append("\(localLLM.name) failed")
@@ -181,13 +211,17 @@ struct PolishPipeline: Sendable {
         if let cloud {
             llmAttempted = true
             do {
-                text = try await cloud.polish(
+                let polished = try await cloud.polish(
                     text,
                     dictionary: dictionary,
                     personalContext: personalContext,
                     targetApp: targetApp,
-                    recentDictations: recentDictations
+                    recentDictations: recentDictations,
+                    sessionIntent: sessionIntent
                 )
+                text = polished.text
+                // Cloud does not judge session context (plain-text output).
+                contextRelevant = nil
                 stages.append(cloud.name)
                 // Cloud success clears earlier local-LLM failure note
                 cleanupFailed = false
@@ -215,7 +249,8 @@ struct PolishPipeline: Sendable {
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
             stages: stages,
             cleanupFailed: cleanupFailed,
-            cleanupNote: cleanupNote
+            cleanupNote: cleanupNote,
+            contextRelevant: contextRelevant
         )
     }
 

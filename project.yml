@@ -136,6 +136,7 @@ targets:
       - path: WhisperLocal/Services/AppUpdateFeed.swift
       - path: WhisperLocal/Services/UpdateInstallLog.swift
       - path: WhisperLocal/Services/AudioInputRoute.swift
+      - path: WhisperLocal/State/SessionContext.swift
       - path: WhisperLocal/App/AppIdentity.swift
     settings:
       base:

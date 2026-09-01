@@ -70,10 +70,11 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
         dictionary: [String],
         personalContext: String = "",
         targetApp: String? = nil,
-        recentDictations: String = ""
-    ) async throws -> String {
+        recentDictations: String = "",
+        sessionIntent: String = ""
+    ) async throws -> PolishedText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return trimmed }
+        guard !trimmed.isEmpty else { return PolishedText(text: trimmed) }
 
         let model = try await ensureLoaded()
         let system = CleanupPrompt.onDeviceSystem(dictionary: dictionary, personalContext: personalContext)
@@ -81,7 +82,8 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
             trimmed,
             targetApp: targetApp,
             personalContext: personalContext,
-            recentDictations: recentDictations
+            recentDictations: recentDictations,
+            sessionIntent: sessionIntent
         )
         let maxTokens = Self.tokenBudget(for: trimmed)
         let timeout = generateTimeout
@@ -127,7 +129,7 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
             }
             let sanitized = PolishOutput.sanitize(raw)
             guard !sanitized.isEmpty else { throw PolisherError.emptyResponse }
-            return sanitized
+            return PolishedText(text: sanitized)
         } catch is CancellationError {
             throw PolisherError.notAvailable("On-device polish timed out.")
         } catch let error as PolisherError {

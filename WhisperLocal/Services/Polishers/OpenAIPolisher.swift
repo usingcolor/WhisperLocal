@@ -10,8 +10,9 @@ struct OpenAIPolisher: TextPolisher {
         dictionary: [String],
         personalContext: String = "",
         targetApp: String? = nil,
-        recentDictations: String = ""
-    ) async throws -> String {
+        recentDictations: String = "",
+        sessionIntent: String = ""
+    ) async throws -> PolishedText {
         guard !apiKey.isEmpty else { throw PolisherError.missingAPIKey("OpenAI") }
 
         let system = CleanupPrompt.system(dictionary: dictionary, personalContext: personalContext)
@@ -23,7 +24,8 @@ struct OpenAIPolisher: TextPolisher {
                 ["role": "user", "content": CleanupPrompt.wrapTranscript(
                     text,
                     targetApp: targetApp,
-                    recentDictations: recentDictations
+                    recentDictations: recentDictations,
+                    sessionIntent: sessionIntent
                 )]
             ]
         ]
@@ -53,6 +55,6 @@ struct OpenAIPolisher: TextPolisher {
         let message = choices?.first?["message"] as? [String: Any]
         let content = (message?["content"] as? String).map(PolishOutput.sanitize)
         guard let content, !content.isEmpty else { throw PolisherError.emptyResponse }
-        return content
+        return PolishedText(text: content)
     }
 }

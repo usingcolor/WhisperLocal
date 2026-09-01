@@ -175,7 +175,7 @@ struct RecordingHUDView: View {
                 .fill(Color.red)
                 .frame(width: 10, height: 10)
                 .overlay(Circle().stroke(Color.red.opacity(0.4), lineWidth: 6))
-        case .processing, .polishing, .inserting:
+        case .processing, .settingContext, .polishing, .inserting:
             ProgressView()
                 .controlSize(.small)
         case .success:

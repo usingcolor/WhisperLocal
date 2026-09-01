@@ -80,6 +80,8 @@ WhisperLocal lives in the menu bar — there's no Dock icon and no window to kee
 
 **Esc** cancels a dictation in progress. In Settings you can switch to tap-to-toggle, or move the hotkey to Right Option, Left Option, or Right Command.
 
+**Shift** during a take stores a short session context instead of pasting — what you are working on, so later dictations resolve names and jargon. Press Shift again to switch back to a normal paste. The HUD shows an orange **CONTEXT** badge when that take will not be pasted. Edit or clear the phrase from the menu bar or Settings. It is not saved across launches.
+
 ## What you get on your macOS version
 
 The defaults assume macOS 26. Older versions still work, with more setup:
@@ -102,6 +104,7 @@ Everything below the defaults is optional and switchable in Settings.
 - Fail-open: if cleanup fails or times out, the previous stage is pasted anyway — you never lose a dictation
 - Smart insertion: Accessibility API first, clipboard ⌘V for terminals and Electron apps that need it
 - Optional dictation log (text only, never audio) with JSON / CSV / plain-text export
+- Spoken session context: Shift during a take stores a temporary polish hint (not pasted, not saved across launches)
 - Floating recording HUD with a live input meter
 - In-app updates from GitHub Releases, with SHA-256 verification when a release publishes checksums
 
@@ -118,6 +121,8 @@ hold hotkey → record 16 kHz audio
 
 The cleanup step is **not a chatbot**. If you dictate a question, you get the question as text — it is never answered.
 
+A Shift take skips insertion: the spoken sentence is distilled into a short session context and kept in memory for later polish.
+
 Native Swift and AppKit. Transcription uses Apple's `SpeechTranscriber`, [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift), or [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) via [FluidAudio](https://github.com/FluidInference/FluidAudio). On-device cleanup uses Apple's `SystemLanguageModel` or Gemma 4 E2B IT through MLX. There is no sidecar LLM process to install or run.
 
 On-device cleanup waits up to 20 s; cloud cleanup waits up to 30 s. A timeout pastes the previous stage rather than hanging.
@@ -131,7 +136,7 @@ On-device cleanup waits up to 20 s; cloud cleanup waits up to 30 s. A timeout pa
 | On-device cleanup | Apple Intelligence, or Gemma 4 E2B IT; skipped automatically while cloud cleanup is on |
 | Cloud cleanup | Off (OpenAI / Anthropic; pick a model in Settings) |
 | Recent dictations in polish | Off. Optional; you choose 1–8 previous takes. Not written into the system prompt. |
-| Session context | On. Shift during a take toggles context vs paste; decided when you finish. Distilled into a short topic (hidden engine; your About you notes still help with names); editable from the menu or Settings; not saved across launches. |
+| Session context | On. Shift during a take stores a short topic for later polish; nothing is pasted; edit from the menu or Settings; not saved across launches. |
 | Custom instructions | Generic starter notes; edit or clear in Settings |
 | Dictionary | Editable list, with CSV import |
 | Trailing space after paste | On |

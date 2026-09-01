@@ -5,15 +5,18 @@ import SwiftUI
 final class RecordingHUDController: ObservableObject {
     @Published var phase: DictationPhase = .idle
     @Published var audioLevel: Float = 0
+    /// Shift+hotkey capture — HUD copy and color differ from dictation.
+    @Published var isContextCapture = false
 
     private var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
     private var levelTimer: Timer?
 
-    func show(phase: DictationPhase, levelPublisher: AudioRecorder) {
+    func show(phase: DictationPhase, levelPublisher: AudioRecorder, contextCapture: Bool = false) {
         hideTask?.cancel()
         levelTimer?.invalidate()
         self.phase = phase
+        self.isContextCapture = contextCapture
         ensurePanel()
         positionOnActiveScreen()
         panel?.orderFrontRegardless()
@@ -41,6 +44,10 @@ final class RecordingHUDController: ObservableObject {
         panel?.orderFrontRegardless()
     }
 
+    func setContextCapture(_ active: Bool) {
+        isContextCapture = active
+    }
+
     func flashSuccess(note: String? = nil) {
         if let note, !note.isEmpty {
             phase = .successNote(note)
@@ -52,6 +59,7 @@ final class RecordingHUDController: ObservableObject {
     }
 
     func flashError(_ message: String) {
+        isContextCapture = false
         phase = .error(message)
         scheduleHide(after: 2.0)
     }
@@ -63,6 +71,7 @@ final class RecordingHUDController: ObservableObject {
         panel?.orderOut(nil)
         phase = .idle
         audioLevel = 0
+        isContextCapture = false
     }
 
     private func scheduleHide(after seconds: Double) {
@@ -79,7 +88,7 @@ final class RecordingHUDController: ObservableObject {
 
         let hosting = NSHostingView(rootView: RecordingHUDView(controller: self))
         hosting.sizingOptions = []
-        hosting.frame = NSRect(x: 0, y: 0, width: 280, height: 72)
+        hosting.frame = NSRect(x: 0, y: 0, width: 300, height: 72)
 
         let panel = HUDPanel(
             contentRect: hosting.frame,
@@ -125,7 +134,7 @@ struct RecordingHUDView: View {
         HStack(spacing: 12) {
             statusIcon
             VStack(alignment: .leading, spacing: 4) {
-                Text(controller.phase.label)
+                Text(headline)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(2)
@@ -134,7 +143,7 @@ struct RecordingHUDView: View {
                         Capsule()
                             .fill(Color.white.opacity(0.15))
                         Capsule()
-                            .fill(Color.accentColor)
+                            .fill(controller.isContextCapture ? Color.orange : Color.accentColor)
                             .frame(width: max(4, 168 * CGFloat(min(1, controller.audioLevel))))
                     }
                     .frame(width: 168, height: 4)
@@ -144,15 +153,23 @@ struct RecordingHUDView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(width: 280, height: 72)
+        .frame(width: 300, height: 72)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         )
         .overlay(alignment: .topTrailing) {
-            if AppIdentity.isDevBuild {
-                Text("DEV")
+            if controller.isContextCapture {
+                Text("CONTEXT")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.95), in: Capsule())
+                    .padding(8)
+            } else if AppIdentity.isDevBuild {
+                Text("DEV \(AppIdentity.versionSummary)")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 6)
@@ -161,6 +178,26 @@ struct RecordingHUDView: View {
                     .padding(8)
             }
         }
+    }
+
+    private var headline: String {
+        if controller.isContextCapture {
+            switch controller.phase {
+            case .waitingForMic:
+                return "Context: waiting for mic…"
+            case .recording:
+                return "Listening for context…"
+            case .processing, .settingContext:
+                return "Transcribing context…"
+            case .polishing:
+                return "Polishing context…"
+            case .successNote(let note):
+                return note
+            default:
+                return controller.phase.label
+            }
+        }
+        return controller.phase.label
     }
 
     @ViewBuilder
@@ -172,9 +209,12 @@ struct RecordingHUDView: View {
                 .tint(.white)
         case .recording:
             Circle()
-                .fill(Color.red)
+                .fill(controller.isContextCapture ? Color.orange : Color.red)
                 .frame(width: 10, height: 10)
-                .overlay(Circle().stroke(Color.red.opacity(0.4), lineWidth: 6))
+                .overlay(Circle().stroke(
+                    (controller.isContextCapture ? Color.orange : Color.red).opacity(0.4),
+                    lineWidth: 6
+                ))
         case .processing, .settingContext, .polishing, .inserting:
             ProgressView()
                 .controlSize(.small)

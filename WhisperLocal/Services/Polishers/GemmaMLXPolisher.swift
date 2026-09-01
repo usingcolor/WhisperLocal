@@ -71,21 +71,31 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
         personalContext: String = "",
         targetApp: String? = nil,
         recentDictations: String = "",
-        sessionIntent: String = ""
+        sessionIntent: String = "",
+        task: PolishTask = .dictation
     ) async throws -> PolishedText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return PolishedText(text: trimmed) }
 
         let model = try await ensureLoaded()
-        let system = CleanupPrompt.onDeviceSystem(dictionary: dictionary, personalContext: personalContext)
-        let user = CleanupPrompt.wrapOnDeviceTranscript(
-            trimmed,
+        let system = CleanupPrompt.system(
+            for: task,
+            dictionary: dictionary,
+            personalContext: personalContext,
+            onDevice: true
+        )
+        let user = CleanupPrompt.userMessage(
+            for: task,
+            text: trimmed,
             targetApp: targetApp,
             personalContext: personalContext,
             recentDictations: recentDictations,
-            sessionIntent: sessionIntent
+            sessionIntent: sessionIntent,
+            onDevice: true
         )
-        let maxTokens = Self.tokenBudget(for: trimmed)
+        let maxTokens = task == .sessionContext
+            ? min(Self.tokenBudget(for: trimmed), 128)
+            : Self.tokenBudget(for: trimmed)
         let timeout = generateTimeout
 
         do {
@@ -98,7 +108,9 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
                 let parameters = GenerateParameters(maxTokens: maxTokens, temperature: 0)
                 let stream = try await model.generate(input: lmInput, parameters: parameters)
                 let deadline = Date().addingTimeInterval(timeout)
-                let charCap = trimmed.count * 3 + 80
+                let charCap = task == .sessionContext
+                    ? SessionContext.maxCharacters + 40
+                    : trimmed.count * 3 + 80
                 var output = ""
                 var sawEndOfTurn = false
                 var generatedTokens = 0

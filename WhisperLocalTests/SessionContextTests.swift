@@ -52,9 +52,51 @@ final class SessionContextTests: XCTestCase {
 
     func testCharacterCapTruncates() {
         let long = String(repeating: "a", count: 400)
-        XCTAssertEqual(SessionContext.capped(long).count, SessionContext.maxCharacters)
-        XCTAssertEqual(SessionContext.make(text: long)?.text.count, SessionContext.maxCharacters)
+        let capped = SessionContext.capped(long)
+        XCTAssertEqual(capped.count, SessionContext.maxCharacters)
+        XCTAssertTrue(capped.hasSuffix("…"))
+        XCTAssertEqual(capped.filter { $0 == "a" }.count, SessionContext.maxCharacters - 1)
+        XCTAssertEqual(SessionContext.make(text: long)?.text, capped)
         XCTAssertNil(SessionContext.make(text: "   "))
         XCTAssertEqual(SessionContext.capped("  hello  "), "hello")
+        XCTAssertEqual(SessionContext.capped(String(repeating: "a", count: 280)).count, 280)
+        XCTAssertFalse(SessionContext.capped(String(repeating: "a", count: 280)).hasSuffix("…"))
+    }
+
+    func testEmptyEditedTextDoesNotMakeAContext() {
+        XCTAssertNil(SessionContext.make(text: ""))
+        XCTAssertNil(SessionContext.make(text: " \n\t "))
+        XCTAssertEqual(SessionContext.make(text: "  MambaEye paper  ")?.text, "MambaEye paper")
+    }
+
+    func testAgeLabelUsesSetAt() {
+        let setAt = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertNil(SessionContext.ageLabel(setAt: setAt, now: setAt.addingTimeInterval(59)))
+        XCTAssertEqual(SessionContext.ageLabel(setAt: setAt, now: setAt.addingTimeInterval(60)), "1 min ago")
+        XCTAssertEqual(SessionContext.ageLabel(setAt: setAt, now: setAt.addingTimeInterval(20 * 60)), "20 min ago")
+        XCTAssertEqual(SessionContext.ageLabel(setAt: setAt, now: setAt.addingTimeInterval(60 * 60)), "1 hr ago")
+        XCTAssertEqual(SessionContext.ageLabel(setAt: setAt, now: setAt.addingTimeInterval(2 * 60 * 60)), "2 hr ago")
+    }
+
+    func testMenuLineIncludesSetAtAgeAndClipsPhrase() {
+        let setAt = Date(timeIntervalSince1970: 1_000_000)
+        let short = SessionContext(
+            text: "MambaEye paper",
+            setAt: setAt,
+            lastUsedAt: setAt,
+            driftStrikes: 0
+        )
+        XCTAssertEqual(short.menuLine(now: setAt), "Context: MambaEye paper")
+        XCTAssertEqual(
+            short.menuLine(now: setAt.addingTimeInterval(20 * 60)),
+            "Context: MambaEye paper · set 20 min ago"
+        )
+        let longText = String(repeating: "a", count: 80)
+        let long = SessionContext(text: longText, setAt: setAt, lastUsedAt: setAt, driftStrikes: 0)
+        let line = long.menuLine(now: setAt, phraseLimit: 56)
+        XCTAssertTrue(line.hasPrefix("Context: "))
+        XCTAssertTrue(line.hasSuffix("…"))
+        XCTAssertFalse(line.contains("set"))
+        XCTAssertEqual(line.count, "Context: ".count + 56)
     }
 }

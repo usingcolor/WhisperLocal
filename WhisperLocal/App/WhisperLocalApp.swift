@@ -10,10 +10,18 @@ struct WhisperLocalApp: App {
         MenuBarExtra {
             MenuBarContent(controller: controller)
         } label: {
-            Label {
-                Text(AppIdentity.productName)
-            } icon: {
-                Image(systemName: menuBarIcon(for: controller.phase))
+            if AppIdentity.isDevBuild {
+                HStack(spacing: 4) {
+                    Image(systemName: menuBarIcon(for: controller.phase))
+                    Text(AppIdentity.versionSummary)
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                }
+            } else {
+                Label {
+                    Text(AppIdentity.productName)
+                } icon: {
+                    Image(systemName: menuBarIcon(for: controller.phase))
+                }
             }
         }
         .menuBarExtraStyle(.menu)
@@ -38,6 +46,15 @@ struct WhisperLocalApp: App {
                 .raiseWindowOnAppear()
         }
         .defaultSize(width: 520, height: 560)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+
+        Window("Session context", id: "session-context") {
+            SessionContextEditor(controller: controller, showsIntro: true)
+                .padding(20)
+                .frame(minWidth: 440, minHeight: 180)
+                .raiseWindowOnAppear()
+        }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
     }
@@ -71,17 +88,22 @@ struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        Text(AppIdentity.menuVersionLine)
         Text(statusLine)
         Text(controller.polishStatusLine)
         if let contextLine = controller.sessionContextLine {
             Text(contextLine)
-            Button("Clear context") {
-                controller.clearSessionContext()
+            Button("Edit context…") {
+                AppWindowFocus.present(title: "Session context") {
+                    openWindow(id: "session-context")
+                }
+            }
+            if controller.hasActiveSessionContext {
+                Button("Clear context") {
+                    controller.clearSessionContext()
+                }
             }
         }
-        Text(AppIdentity.isDevBuild
-             ? "Version \(AppUpdater.currentVersion) · Dev"
-             : "Version \(AppUpdater.currentVersion)")
         Button(updater.menuTitle) {
             Task { await updater.handleMenuClick() }
         }
@@ -138,6 +160,8 @@ struct MenuBarContent: View {
         switch controller.phase {
         case .idle, .success:
             return controller.readyStatusLine
+        case .recording, .waitingForMic:
+            return controller.isIntentTake ? "Listening for context…" : controller.phase.label
         default:
             return controller.phase.label
         }

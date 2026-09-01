@@ -24,7 +24,7 @@ Your audio never leaves the Mac. Transcription and cleanup both run on-device by
 <!-- TODO: replace with a ~5s screen recording: hold Globe/Fn → HUD appears → cleaned text lands in a text field. -->
 <!-- <p align="center"><img src="assets/demo.gif" alt="WhisperLocal in use" width="720"></p> -->
 
-> Early preview (`0.1.8`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
+> Early preview (`0.1.9`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
 
 ## Why not the dictation already built into macOS?
 
@@ -131,7 +131,7 @@ On-device cleanup waits up to 20 s; cloud cleanup waits up to 30 s. A timeout pa
 | On-device cleanup | Apple Intelligence, or Gemma 4 E2B IT; skipped automatically while cloud cleanup is on |
 | Cloud cleanup | Off (OpenAI / Anthropic; pick a model in Settings) |
 | Recent dictations in polish | Off. Optional; you choose 1–8 previous takes. Not written into the system prompt. |
-| Session context | On. Shift + the dictation hotkey; spoken, temporary, not saved across launches. |
+| Session context | On. Shift during a take toggles context vs paste; decided when you finish. Distilled into a short topic (hidden engine; your About you notes still help with names); editable from the menu or Settings; not saved across launches. |
 | Custom instructions | Generic starter notes; edit or clear in Settings |
 | Dictionary | Editable list, with CSV import |
 | Trailing space after paste | On |
@@ -148,7 +148,7 @@ API keys live in the Keychain under `com.usingcolor.WhisperLocal`.
 | Microphone indicator | After you let go, the input graph stays open briefly so the next take starts faster. Built-in mics drop it after about 2 seconds. A Bluetooth headset used only as input can stay open up to 45 seconds — the orange Control Center dot stays lit. If those headphones are also playing audio, the graph drops after 2 seconds so they can leave the hands-free profile. Nothing is recorded or uploaded during that idle hold. |
 | Keystrokes | The hotkey and Esc are observed through Accessibility. Keystrokes are never stored or logged. |
 | Clipboard | Clipboard-paste mode briefly uses the general pasteboard, marked so clipboard managers skip it. |
-| Session context | Spoken text only, in memory until it expires or you clear it. Not written to disk. With cloud polish, that text also goes to the API. |
+| Session context | Spoken or typed text only, in memory until it expires or you clear it. Not written to disk. With cloud polish, that text also goes to the API. |
 | Dictation log | Optional, off-switchable, local only: `~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`, text with no audio. Polish does not read it unless you enable recent dictations in polish. |
 
 The app is **not sandboxed** — global hotkeys, Accessibility insertion, and synthetic paste all require that.

@@ -14,11 +14,16 @@ struct AnthropicPolisher: TextPolisher {
         personalContext: String = "",
         targetApp: String? = nil,
         recentDictations: String = "",
-        sessionIntent: String = ""
+        sessionIntent: String = "",
+        task: PolishTask = .dictation
     ) async throws -> PolishedText {
         guard !apiKey.isEmpty else { throw PolisherError.missingAPIKey("Anthropic") }
 
-        let system = CleanupPrompt.system(dictionary: dictionary, personalContext: personalContext)
+        let system = CleanupPrompt.system(
+            for: task,
+            dictionary: dictionary,
+            personalContext: personalContext
+        )
 
         // Explicit breakpoint on the system prompt only. Top-level automatic cache_control
         // would mark the unique transcript and miss on every take.
@@ -34,8 +39,9 @@ struct AnthropicPolisher: TextPolisher {
                 ]
             ],
             "messages": [
-                ["role": "user", "content": CleanupPrompt.wrapTranscript(
-                    text,
+                ["role": "user", "content": CleanupPrompt.userMessage(
+                    for: task,
+                    text: text,
                     targetApp: targetApp,
                     recentDictations: recentDictations,
                     sessionIntent: sessionIntent

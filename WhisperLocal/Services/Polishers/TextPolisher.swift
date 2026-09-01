@@ -1,5 +1,12 @@
 import Foundation
 
+enum PolishTask: Equatable, Sendable {
+    /// Clean a take to paste into the focused app.
+    case dictation
+    /// Distill a spoken take into a short session-context phrase. Never pasted.
+    case sessionContext
+}
+
 /// One polish step. `contextRelevant` is set only by Apple Intelligence structured output.
 struct PolishedText: Sendable {
     var text: String
@@ -14,7 +21,8 @@ protocol TextPolisher: Sendable {
         personalContext: String,
         targetApp: String?,
         recentDictations: String,
-        sessionIntent: String
+        sessionIntent: String,
+        task: PolishTask
     ) async throws -> PolishedText
 }
 
@@ -26,7 +34,8 @@ extension TextPolisher {
             personalContext: "",
             targetApp: nil,
             recentDictations: "",
-            sessionIntent: ""
+            sessionIntent: "",
+            task: .dictation
         )
     }
 
@@ -37,7 +46,8 @@ extension TextPolisher {
             personalContext: personalContext,
             targetApp: nil,
             recentDictations: "",
-            sessionIntent: ""
+            sessionIntent: "",
+            task: .dictation
         )
     }
 }
@@ -164,6 +174,8 @@ struct PolishPipeline: Sendable {
     var recentDictations: String = ""
     /// Spoken, temporary context. User message only — never the system prefill.
     var sessionIntent: String = ""
+    /// Dictation paste vs spoken session-context distillation.
+    var task: PolishTask = .dictation
 
     func run(_ raw: String, targetApp: String? = nil) async -> PolishResult {
         guard enableTextCleanup else {
@@ -185,6 +197,9 @@ struct PolishPipeline: Sendable {
         text = applyFillerFilter(text, stages: &stages)
 
         var llmAttempted = false
+        let polishApp = task == .sessionContext ? nil : targetApp
+        let polishRecent = task == .sessionContext ? "" : recentDictations
+        let polishIntent = task == .sessionContext ? "" : sessionIntent
 
         // Cloud polish replaces the on-device LLM so we do not wait for both.
         if useLocalLLM, let localLLM, cloud == nil {
@@ -194,12 +209,13 @@ struct PolishPipeline: Sendable {
                     text,
                     dictionary: dictionary,
                     personalContext: personalContext,
-                    targetApp: targetApp,
-                    recentDictations: recentDictations,
-                    sessionIntent: sessionIntent
+                    targetApp: polishApp,
+                    recentDictations: polishRecent,
+                    sessionIntent: polishIntent,
+                    task: task
                 )
                 text = polished.text
-                contextRelevant = polished.contextRelevant
+                contextRelevant = task == .sessionContext ? nil : polished.contextRelevant
                 stages.append(localLLM.name)
             } catch {
                 stages.append("\(localLLM.name) failed")
@@ -215,9 +231,10 @@ struct PolishPipeline: Sendable {
                     text,
                     dictionary: dictionary,
                     personalContext: personalContext,
-                    targetApp: targetApp,
-                    recentDictations: recentDictations,
-                    sessionIntent: sessionIntent
+                    targetApp: polishApp,
+                    recentDictations: polishRecent,
+                    sessionIntent: polishIntent,
+                    task: task
                 )
                 text = polished.text
                 // Cloud does not judge session context (plain-text output).

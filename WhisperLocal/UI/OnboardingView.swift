@@ -11,7 +11,7 @@ struct OnboardingView: View {
                 Text("Welcome to \(AppIdentity.productName)")
                     .font(.title2.bold())
                 Text(AppIdentity.isDevBuild
-                     ? "Dev build — default hotkey is Right Option. The public app keeps Globe / Fn. Audio stays on your Mac by default."
+                     ? "Dev \(AppIdentity.versionSummary) — default hotkey is Right Option. The public app keeps Globe / Fn. Audio stays on your Mac by default."
                      : "Speak with Globe / Fn — polished text appears at your cursor. Audio stays on your Mac by default.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

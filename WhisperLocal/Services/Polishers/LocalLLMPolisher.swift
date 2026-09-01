@@ -76,7 +76,8 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
         personalContext: String = "",
         targetApp: String? = nil,
         recentDictations: String = "",
-        sessionIntent: String = ""
+        sessionIntent: String = "",
+        task: PolishTask = .dictation
     ) async throws -> PolishedText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return PolishedText(text: trimmed) }
@@ -89,7 +90,8 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
                 personalContext: personalContext,
                 targetApp: targetApp,
                 recentDictations: recentDictations,
-                sessionIntent: sessionIntent
+                sessionIntent: sessionIntent,
+                task: task
             )
         }
         #endif
@@ -98,6 +100,13 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
 }
 
 #if canImport(FoundationModels)
+@available(macOS 26.0, *)
+@Generable
+private struct PolishedSessionContext {
+    @Guide(description: "The session context phrase only. One or two short sentences. No greeting, labels, or quotes.")
+    var text: String
+}
+
 @available(macOS 26.0, *)
 @Generable
 private struct PolishedDictation {
@@ -135,10 +144,19 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         personalContext: String = "",
         targetApp: String? = nil,
         recentDictations: String = "",
-        sessionIntent: String = ""
+        sessionIntent: String = "",
+        task: PolishTask = .dictation
     ) async throws -> PolishedText {
         guard SystemLanguageModel.default.isAvailable else {
             throw PolisherError.notAvailable(LocalLLMPolisher.statusMessage)
+        }
+
+        if task == .sessionContext {
+            return try await polishSessionContext(
+                text,
+                dictionary: dictionary,
+                personalContext: personalContext
+            )
         }
 
         let fp = fingerprint(dictionary: dictionary, personalContext: personalContext)
@@ -181,6 +199,50 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
                 text: sanitized,
                 contextRelevant: judged ? generated.1 : nil
             )
+        } catch is CancellationError {
+            throw PolisherError.notAvailable("On-device polish timed out.")
+        } catch let error as PolisherError {
+            throw error
+        } catch {
+            if Self.looksLikeTruncation(error) {
+                throw PolisherError.truncated
+            }
+            throw PolisherError.notAvailable(error.localizedDescription)
+        }
+    }
+
+    private func polishSessionContext(
+        _ text: String,
+        dictionary: [String],
+        personalContext: String
+    ) async throws -> PolishedText {
+        let session = LanguageModelSession(
+            model: SystemLanguageModel(
+                useCase: .general,
+                guardrails: .permissiveContentTransformations
+            ),
+            instructions: CleanupPrompt.contextSystem(
+                dictionary: dictionary,
+                personalContext: personalContext
+            )
+        )
+        let prompt = CleanupPrompt.wrapContextTranscript(text)
+        let options = GenerationOptions(
+            sampling: .greedy,
+            maximumResponseTokens: min(PolishOutput.maxOutputTokens(for: text), 128)
+        )
+        do {
+            let generated = try await withTimeout(timeoutSeconds) { () -> String in
+                let response = try await session.respond(
+                    to: prompt,
+                    generating: PolishedSessionContext.self,
+                    options: options
+                )
+                return response.content.text
+            }
+            let sanitized = PolishOutput.sanitize(generated)
+            guard !sanitized.isEmpty else { throw PolisherError.emptyResponse }
+            return PolishedText(text: sanitized, contextRelevant: nil)
         } catch is CancellationError {
             throw PolisherError.notAvailable("On-device polish timed out.")
         } catch let error as PolisherError {

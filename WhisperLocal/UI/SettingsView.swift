@@ -121,7 +121,7 @@ struct SettingsView: View {
         settingsForm {
             if AppIdentity.isDevBuild {
                 Section {
-                    Text("This is the Dev app. It does not replace /Applications/WhisperLocal.app. Default hotkey is Right Option so Globe / Fn stays on the public copy. Grant Microphone, Accessibility, and Input Monitoring for WhisperLocal Dev separately.")
+                    Text("This is the Dev app \(AppIdentity.versionSummary). It does not replace /Applications/WhisperLocal.app. Default hotkey is Right Option so Globe / Fn stays on the public copy. Grant Microphone, Accessibility, and Input Monitoring for WhisperLocal Dev separately.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -141,7 +141,7 @@ struct SettingsView: View {
                 Text(hotKey.mode.helpText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("Hold Shift with the hotkey to set a temporary polish context — nothing is pasted. Toggle it under Polish.")
+                Text("Press Shift during a take to switch it to session context; press Shift again to switch back. Context is distilled into a short topic (nothing pasted). Edit it from the menu or under Polish.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -277,6 +277,9 @@ struct SettingsView: View {
                 Text(sessionContextHelp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if settings.enableSessionContext {
+                    SessionContextEditor(controller: controller)
+                }
             }
         }
     }
@@ -906,11 +909,12 @@ struct SettingsView: View {
     }
 
     private var sessionContextHelp: String {
-        let chord = "Shift + \(hotKey.selectedKey.displayName)"
+        let hotkey = hotKey.selectedKey.displayName
+        let shared = "Press Shift while talking to switch this take to session context; press Shift again to switch back to a normal paste. You can also start with Shift + \(hotkey). The orange CONTEXT badge is the mode that will be used when you finish. Spoken context is rewritten into a short topic with a hidden engine prompt (not shown in Settings); your About you notes still help with names. Nothing is pasted. Later takes send it with polish so names and jargon resolve. It expires after a few off-topic takes or 45 minutes idle, and is not saved into your system prompt or across launches. Edit it below if speech got it wrong."
         if settings.hasUsableCloudPolish {
-            return "Hold \(chord) and speak one sentence about what you are working on. Nothing is pasted. That sentence rides with later polish requests for vocabulary and register, then expires. It is not saved into your system prompt or across launches. With cloud polish, that text also goes to the API."
+            return shared + " With cloud polish, that text also goes to the API."
         }
-        return "Hold \(chord) and speak one sentence about what you are working on. Nothing is pasted. That sentence rides with later polish requests for vocabulary and register, then expires after a few off-topic takes or 45 minutes idle. It is not saved into your system prompt or across launches."
+        return shared
     }
 
     private var recentPolishLogsHelp: String {

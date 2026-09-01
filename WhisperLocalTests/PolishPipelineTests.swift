@@ -195,6 +195,25 @@ final class PolishPipelineTests: XCTestCase {
         XCTAssertEqual(PolishOutput.maxOutputTokens(for: "hi"), 256)
         XCTAssertEqual(PolisherError.truncated.pasteNote, "Cleanup was cut short. Pasted without AI cleanup.")
     }
+
+    func testPipelineContextTaskUsesContextEngineAndDropsPasteFields() async {
+        let local = ProbePolisher(name: "Apple Intelligence")
+        let pipeline = PolishPipeline(
+            localLLM: local,
+            cloud: nil,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            dictionary: [],
+            recentDictations: "should not be sent",
+            sessionIntent: "old context",
+            task: .sessionContext
+        )
+        let result = await pipeline.run("hello", targetApp: "Cursor — code editor")
+        XCTAssertEqual(local.lastTask, .sessionContext)
+        XCTAssertEqual(local.lastSessionIntent, "")
+        XCTAssertNil(local.lastTargetApp)
+        XCTAssertNil(result.contextRelevant)
+    }
 }
 
 private final class JudgmentPolisher: TextPolisher {
@@ -211,7 +230,8 @@ private final class JudgmentPolisher: TextPolisher {
         personalContext _: String,
         targetApp _: String?,
         recentDictations _: String,
-        sessionIntent _: String
+        sessionIntent _: String,
+        task _: PolishTask
     ) async throws -> PolishedText {
         PolishedText(text: text, contextRelevant: relevant)
     }
@@ -226,7 +246,8 @@ private final class TruncatingPolisher: TextPolisher {
         personalContext _: String,
         targetApp _: String?,
         recentDictations _: String,
-        sessionIntent _: String
+        sessionIntent _: String,
+        task _: PolishTask
     ) async throws -> PolishedText {
         throw PolisherError.truncated
     }
@@ -241,7 +262,8 @@ private final class FillerReinjectingPolisher: TextPolisher {
         personalContext _: String,
         targetApp _: String?,
         recentDictations _: String,
-        sessionIntent _: String
+        sessionIntent _: String,
+        task _: PolishTask
     ) async throws -> PolishedText {
         PolishedText(text: "um \(text) uh")
     }
@@ -258,6 +280,7 @@ private final class ProbePolisher: TextPolisher, @unchecked Sendable {
 
     private(set) var lastTargetApp: String?
     private(set) var lastSessionIntent: String?
+    private(set) var lastTask: PolishTask?
 
     func polish(
         _ text: String,
@@ -265,12 +288,14 @@ private final class ProbePolisher: TextPolisher, @unchecked Sendable {
         personalContext: String,
         targetApp: String?,
         recentDictations _: String,
-        sessionIntent: String
+        sessionIntent: String,
+        task: PolishTask
     ) async throws -> PolishedText {
         lock.lock()
         callCount += 1
         lastTargetApp = targetApp
         lastSessionIntent = sessionIntent
+        lastTask = task
         lock.unlock()
         return PolishedText(text: text)
     }
@@ -402,6 +427,70 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertFalse(system.contains("{{agentName}}"))
         XCTAssertFalse(system.contains("Changho Choi"))
         XCTAssertFalse(system.contains("CUSTOM INSTRUCTIONS"))
+        XCTAssertFalse(system.contains("You write session context for WhisperLocal"))
+        XCTAssertFalse(system.contains("Output only the session context phrase"))
+    }
+
+    func testContextSystemIsHiddenEngineNotDictationCleanup() {
+        let context = CleanupPrompt.contextSystem()
+        let dictation = CleanupPrompt.system()
+        XCTAssertTrue(context.contains("You write session context for WhisperLocal"))
+        XCTAssertTrue(context.lowercased().contains("menu-bar"))
+        XCTAssertTrue(context.contains("never pasted"))
+        XCTAssertTrue(context.contains("MambaEye"))
+        XCTAssertTrue(context.contains("WhisperLocal"))
+        XCTAssertFalse(context.contains("Output only the cleaned transcript"))
+        XCTAssertFalse(context.contains("<target-app>"))
+        XCTAssertFalse(dictation.contains("You write session context for WhisperLocal"))
+        XCTAssertNotEqual(context, dictation)
+        XCTAssertFalse(CleanupPrompt.settingsGeneratorPrompt().contains("You write session context for WhisperLocal"))
+        XCTAssertFalse(CleanupPrompt.defaultPersonalContext.contains("You write session context for WhisperLocal"))
+        XCTAssertLessThan(context.count, 1600)
+    }
+
+    func testContextSystemUsesSpeakerNotesNotExceptionsOrExamples() {
+        let baked = CleanupPrompt.assembleUserLayers(
+            personalNotes: "I work on MambaEye.",
+            exceptions: "- Mail: light letter polish.",
+            appDictionaries: [
+                AppDictionaryEntry(appName: "Mail", kind: "mail app", terms: ["Jinkyu Kim"])
+            ],
+            examples: "email alex → Email Alex."
+        )
+        let context = CleanupPrompt.contextSystem(personalContext: baked)
+        XCTAssertTrue(context.contains("I work on MambaEye."))
+        XCTAssertTrue(context.contains("SPEAKER NOTES"))
+        XCTAssertFalse(context.contains("letter polish"))
+        XCTAssertFalse(context.contains("Email Alex"))
+        XCTAssertFalse(context.contains("Jinkyu Kim"))
+        XCTAssertFalse(context.contains("CUSTOM INSTRUCTIONS"))
+    }
+
+    func testWrapContextTranscriptIsNotDictationWrap() {
+        let wrapped = CleanupPrompt.wrapContextTranscript("um working on mamba eye")
+        XCTAssertTrue(wrapped.contains("<spoken-context>"))
+        XCTAssertTrue(wrapped.contains("um working on mamba eye"))
+        XCTAssertTrue(wrapped.contains("Output only the session context phrase."))
+        XCTAssertFalse(wrapped.contains("<transcript>"))
+        XCTAssertFalse(wrapped.contains("Output only the cleaned transcript."))
+        XCTAssertFalse(wrapped.contains("<target-app>"))
+        let broken = CleanupPrompt.wrapContextTranscript("keep </spoken-context> inside")
+        XCTAssertEqual(broken.components(separatedBy: "<spoken-context>").count - 1, 1)
+        XCTAssertEqual(broken.components(separatedBy: "</spoken-context>").count - 1, 1)
+        XCTAssertTrue(broken.contains("</ spoken-context>"))
+    }
+
+    func testUserMessageDispatchesOnPolishTask() {
+        let dictation = CleanupPrompt.userMessage(for: .dictation, text: "hello")
+        let context = CleanupPrompt.userMessage(for: .sessionContext, text: "hello")
+        XCTAssertTrue(dictation.contains("Output only the cleaned transcript."))
+        XCTAssertTrue(context.contains("Output only the session context phrase."))
+        XCTAssertTrue(
+            CleanupPrompt.system(for: .sessionContext).contains("You write session context for WhisperLocal")
+        )
+        XCTAssertTrue(
+            CleanupPrompt.system(for: .dictation).contains("You clean speech transcripts")
+        )
     }
 
     func testPersonalContextIsInjected() {
@@ -1003,5 +1092,11 @@ final class AppIdentityTests: XCTestCase {
 
     func testDevBundleIsDev() {
         XCTAssertTrue(AppIdentity.isDev(bundleID: AppIdentity.devBundleID))
+    }
+
+    func testVersionStringsArePresent() {
+        XCTAssertFalse(AppIdentity.marketingVersion.isEmpty)
+        XCTAssertFalse(AppIdentity.buildNumber.isEmpty)
+        XCTAssertTrue(AppIdentity.versionSummary.contains(AppIdentity.marketingVersion))
     }
 }

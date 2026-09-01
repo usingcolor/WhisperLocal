@@ -23,8 +23,25 @@ enum AppIdentity {
         isDevBuild ? "WhisperLocal Dev" : "WhisperLocal"
     }
 
+    static var marketingVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+    }
+
+    static var buildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+    }
+
+    /// Dev includes the build so two installs of the same marketing version stay distinguishable.
+    static var versionSummary: String {
+        isDevBuild ? "\(marketingVersion) (\(buildNumber))" : marketingVersion
+    }
+
+    static var menuVersionLine: String {
+        isDevBuild ? "Dev \(versionSummary)" : "Version \(marketingVersion)"
+    }
+
     static var settingsWindowTitle: String {
-        "\(productName) Settings"
+        isDevBuild ? "\(productName) \(versionSummary)" : "\(productName) Settings"
     }
 
     static var supportFolderName: String {

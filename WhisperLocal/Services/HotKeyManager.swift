@@ -71,6 +71,8 @@ final class HotKeyManager: ObservableObject {
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
     var onCancel: (() -> Void)?
+    /// Shift pressed while a take is running. `true` = context, `false` = paste. Can flip either way.
+    var onIntentModifierChanged: ((Bool) -> Void)?
 
     private var flagsMonitor: Any?
     private var keyMonitor: Any?
@@ -79,8 +81,9 @@ final class HotKeyManager: ObservableObject {
     private var isHolding = false
     /// True while a hold-session is active (used so Esc can cancel).
     private(set) var isSessionActive = false
-    /// Shift was down on the hotkey press that started this take. Read once in `beginRecording`.
+    /// Shift switch for the current take. Sampled at start, toggled by later Shift presses, read at finish.
     private(set) var intentModifierHeld = false
+    private var shiftWasDown = false
 
     init() {
         if let raw = UserDefaults.standard.string(forKey: "hotkeyChoice"),
@@ -107,6 +110,7 @@ final class HotKeyManager: ObservableObject {
 
     func start() {
         stop()
+        shiftWasDown = NSEvent.modifierFlags.contains(.shift)
 
         flagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             DispatchQueue.main.async {
@@ -148,11 +152,28 @@ final class HotKeyManager: ObservableObject {
         isHolding = false
         isSessionActive = false
         intentModifierHeld = false
+        shiftWasDown = false
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
-        guard event.keyCode == selectedKey.keyCode else { return }
+        let shiftDown = event.modifierFlags.contains(.shift)
+        let shiftPressed = shiftDown && !shiftWasDown
+        shiftWasDown = shiftDown
 
+        let isHotkeyEvent = event.keyCode == selectedKey.keyCode
+        if isHotkeyEvent {
+            handleHotkeyFlagsChanged(event, shiftDown: shiftDown)
+        }
+
+        // Shift is a switch for this take: press to turn context on, press again to turn it off.
+        // Skip the hotkey event so Shift+hotkey at start is counted once, and stop doesn't flip it.
+        if isSessionActive, shiftPressed, !isHotkeyEvent {
+            intentModifierHeld.toggle()
+            onIntentModifierChanged?(intentModifierHeld)
+        }
+    }
+
+    private func handleHotkeyFlagsChanged(_ event: NSEvent, shiftDown: Bool) {
         let pressed: Bool
         switch selectedKey {
         case .rightOption, .leftOption:
@@ -166,18 +187,25 @@ final class HotKeyManager: ObservableObject {
         switch mode {
         case .hold:
             if pressed && !isHolding {
-                intentModifierHeld = event.modifierFlags.contains(.shift)
+                intentModifierHeld = shiftDown
                 isHolding = true
                 isSessionActive = true
                 onPress?()
             } else if !pressed && isHolding {
                 isHolding = false
+                isSessionActive = false
                 onRelease?()
             }
         case .tap:
             // Toggle on key-down edge only (ignore release).
             if pressed && !isHolding {
-                intentModifierHeld = event.modifierFlags.contains(.shift)
+                if !isSessionActive {
+                    intentModifierHeld = shiftDown
+                    isSessionActive = true
+                } else {
+                    // Stopping: freeze the switch so the finish path reads the last choice.
+                    isSessionActive = false
+                }
                 isHolding = true
                 onPress?()
             } else if !pressed && isHolding {

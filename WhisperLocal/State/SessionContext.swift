@@ -21,8 +21,36 @@ struct SessionContext: Equatable, Sendable {
     static func capped(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > maxCharacters else { return trimmed }
-        let end = trimmed.index(trimmed.startIndex, offsetBy: maxCharacters)
-        return String(trimmed[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let budget = maxCharacters - 1
+        let end = trimmed.index(trimmed.startIndex, offsetBy: budget)
+        let head = String(trimmed[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return head + "…"
+    }
+
+    /// Menu-bar age from `setAt`. Nil while the phrase is still fresh (under a minute).
+    static func ageLabel(setAt: Date, now: Date) -> String? {
+        let seconds = now.timeIntervalSince(setAt)
+        guard seconds >= 60 else { return nil }
+        let minutes = Int(seconds / 60)
+        if minutes < 60 {
+            return minutes == 1 ? "1 min ago" : "\(minutes) min ago"
+        }
+        let hours = minutes / 60
+        return hours == 1 ? "1 hr ago" : "\(hours) hr ago"
+    }
+
+    func menuLine(now: Date = Date(), phraseLimit: Int = 56) -> String {
+        let phrase: String
+        if text.count <= phraseLimit {
+            phrase = text
+        } else {
+            let end = text.index(text.startIndex, offsetBy: max(phraseLimit - 1, 0))
+            phrase = String(text[..<end]).trimmingCharacters(in: .whitespaces) + "…"
+        }
+        if let age = Self.ageLabel(setAt: setAt, now: now) {
+            return "Context: \(phrase) · set \(age)"
+        }
+        return "Context: \(phrase)"
     }
 
     static func isExpired(_ context: SessionContext, now: Date) -> Bool {

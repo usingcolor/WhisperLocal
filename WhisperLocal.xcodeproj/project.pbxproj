@@ -11,6 +11,7 @@
 		18B6B2A9941C3D8D4041791B /* OpenAIPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005FD23F400A298F93508D18 /* OpenAIPolisher.swift */; };
 		1BBDFC011CF6AA23F30046CD /* AppUpdateFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */; };
 		1D50AA3CEE8B37409DA4B35B /* AudioInputRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */; };
+		22AB783D17862B8DDB743D56 /* SessionContextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EEFF6A4C488C19CF87AF301 /* SessionContextEditor.swift */; };
 		2492640D252CC0BB949F2270 /* WindowFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5763CB6E982097551A2347A /* WindowFocus.swift */; };
 		257AE55C48A885FAEF6FADFC /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A7E52EF80A958922373895 /* OnboardingView.swift */; };
 		2DE43BEE1ABCCCDE4B8FEB29 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44C4928A4E716CB8E7823B2 /* HotKeyManager.swift */; };
@@ -82,6 +83,7 @@
 		48CBEDA339771ED2790D9F89 /* CleanupPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupPrompt.swift; sourceTree = "<group>"; };
 		4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemmaMLXPolisher.swift; sourceTree = "<group>"; };
 		4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateFeed.swift; sourceTree = "<group>"; };
+		4EEFF6A4C488C19CF87AF301 /* SessionContextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionContextEditor.swift; sourceTree = "<group>"; };
 		68A7E52EF80A958922373895 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		6FCC628C5CD310EC5C6F34E0 /* AnthropicPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicPolisher.swift; sourceTree = "<group>"; };
 		748E974DF04BD7DC99D7796A /* WhisperLocalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperLocalApp.swift; sourceTree = "<group>"; };
@@ -235,6 +237,7 @@
 				9B2368773CE8F483F2B05DC9 /* DictationLogView.swift */,
 				68A7E52EF80A958922373895 /* OnboardingView.swift */,
 				22AEB3874E72F1200F202546 /* RecordingHUD.swift */,
+				4EEFF6A4C488C19CF87AF301 /* SessionContextEditor.swift */,
 				7E19E3CCC2AD2335AECE85AB /* SettingsView.swift */,
 			);
 			path = UI;
@@ -407,6 +410,7 @@
 				ACAF76996E8C668DA5DD5B75 /* PermissionManager.swift in Sources */,
 				55508417CAC3686AF9D7212F /* RecordingHUD.swift in Sources */,
 				C8AF85C8CA7C1B8F3B32390C /* SessionContext.swift in Sources */,
+				22AB783D17862B8DDB743D56 /* SessionContextEditor.swift in Sources */,
 				3734CB93A0CCF86BB2613CEC /* SettingsStore.swift in Sources */,
 				82932228A06406AFBCB3ABDE /* SettingsView.swift in Sources */,
 				3FDBFD6B24BF76442776DEE2 /* TextInserter.swift in Sources */,
@@ -452,7 +456,7 @@
 				CODE_SIGN_ENTITLEMENTS = WhisperLocal/App/WhisperLocal.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXCLUDED_ARCHS = x86_64;
@@ -463,7 +467,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.8;
+				MARKETING_VERSION = 0.1.9;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(inherited) -weak_framework FoundationModels";
 				PRODUCT_BUNDLE_IDENTIFIER = com.usingcolor.WhisperLocal.dev;
@@ -546,7 +550,7 @@
 				CODE_SIGN_ENTITLEMENTS = WhisperLocal/App/WhisperLocal.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXCLUDED_ARCHS = x86_64;
@@ -557,7 +561,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.8;
+				MARKETING_VERSION = 0.1.9;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(inherited) -weak_framework FoundationModels";
 				PRODUCT_BUNDLE_IDENTIFIER = com.usingcolor.WhisperLocal.dev;
@@ -756,7 +760,7 @@
 				CODE_SIGN_ENTITLEMENTS = WhisperLocal/App/WhisperLocal.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXCLUDED_ARCHS = x86_64;
@@ -767,7 +771,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.8;
+				MARKETING_VERSION = 0.1.9;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(inherited) -weak_framework FoundationModels";
 				PRODUCT_BUNDLE_IDENTIFIER = com.usingcolor.WhisperLocal;

@@ -24,7 +24,7 @@ enum DictationPhase: Equatable {
         case .waitingForMic: return "Waiting for mic…"
         case .recording: return "Listening…"
         case .processing: return "Transcribing…"
-        case .settingContext: return "Setting context…"
+        case .settingContext: return "Transcribing context…"
         case .polishing: return "Polishing…"
         case .inserting: return "Inserting…"
         case .success: return "Done"
@@ -65,8 +65,8 @@ final class DictationController: ObservableObject {
     private var didBootstrapSpeech = false
     /// Bumped at the start of each take so a late success-sleeper cannot idle a newer session.
     private var sessionGeneration = 0
-    /// Snapshot of Shift+hotkey for this take. Never inferred from transcript content.
-    private var isIntentTake = false
+    /// Shift switch for this take (context vs paste). Never inferred from transcript content. Snapshot at finish.
+    @Published private(set) var isIntentTake = false
 
     private init() {
         transcription.objectWillChange
@@ -133,6 +133,9 @@ final class DictationController: ObservableObject {
         hotKey.onCancel = { [weak self] in
             Task { @MainActor in self?.cancelRecording() }
         }
+        hotKey.onIntentModifierChanged = { [weak self] intent in
+            self?.setRecordingIntent(intent)
+        }
         hotKey.start()
 
         permissions.refresh()
@@ -189,16 +192,22 @@ final class DictationController: ObservableObject {
         permissions.refresh()
 
         guard permissions.microphoneGranted else {
+            isIntentTake = false
+            hotKey.markSessionActive(false)
             phase = .error("Microphone permission required")
             showOnboarding = true
             return
         }
         guard permissions.accessibilityTrusted else {
+            isIntentTake = false
+            hotKey.markSessionActive(false)
             phase = .error("Accessibility permission required")
             showOnboarding = true
             return
         }
         guard transcription.isReady else {
+            isIntentTake = false
+            hotKey.markSessionActive(false)
             phase = .error(transcription.statusMessage)
             hud.flashError(transcription.statusMessage)
             return
@@ -212,16 +221,23 @@ final class DictationController: ObservableObject {
             hotKey.markSessionActive(true)
             if recorder.isInputReady {
                 phase = .recording
-                hud.show(phase: .recording, levelPublisher: recorder)
+                hud.show(phase: .recording, levelPublisher: recorder, contextCapture: isIntentTake)
             } else {
                 phase = .waitingForMic
-                hud.show(phase: .waitingForMic, levelPublisher: recorder)
+                hud.show(phase: .waitingForMic, levelPublisher: recorder, contextCapture: isIntentTake)
             }
         } catch {
+            isIntentTake = false
             phase = .error(error.localizedDescription)
             hotKey.markSessionActive(false)
             hud.flashError(error.localizedDescription)
         }
+    }
+
+    private func setRecordingIntent(_ intent: Bool) {
+        guard phase == .recording || phase == .waitingForMic else { return }
+        isIntentTake = settings.enableSessionContext && settings.enableTextCleanup && intent
+        hud.setContextCapture(isIntentTake)
     }
 
     private func cancelRecording() {
@@ -237,6 +253,8 @@ final class DictationController: ObservableObject {
 
     private func finishRecording() {
         guard phase == .recording || phase == .waitingForMic else { return }
+        // Paste vs context is the Shift switch at the end of the take, not the first press.
+        setRecordingIntent(hotKey.intentModifierHeld)
         let samples = recorder.stop()
         hotKey.markSessionActive(false)
 
@@ -267,8 +285,8 @@ final class DictationController: ObservableObject {
             return
         }
 
-        phase = .processing
-        hud.update(phase: .processing)
+        phase = isIntentTake ? .settingContext : .processing
+        hud.update(phase: phase)
 
         Task {
             await process(samples: samples)
@@ -405,7 +423,7 @@ final class DictationController: ObservableObject {
         }
     }
 
-    private func makePipeline() -> PolishPipeline {
+    private func makePipeline(sessionIntentOverride: String? = nil, task: PolishTask = .dictation) -> PolishPipeline {
         var cloud: (any TextPolisher)?
         switch settings.cloudPolishProvider {
         case .none:
@@ -429,7 +447,8 @@ final class DictationController: ObservableObject {
             dictionary: CleanupPrompt.mergedDictionary(settings.dictionaryWords),
             personalContext: settings.cleanupPersonalContext,
             recentDictations: recentDictationsForPolish(),
-            sessionIntent: liveSessionIntent()
+            sessionIntent: sessionIntentOverride ?? liveSessionIntent(),
+            task: task
         )
     }
 
@@ -445,23 +464,48 @@ final class DictationController: ObservableObject {
     }
 
     private func storeSessionContext(from raw: String) async {
+        let generation = sessionGeneration
         phase = .settingContext
         hud.update(phase: .settingContext)
-        let stripped = VocalFillerFilter.strip(raw)
-        guard let context = SessionContext.make(text: stripped) else {
+        if settings.enableTextCleanup && (
+            settings.shouldRunOnDevicePolish
+                || settings.hasUsableCloudPolish
+        ) {
+            phase = .polishing
+            hud.update(phase: .polishing)
+        }
+        // Empty override so an older phrase is not sent while polishing its replacement.
+        let result = await makePipeline(sessionIntentOverride: "", task: .sessionContext).run(raw, targetApp: nil)
+        guard generation == sessionGeneration else { return }
+
+        var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty {
+            text = VocalFillerFilter.strip(raw)
+        }
+        guard let context = SessionContext.make(text: text) else {
             phase = .error("Heard nothing")
             hud.flashError("Heard nothing")
             return
         }
         sessionContext = context
         lastPolished = context.text
-        lastStages = ["Session context"]
-        let generation = sessionGeneration
+        lastStages = ["Session context"] + result.stages
+        lastCleanupNote = result.cleanupNote
         hud.flashSuccess(note: context.text)
         try? await Task.sleep(nanoseconds: 1_600_000_000)
         guard generation == sessionGeneration else { return }
         phase = .idle
         hud.hide()
+    }
+
+    func replaceSessionContext(fromEditedText raw: String) {
+        sessionContext = SessionContext.make(text: raw)
+    }
+
+    /// Live phrase for the editor. Empty when unset or expired.
+    var sessionContextText: String {
+        guard hasActiveSessionContext else { return "" }
+        return sessionContext?.text ?? ""
     }
 
     private func rememberSessionContextUse(relevant: Bool?, now: Date = Date()) {
@@ -592,16 +636,19 @@ final class DictationController: ObservableObject {
         }
     }
 
-    /// Active spoken context for the menu bar. Hidden when empty or idle-expired.
+    /// Active spoken context for the menu bar. Nil when the feature is off.
+    /// Empty takes still return a "not set" line so you can see the build has the feature.
     var sessionContextLine: String? {
         guard settings.enableSessionContext else { return nil }
-        guard let context = sessionContext, !context.isExpired(now: Date()) else { return nil }
-        let text = context.text
-        if text.count <= 56 {
-            return "Context: \(text)"
+        if let context = sessionContext, !context.isExpired(now: Date()) {
+            return context.menuLine()
         }
-        let end = text.index(text.startIndex, offsetBy: 55)
-        return "Context: \(String(text[..<end]).trimmingCharacters(in: .whitespaces))…"
+        return "Context: not set — press Shift during a take"
+    }
+
+    var hasActiveSessionContext: Bool {
+        guard settings.enableSessionContext, let context = sessionContext else { return false }
+        return !context.isExpired(now: Date())
     }
 
     private func cloudPolishModelName(_ provider: CloudPolishProvider) -> String {

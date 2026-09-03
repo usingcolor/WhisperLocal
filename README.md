@@ -42,27 +42,10 @@ If you want Windows or Linux, streaming transcription, or a large model catalog,
 
 Apple Silicon only. Grab the DMG from [Releases](https://github.com/usingcolor/WhisperLocal/releases/latest) — no Xcode and no git clone required.
 
-> **macOS will block the first launch, and that is expected.**
-> Releases are ad-hoc signed, not Apple-notarized. Notarization requires the Apple
-> Developer Program at $99/year, which this project does not pay for. The steps below
-> get you past it in about ten seconds. If you would rather not bypass Gatekeeper at
-> all, [build from source](#build-from-source) instead — a locally built app is never
-> quarantined, so nothing blocks it.
-
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
-2. Open **WhisperLocal**. macOS will refuse and say it cannot verify the developer.
-3. Go to **System Settings → Privacy & Security**, scroll to **Security**, and click
-   **Open Anyway** next to the WhisperLocal message. Confirm, and it launches.
-4. Grant **Microphone** and **Accessibility** when asked.
+2. Open **WhisperLocal** and grant **Microphone** and **Accessibility** when asked.
 
-Right-click → **Open** no longer works on macOS 15 and later; use **Open Anyway** above.
-
-**If macOS says "WhisperLocal is damaged and can't be opened"** there is no Open Anyway
-button for that message. Clear the quarantine flag, then open it normally:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
-```
+Current releases are Developer ID signed, Apple-notarized, and stapled, so Gatekeeper lets them open. **Check for Updates** is in the menu bar.
 
 Verify what you downloaded against the `SHA256SUMS` published with each release:
 
@@ -70,7 +53,13 @@ Verify what you downloaded against the `SHA256SUMS` published with each release:
 shasum -a 256 ~/Downloads/WhisperLocal-*-arm64.dmg
 ```
 
-WhisperLocal lives in the menu bar — there's no Dock icon and no window to keep open. **Check for Updates** is in the menu.
+WhisperLocal lives in the menu bar — there's no Dock icon and no window to keep open.
+
+Older **0.1.8** and earlier DMGs were ad-hoc signed. If macOS blocks one of those, use **System Settings → Privacy & Security → Open Anyway**, or:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
+```
 
 ## Usage
 
@@ -229,7 +218,7 @@ xcodebuild -scheme WhisperLocal -configuration Release \
   build
 ```
 
-Build an ad-hoc signed Release DMG with `bash scripts/make-dmg.sh`. Re-run `xcodegen generate` after changing `project.yml` or moving files. The release workflow opts into Developer ID signing and notarization only when its Apple repository secrets are available.
+Build an ad-hoc signed Release DMG locally with `bash scripts/make-dmg.sh`. GitHub Releases are Developer ID signed and notarized. Re-run `xcodegen generate` after changing `project.yml` or moving files.
 
 Speech models are not in this repo — Whisper and Parakeet download from Hugging Face into the engine cache on first use.
 

@@ -729,7 +729,7 @@ enum CleanupPrompt {
 
     If they cancel a phrase or restart a sentence, keep only the final wording. Drop the abandoned fragment and markers (scratch that, wait no, I mean, or rather). Do the same when they trail off and start over with no marker — a leftover start plus a clear restart is not two sentences.
 
-    Drop vocalized pauses written as words: um, uh, uhm, er, ah, hmm, mm, mhm.
+    Drop vocalized pauses written as words: um, uh, uhm, er, ah, hmm, mm, mhm. Keep "mm" when it is the unit after a number (5 mm, 50 mm).
 
     Use <target-app>, <app-notes>, <app-dictionary>, and <session-intent> when present. Never name the app — they are dictating into it, not about it.
 

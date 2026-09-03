@@ -11,6 +11,7 @@ Then grant Microphone and Accessibility. Default ASR is Apple Speech on macOS 26
 - **Spoken session context.** Press Shift during a take to store a short, temporary note about what you are working on. Nothing is pasted. Later dictations send it with polish so names and jargon resolve. Press Shift again to switch back to a normal paste. Edit or clear it from the menu or Settings. It is not saved across launches.
 - Context takes use a hidden polish engine that distills what you said into a short topic. Your About you notes still help with names. With cloud polish, that phrase goes to the API too.
 - The HUD shows an orange CONTEXT badge while that take is in progress, so it is obvious this will not paste.
+- Polish no longer strips spoken millimetres (`5 mm`, `50 mm`) after LLM cleanup.
 
 ## 0.1.7
 

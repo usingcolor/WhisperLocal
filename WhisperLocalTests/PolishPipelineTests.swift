@@ -423,6 +423,8 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertTrue(system.contains("poem about the ocean"))
         XCTAssertTrue(system.lowercased().contains("dictating into"))
         XCTAssertTrue(system.contains("<session-intent>"))
+        // The prompt must not undo VocalFillerFilter's millimetre carve-out.
+        XCTAssertTrue(system.contains("Keep \"mm\" when it is the unit after a number"))
         XCTAssertLessThan(system.count, 1450)
         XCTAssertFalse(system.contains("{{agentName}}"))
         XCTAssertFalse(system.contains("Changho Choi"))

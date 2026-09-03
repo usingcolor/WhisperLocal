@@ -935,7 +935,7 @@ struct SettingsView: View {
         case .parakeet:
             Text("Parakeet TDT 0.6B v2 is NVIDIA’s English model (CC-BY-4.0), running on-device via FluidAudio. First load downloads CoreML weights from Hugging Face.")
         case .appleSpeech:
-            Text("On-device Apple SpeechTranscriber (macOS 26). English, even if the system language is Korean. The OS may download a shared speech model on first use. Each take is written to a private temp file and deleted after transcription; audio stays on this Mac.")
+            Text("On-device Apple SpeechTranscriber (macOS 26). English, even if that is not the system language. The OS may download a shared speech model on first use. Each take is written to a private temp file and deleted after transcription; audio stays on this Mac.")
         }
     }
 

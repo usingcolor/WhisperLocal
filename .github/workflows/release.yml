@@ -125,6 +125,10 @@ jobs:
             echo "error: APPLE_TEAM_ID does not match the imported Developer ID team ${identity_team:-unknown}." >&2
             exit 1
           fi
+          if [[ ! "$APPLE_API_ISSUER" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo "error: APPLE_API_ISSUER must be the App Store Connect Issuer ID (a UUID), not the Team ID or Key ID." >&2
+            exit 1
+          fi
 
           echo "enabled=1" >> "$GITHUB_OUTPUT"
           echo "identity=$identity" >> "$GITHUB_OUTPUT"

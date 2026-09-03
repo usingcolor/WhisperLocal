@@ -140,7 +140,7 @@ if [[ "$signed_release" == "1" ]]; then
     echo "error: app is not signed by a Developer ID Application certificate." >&2
     exit 1
   fi
-  if ! grep -Eq '^flags=.*\(runtime\)' <<<"$signature_info"; then
+  if ! grep -Eq 'flags=0x[0-9a-fA-F]*\(runtime\)' <<<"$signature_info"; then
     echo "error: app signature does not enable the hardened runtime." >&2
     exit 1
   fi

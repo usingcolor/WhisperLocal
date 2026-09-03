@@ -62,8 +62,13 @@ derived="${root}/build/DerivedData"
 if [[ "$signed_release" == "1" ]]; then
   echo "==> Building WhisperLocal ${version} (Release, arm64, Developer ID)"
   hardened_runtime=YES
+  if [[ -n "${CODESIGN_KEYCHAIN:-}" ]]; then
+    security default-keychain -d user -s "$CODESIGN_KEYCHAIN"
+  fi
+  # Xcode matches Developer ID by type + team; the full common name is used
+  # later when signing the DMG with codesign.
   build_signing_args=(
-    "CODE_SIGN_IDENTITY=$codesign_identity"
+    "CODE_SIGN_IDENTITY=Developer ID Application"
     "CODE_SIGN_STYLE=Manual"
     "CODE_SIGNING_ALLOWED=YES"
     "DEVELOPMENT_TEAM=${APPLE_TEAM_ID:-}"

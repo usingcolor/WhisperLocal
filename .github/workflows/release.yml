@@ -73,6 +73,8 @@ jobs:
           printf '%s' "$APPLE_DEVELOPER_ID_P12_BASE64" | base64 --decode > "$certificate_path"
           printf '%s' "$APPLE_API_KEY_P8" > "$api_key_path"
           chmod 600 "$certificate_path" "$api_key_path"
+          APPLE_API_KEY_ID="$(tr -d '[:space:]' <<<"$APPLE_API_KEY_ID")"
+          APPLE_API_ISSUER="$(tr -d '[:space:]' <<<"$APPLE_API_ISSUER")"
 
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
@@ -127,6 +129,18 @@ jobs:
           fi
           if [[ ! "$APPLE_API_ISSUER" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
             echo "error: APPLE_API_ISSUER must be the App Store Connect Issuer ID (a UUID), not the Team ID or Key ID." >&2
+            exit 1
+          fi
+          if ! grep -q 'BEGIN PRIVATE KEY' "$api_key_path"; then
+            echo "error: APPLE_API_KEY_P8 does not look like an AuthKey .p8 PEM. Set it from the file, not a paste that lost newlines." >&2
+            exit 1
+          fi
+          if ! xcrun notarytool history \
+            --key "$api_key_path" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --output-format json >/dev/null; then
+            echo "error: notarytool rejected APPLE_API_KEY_P8 / APPLE_API_KEY_ID / APPLE_API_ISSUER (401 or similar). They must be the matching Team key from App Store Connect, signed in as the paid account." >&2
             exit 1
           fi
 

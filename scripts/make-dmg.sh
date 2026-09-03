@@ -29,6 +29,8 @@ if [[ "$notarize" == "1" ]]; then
       exit 1
     fi
   done
+  NOTARYTOOL_KEY_ID="$(tr -d '[:space:]' <<<"$NOTARYTOOL_KEY_ID")"
+  NOTARYTOOL_ISSUER_ID="$(tr -d '[:space:]' <<<"$NOTARYTOOL_ISSUER_ID")"
   if [[ ! -f "$NOTARYTOOL_KEY_PATH" ]]; then
     echo "error: NOTARYTOOL_KEY_PATH does not exist: $NOTARYTOOL_KEY_PATH" >&2
     exit 1

@@ -164,6 +164,23 @@ final class DictationController: ObservableObject {
         }
     }
 
+    /// What would be lost by quitting right now, phrased to finish "WhisperLocal is
+    /// still …". Nil when there is nothing in flight.
+    var workInProgressDescription: String? {
+        switch phase {
+        case .recording, .waitingForMic:
+            return "recording"
+        case .processing, .settingContext:
+            return "transcribing a dictation"
+        case .polishing:
+            return "polishing a dictation"
+        case .inserting:
+            return "inserting a dictation"
+        case .idle, .success, .successNote, .error:
+            return nil
+        }
+    }
+
     func stop() {
         hotKey.stop()
         recorder.cancel()

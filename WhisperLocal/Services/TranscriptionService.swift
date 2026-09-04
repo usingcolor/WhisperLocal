@@ -302,6 +302,8 @@ enum TranscriptionError: LocalizedError {
     case emptyAudio
     /// Every piece of a long take failed, twice each.
     case allChunksFailed
+    /// Could not write the scratch audio file — usually a full or read-only disk.
+    case audioScratchFailed
     case appleSpeechUnavailable
     case appleSpeechLocaleUnsupported
 
@@ -313,6 +315,8 @@ enum TranscriptionError: LocalizedError {
             return "No audio was recorded."
         case .allChunksFailed:
             return "Could not transcribe this recording. The audio was captured but every part failed."
+        case .audioScratchFailed:
+            return "Could not write temporary audio. Check free disk space and try again."
         case .appleSpeechUnavailable:
             return "Apple Speech needs macOS 26 and a supported Apple Silicon Mac."
         case .appleSpeechLocaleUnsupported:

@@ -222,7 +222,15 @@ final class AppleSpeechASR {
         }
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(appleSpeechTempPrefix)\(UUID().uuidString).caf")
-        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        // A full or read-only disk surfaces here as a bare OSStatus, which tells the
+        // user nothing they can act on. An hour of audio is ~220 MB of scratch file.
+        let file: AVAudioFile
+        do {
+            file = try AVAudioFile(forWriting: url, settings: format.settings)
+        } catch {
+            appleSpeechLogger.error("Temp audio write failed: \(error.localizedDescription, privacy: .public)")
+            throw TranscriptionError.audioScratchFailed
+        }
         guard let buffer = AVAudioPCMBuffer(
             pcmFormat: format,
             frameCapacity: AVAudioFrameCount(samples.count)
@@ -234,7 +242,13 @@ final class AppleSpeechASR {
             guard let base = src.baseAddress, let dest = buffer.floatChannelData?[0] else { return }
             dest.update(from: base, count: samples.count)
         }
-        try file.write(from: buffer)
+        do {
+            try file.write(from: buffer)
+        } catch {
+            appleSpeechLogger.error("Temp audio write failed: \(error.localizedDescription, privacy: .public)")
+            Self.removeTempAudio(url)
+            throw TranscriptionError.audioScratchFailed
+        }
         Self.protectTempAudio(url)
         return url
     }

@@ -21,6 +21,29 @@ final class RecordingHUDController: ObservableObject {
     private var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
     private var levelTimer: Timer?
+    private var screenObserver: NSObjectProtocol?
+
+    init() {
+        // Position is otherwise only computed when the HUD is shown or updated, so
+        // unplugging a display mid-take could leave it on a screen that no longer
+        // exists.
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.panel?.isVisible == true else { return }
+                self.positionOnActiveScreen()
+            }
+        }
+    }
+
+    deinit {
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+        }
+    }
 
     func show(phase: DictationPhase, levelPublisher: AudioRecorder, contextCapture: Bool = false) {
         hideTask?.cancel()

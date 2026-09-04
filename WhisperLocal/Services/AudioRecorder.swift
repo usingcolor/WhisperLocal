@@ -52,7 +52,13 @@ final class AudioRecorder: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.teardown()
+                guard let self else { return }
+                // Sleeping mid-take used to end capture and say nothing: you woke to
+                // a transcript that stopped where the lid closed. Treat it like any
+                // other dead input so the take completes with what it caught.
+                let wasRecording = self.isRecording
+                self.teardown()
+                if wasRecording { self.inputFailed = true }
             }
         }
     }

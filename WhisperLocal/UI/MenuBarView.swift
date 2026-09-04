@@ -62,7 +62,9 @@ struct MenuBarView: View {
             MenuSeparator()
 
             MenuRow("Quit \(AppIdentity.productName)", shortcut: "⌘Q") {
-                controller.stop()
+                // Straight to terminate so the app delegate can ask about work in
+                // flight. Stopping first made the question unanswerable — it threw
+                // the take away before anything could notice it existed.
                 NSApplication.shared.terminate(nil)
             }
         }

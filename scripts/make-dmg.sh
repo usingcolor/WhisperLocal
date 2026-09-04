@@ -61,38 +61,13 @@ echo "==> Generating Xcode project"
 xcodegen generate
 
 derived="${root}/build/DerivedData"
-if [[ "$signed_release" == "1" ]]; then
-  echo "==> Building WhisperLocal ${version} (Release, arm64, Developer ID)"
-  hardened_runtime=YES
-  if [[ -n "${CODESIGN_KEYCHAIN:-}" ]]; then
-    security default-keychain -d user -s "$CODESIGN_KEYCHAIN"
-  fi
-  # Xcode matches Developer ID by type + team; the full common name is used
-  # later when signing the DMG with codesign.
-  build_signing_args=(
-    "CODE_SIGN_IDENTITY=Developer ID Application"
-    "CODE_SIGN_STYLE=Manual"
-    "CODE_SIGNING_ALLOWED=YES"
-    "DEVELOPMENT_TEAM=${APPLE_TEAM_ID:-}"
-    "ENABLE_HARDENED_RUNTIME=$hardened_runtime"
-  )
-  if [[ -n "${CODESIGN_KEYCHAIN:-}" ]]; then
-    build_signing_args+=(
-      "OTHER_CODE_SIGN_FLAGS=--keychain $CODESIGN_KEYCHAIN --timestamp"
-    )
-  else
-    build_signing_args+=("OTHER_CODE_SIGN_FLAGS=--timestamp")
-  fi
-else
-  echo "==> Building WhisperLocal ${version} (Release, arm64, ad-hoc signed)"
-  hardened_runtime=NO
-  build_signing_args=(
-    "CODE_SIGN_IDENTITY=-"
-    "CODE_SIGNING_ALLOWED=YES"
-    "DEVELOPMENT_TEAM="
-    "ENABLE_HARDENED_RUNTIME=$hardened_runtime"
-  )
+echo "==> Building WhisperLocal ${version} (Release, arm64)"
+if [[ "$signed_release" == "1" && -n "${CODESIGN_KEYCHAIN:-}" ]]; then
+  security default-keychain -d user -s "$CODESIGN_KEYCHAIN"
 fi
+# Compile ad-hoc. Developer ID + timestamp on SPM objects (Cmlx especially)
+# is what stretched an 11-minute compile past an hour. The .app is signed
+# once after it exists.
 xcodebuild \
   -scheme WhisperLocal \
   -configuration Release \
@@ -104,7 +79,10 @@ xcodebuild \
   VALID_ARCHS=arm64 \
   EXCLUDED_ARCHS=x86_64 \
   ONLY_ACTIVE_ARCH=YES \
-  "${build_signing_args[@]}" \
+  CODE_SIGN_IDENTITY="-" \
+  CODE_SIGNING_ALLOWED=YES \
+  DEVELOPMENT_TEAM= \
+  ENABLE_HARDENED_RUNTIME=NO \
   build
 
 app="${derived}/Build/Products/Release/WhisperLocal.app"
@@ -126,54 +104,14 @@ payload="${stage}/payload"
 mkdir -p "$payload"
 
 if [[ "$signed_release" == "1" ]]; then
-  # Xcode signs the app, but Swift stdlib dylibs and SPM resource bundles
-  # can land without hardened runtime. Notarization rejects that.
-  echo "==> Re-signing nested Mach-O with hardened runtime"
-  python3 - "$app" "$codesign_identity" "${CODESIGN_KEYCHAIN:-}" <<'PY'
-import os
-import subprocess
-import sys
-
-app, identity, keychain = sys.argv[1], sys.argv[2], sys.argv[3]
-magics = {
-    b"\xfe\xed\xfa\xce",
-    b"\xce\xfa\xed\xfe",
-    b"\xfe\xed\xfa\xcf",
-    b"\xcf\xfa\xed\xfe",
-    b"\xca\xfe\xba\xbe",
-    b"\xbe\xba\xfe\xca",
-}
-main = os.path.join(app, "Contents", "MacOS", "WhisperLocal")
-paths = []
-for dirpath, _, filenames in os.walk(app):
-    for name in filenames:
-        path = os.path.join(dirpath, name)
-        if path == main:
-            continue
-        try:
-            with open(path, "rb") as handle:
-                magic = handle.read(4)
-        except OSError:
-            continue
-        if magic in magics:
-            paths.append(path)
-paths.sort(key=lambda p: p.count(os.sep), reverse=True)
-for path in paths:
-    cmd = [
-        "codesign",
-        "--force",
-        "--options",
-        "runtime",
-        "--timestamp",
-        "--sign",
-        identity,
-    ]
-    if keychain:
-        cmd.extend(["--keychain", keychain])
-    cmd.append(path)
-    subprocess.check_call(cmd)
-PY
-  echo "==> Signing app bundle"
+  # Nested first, without app entitlements. Then the outer bundle with them.
+  # --deep on the second pass would stamp microphone/network onto Swift dylibs
+  # and Apple would reject notarization.
+  echo "==> Developer ID codesign (hardened runtime and timestamp)"
+  codesign --force --deep --options runtime --timestamp \
+    --sign "$codesign_identity" \
+    "${codesign_keychain_args[@]}" \
+    "$app"
   codesign --force --options runtime --timestamp \
     --sign "$codesign_identity" \
     "${codesign_keychain_args[@]}" \

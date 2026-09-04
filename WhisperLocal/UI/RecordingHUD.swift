@@ -156,6 +156,12 @@ final class RecordingHUDController: ObservableObject {
         panel.ignoresMouseEvents = true
         panel.becomesKeyOnlyIfNeeded = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Every colour in this view — headline, level meter, border, the cancel
+        // button's disc — is chosen for a dark material. In Light Mode
+        // .ultraThinMaterial resolves light and all of it washes out, the headline
+        // worst of all. Pinning the appearance keeps the design coherent instead of
+        // half-adapting seven colours to a look this HUD was never drawn for.
+        panel.appearance = NSAppearance(named: .darkAqua)
         self.panel = panel
         positionOnActiveScreen()
     }
@@ -204,6 +210,7 @@ struct RecordingHUDView: View {
                 Text(headline)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(controller.detailIsWarning ? Color.yellow : .white)
+                    .shadow(color: .black.opacity(0.35), radius: 1, y: 0.5)
                     .lineLimit(2)
                 if controller.phase == .recording {
                     ZStack(alignment: .leading) {
@@ -242,7 +249,15 @@ struct RecordingHUDView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(width: 300, height: 72)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        // Material alone still lightens toward whatever is behind it, so over a white
+        // document the HUD drifted to mid-grey and the white text with it. A dark
+        // scrim under the material sets a floor: the blur and vibrancy survive, the
+        // contrast stops depending on what happens to be on screen.
+        .background {
+            let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+            shape.fill(.ultraThinMaterial)
+                .overlay(shape.fill(Color.black.opacity(0.42)))
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)

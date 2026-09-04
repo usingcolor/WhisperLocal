@@ -84,6 +84,7 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=YES \
   DEVELOPMENT_TEAM= \
   ENABLE_HARDENED_RUNTIME=NO \
+  CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   build
 
 app="${derived}/Build/Products/Release/WhisperLocal.app"
@@ -126,6 +127,19 @@ else
     "$app"
 fi
 codesign --verify --deep --strict --verbose=2 "$app"
+
+# Apple rejects notarization outright when the executable can be debugged.
+# Xcode injects this for development-style signing; CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
+# above prevents it and the entitlements re-sign strips it, so reaching here means
+# one of those stopped working. Catch it now: the alternative is finding out from
+# the notary service ten minutes later.
+app_entitlements="$(codesign -d --entitlements - --xml "$app" 2>/dev/null || true)"
+if grep -q 'get-task-allow' <<<"$app_entitlements"; then
+  echo "error: signed app still requests com.apple.security.get-task-allow." >&2
+  echo "       Apple will reject notarization with status 'Invalid'." >&2
+  echo "       Check CODE_SIGN_INJECT_BASE_ENTITLEMENTS and the entitlements re-sign." >&2
+  exit 1
+fi
 
 if [[ "$signed_release" == "1" ]]; then
   signature_info="$(codesign --display --verbose=4 "$app" 2>&1)"

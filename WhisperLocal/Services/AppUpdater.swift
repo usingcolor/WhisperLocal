@@ -304,6 +304,20 @@ final class AppUpdater: ObservableObject {
         guard validity == errSecSuccess else {
             throw UpdateError.invalidSignature
         }
+
+        // Validity alone only proves the bundle matches its own signature — an ad-hoc
+        // build passes that. Pin the publisher too. Without this, a release that fell
+        // back to ad-hoc signing (missing CI secrets) would install over a notarized
+        // copy, silently resetting Microphone and Accessibility for every user.
+        let requirementText = "anchor apple generic and certificate leaf[subject.OU] = \"\(AppIdentity.releaseTeamID)\""
+        var requirement: SecRequirement?
+        guard SecRequirementCreateWithString(requirementText as CFString, [], &requirement) == errSecSuccess,
+              let requirement else {
+            throw UpdateError.invalidSignature
+        }
+        guard SecStaticCodeCheckValidity(staticCode, [], requirement) == errSecSuccess else {
+            throw UpdateError.untrustedSigner
+        }
     }
 
     /// `ditto` into a sibling then rename, so a mid-copy failure does not leave a half-written app.
@@ -437,6 +451,7 @@ final class AppUpdater: ObservableObject {
         case dmgSizeMismatch(expected: Int, actual: Int)
         case digestMismatch
         case invalidSignature
+        case untrustedSigner
         case commandFailed(String, String)
 
         var errorDescription: String? {
@@ -451,6 +466,13 @@ final class AppUpdater: ObservableObject {
                 return "The downloaded DMG was \(actual) bytes; GitHub listed \(expected)."
             case .digestMismatch:
                 return "The downloaded DMG did not match the published SHA-256 checksum."
+            case .untrustedSigner:
+                return """
+                    That download is not signed by the WhisperLocal Developer ID team \
+                    (\(AppIdentity.releaseTeamID)). Installing it would reset your Microphone \
+                    and Accessibility permissions, so it was refused. Download the release \
+                    from GitHub manually if you believe this is wrong.
+                    """
             case .missingAppOnDMG:
                 return "The disk image did not contain WhisperLocal.app."
             case .wrongBundle:

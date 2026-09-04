@@ -7,6 +7,11 @@ enum AppIdentity {
     static let publicBundleID = "com.usingcolor.WhisperLocal"
     static let devBundleID = "com.usingcolor.WhisperLocal.dev"
 
+    /// Developer ID team that signs public releases. The in-app updater refuses a
+    /// download that is not signed by this team, which is what stops an ad-hoc
+    /// fallback build from replacing a notarized install and resetting TCC.
+    static let releaseTeamID = "HA9M6YGZ68"
+
     static var bundleID: String {
         Bundle.main.bundleIdentifier ?? publicBundleID
     }

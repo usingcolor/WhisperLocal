@@ -457,7 +457,10 @@ final class DictationController: ObservableObject {
                 } else if limited {
                     hud.flashSuccess(note: "Stopped at the \(Int(TakeLimits.maxSeconds / 60))-minute limit — this is everything up to there")
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
-                } else if result.cleanupFailed, let note = result.cleanupNote {
+                } else if let note = result.cleanupNote {
+                    // Not gated on cleanupFailed: a successful on-device fallback
+                    // sets a note *and* leaves cleanupFailed false, so the old
+                    // condition hid "Offline — polished on this Mac" entirely.
                     hud.flashSuccess(note: note)
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
                 } else {

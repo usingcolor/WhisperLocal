@@ -158,7 +158,10 @@ final class TranscriptionService: ObservableObject {
         // Only give up when nothing at all came back. One bad chunk must never
         // blank a take the user spent minutes on.
         if failed == ranges.count {
-            throw TranscriptionError.emptyAudio
+            // Not `emptyAudio`: there was plenty of audio. Saying "No audio was
+            // recorded" to someone who just spoke for five minutes is worse than
+            // saying nothing.
+            throw TranscriptionError.allChunksFailed
         }
         if failed > 0 {
             logger.error("Chunked transcribe finished with \(failed, privacy: .public) gap(s)")
@@ -297,6 +300,8 @@ final class TranscriptionService: ObservableObject {
 enum TranscriptionError: LocalizedError {
     case modelNotLoaded
     case emptyAudio
+    /// Every piece of a long take failed, twice each.
+    case allChunksFailed
     case appleSpeechUnavailable
     case appleSpeechLocaleUnsupported
 
@@ -306,6 +311,8 @@ enum TranscriptionError: LocalizedError {
             return "Speech model is not loaded yet."
         case .emptyAudio:
             return "No audio was recorded."
+        case .allChunksFailed:
+            return "Could not transcribe this recording. The audio was captured but every part failed."
         case .appleSpeechUnavailable:
             return "Apple Speech needs macOS 26 and a supported Apple Silicon Mac."
         case .appleSpeechLocaleUnsupported:

@@ -378,7 +378,19 @@ struct PolishPipeline: Sendable {
 
         // On-device: primary when no cloud is configured, fallback when cloud could
         // not deliver. Falling back this direction only ever sends less data out.
-        let wantsLocal = cloud == nil || cloudDisabled ? useLocalLLM : (cloudFailure != nil && localIsReady)
+        // With no cloud configured the on-device model is the primary and runs on
+        // the user's setting. With a cloud configured it is strictly a fallback, so
+        // it needs a failure *and* a model that can run now — and `cloudDisabled`
+        // is a failure, inherited from the piece that tripped the breaker. Folding
+        // that case in with the primary rule silently disabled the fallback for
+        // every piece after the first, because `useLocalLLM` is false whenever
+        // cloud polish is the selected engine.
+        let wantsLocal: Bool
+        if cloud == nil {
+            wantsLocal = useLocalLLM
+        } else {
+            wantsLocal = (cloudFailure != nil || cloudDisabled) && localIsReady
+        }
         if !polished, wantsLocal, let localLLM {
             llmAttempted = true
             do {

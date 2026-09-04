@@ -232,11 +232,15 @@ final class AudioRecorder: ObservableObject {
     /// been measured. Failure is non-fatal: dictation continues on the raw input.
     private func applyVoiceProcessing(to input: AVAudioInputNode) {
         let wanted = SettingsStore.shared.enableEchoCancellation
-        engineUsesVoiceProcessing = false
+        // Records what this engine was *asked* for, not what succeeded. Storing the
+        // outcome meant a failure left the flag disagreeing with the setting
+        // forever, and start() then tore the graph down and rebuilt it on every
+        // single take — a mic restart each time, and a Bluetooth profile switch
+        // with it.
+        engineUsesVoiceProcessing = wanted
         guard wanted else { return }
         do {
             try input.setVoiceProcessingEnabled(true)
-            engineUsesVoiceProcessing = true
             // Duck other audio while you speak. Cancellation alone cannot cope with
             // double-talk — two voices at once is where the adaptive filter stops
             // adapting and residual speech leaks into the transcript. Dipping the

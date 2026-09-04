@@ -74,7 +74,10 @@ final class PolishFallbackTests: XCTestCase {
         PolishPipeline(
             localLLM: local,
             cloud: cloud,
-            useLocalLLM: local != nil,
+            // Mirrors SettingsStore.shouldRunOnDevicePolish, which is false whenever
+            // cloud polish is selected. Passing true here let the fallback tests
+            // pass through the primary path and hid a real bug.
+            useLocalLLM: cloud == nil && local != nil,
             localIsReady: localIsReady,
             isOnline: { online },
             enableTextCleanup: true,

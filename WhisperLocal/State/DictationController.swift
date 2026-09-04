@@ -61,6 +61,10 @@ final class DictationController: ObservableObject {
     /// Frontmost app when dictation started. Passed to polish LLMs as formatting context.
     private var dictationTargetApp: TargetAppContext?
     private var recordingBeganAt: Date?
+    /// Watches the take against TakeLimits and auto-finishes at the ceiling.
+    private var takeLimitTask: Task<Void, Never>?
+    /// True when this take was stopped by the limit rather than by the user.
+    private var hitTakeLimit = false
     /// MenuBarExtra onAppear also calls start(); only load speech once.
     private var didBootstrapSpeech = false
     /// Bumped at the start of each take so a late success-sleeper cannot idle a newer session.
@@ -218,7 +222,9 @@ final class DictationController: ObservableObject {
             dictationTargetApp = TargetAppContext.captureFrontmost()
             try recorder.start()
             recordingBeganAt = Date()
+            hitTakeLimit = false
             hotKey.markSessionActive(true)
+            startTakeLimitWatch()
             if recorder.isInputReady {
                 phase = .recording
                 hud.show(phase: .recording, levelPublisher: recorder, contextCapture: isIntentTake)
@@ -234,6 +240,35 @@ final class DictationController: ObservableObject {
         }
     }
 
+    /// A take had no ceiling at all: the buffer grew until the key came up, and a
+    /// failure anywhere downstream then cost every word of it. The limit stops the
+    /// take and transcribes what it has — it never throws the audio away.
+    private func startTakeLimitWatch() {
+        takeLimitTask?.cancel()
+        takeLimitTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                guard !Task.isCancelled, let self else { return }
+                guard self.phase == .recording || self.phase == .waitingForMic,
+                      let began = self.recordingBeganAt else { return }
+
+                let elapsed = Date().timeIntervalSince(began)
+                if TakeLimits.shouldAutoStop(elapsed: elapsed) {
+                    self.hitTakeLimit = true
+                    self.finishRecording()
+                    return
+                }
+                self.hud.setDetail(TakeLimits.countdownLabel(elapsed: elapsed), warning: true)
+            }
+        }
+    }
+
+    private func stopTakeLimitWatch() {
+        takeLimitTask?.cancel()
+        takeLimitTask = nil
+        hud.setDetail(nil)
+    }
+
     private func setRecordingIntent(_ intent: Bool) {
         guard phase == .recording || phase == .waitingForMic else { return }
         isIntentTake = settings.enableSessionContext && settings.enableTextCleanup && intent
@@ -241,6 +276,7 @@ final class DictationController: ObservableObject {
     }
 
     private func cancelRecording() {
+        stopTakeLimitWatch()
         cancelRequested = true
         isIntentTake = false
         dictationTargetApp = nil
@@ -253,6 +289,7 @@ final class DictationController: ObservableObject {
 
     private func finishRecording() {
         guard phase == .recording || phase == .waitingForMic else { return }
+        stopTakeLimitWatch()
         // Paste vs context is the Shift switch at the end of the take, not the first press.
         setRecordingIntent(hotKey.intentModifierHeld)
         let samples = recorder.stop()
@@ -282,11 +319,31 @@ final class DictationController: ObservableObject {
             isIntentTake = false
             phase = .error("No microphone input")
             hud.flashError("No microphone input")
+            // Logged so this failure class stops being invisible: it was the one
+            // path that ended a take with nothing written anywhere.
+            log.append(DictationLogEntry(
+                id: UUID(),
+                date: Date(),
+                raw: "",
+                polished: "",
+                stages: [],
+                cleanupNote: nil,
+                appName: NSWorkspace.shared.frontmostApplication?.localizedName,
+                insertMethod: nil,
+                outcome: .error,
+                errorMessage: "No microphone input",
+                audioSeconds: Double(samples.count) / TranscriptionService.sampleRate
+            ))
             return
         }
 
         phase = isIntentTake ? .settingContext : .processing
         hud.update(phase: phase)
+        if hitTakeLimit {
+            // Said here rather than at the end: the take vanishing mid-sentence
+            // needs explaining now, not after the paste lands.
+            hud.setDetail(TakeLimits.limitNote(seconds: TakeLimits.maxSeconds), warning: true)
+        }
 
         Task {
             await process(samples: samples)
@@ -297,15 +354,25 @@ final class DictationController: ObservableObject {
         let audioSeconds = Double(samples.count) / 16_000
         let targetApp = dictationTargetApp?.promptLine
         let intentTake = isIntentTake
+        // Snapshot: chunk progress overwrites the HUD detail within a second, so
+        // the reason the take ended has to survive to the completion note.
+        let limited = hitTakeLimit
         dictationTargetApp = nil
         isIntentTake = false
+        hitTakeLimit = false
         lastTranscript = ""
         lastPolished = ""
         lastStages = []
         lastCleanupNote = nil
         do {
             let extraTerms = settings.matchingAppDictionaryTerms(targetApp: targetApp)
-            let raw = try await transcription.transcribe(samples: samples, extraDictionary: extraTerms)
+            let raw = try await transcription.transcribe(
+                samples: samples,
+                extraDictionary: extraTerms
+            ) { [weak self] chunk, total in
+                self?.hud.setDetail("part \(chunk) of \(total)")
+            }
+            hud.setDetail(nil)
             lastTranscript = raw
 
             guard !raw.isEmpty else {
@@ -340,7 +407,10 @@ final class DictationController: ObservableObject {
                 phase = .polishing
                 hud.update(phase: .polishing)
             }
-            let result = await makePipeline().run(raw, targetApp: targetApp)
+            let result = await makePipeline().runChunked(raw, targetApp: targetApp) { [weak self] piece, total in
+                self?.hud.setDetail("part \(piece) of \(total)")
+            }
+            hud.setDetail(nil)
             var output = result.text
             if settings.insertTrailingSpace, !output.hasSuffix(" ") {
                 output += " "
@@ -382,6 +452,9 @@ final class DictationController: ObservableObject {
                 if insertion.method == .clipboardUnverified {
                     hud.flashSuccess(note: "Couldn’t confirm the paste — press ⌘V to insert it")
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
+                } else if limited {
+                    hud.flashSuccess(note: "Stopped at the \(Int(TakeLimits.maxSeconds / 60))-minute limit — this is everything up to there")
+                    try? await Task.sleep(nanoseconds: 1_600_000_000)
                 } else if result.cleanupFailed, let note = result.cleanupNote {
                     hud.flashSuccess(note: note)
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
@@ -395,7 +468,11 @@ final class DictationController: ObservableObject {
             } else {
                 phase = .error("Could not insert text")
                 let target = insertion.appName.map { " into \($0)" } ?? ""
-                hud.flashError("Could not insert text\(target) — check Accessibility")
+                hud.flashError(
+                    insertion.textOnClipboard
+                        ? "Couldn’t insert text\(target) — press ⌘V to paste it"
+                        : "Could not insert text\(target) — check Accessibility"
+                )
                 log.append(DictationLogEntry(
                     id: UUID(),
                     date: Date(),

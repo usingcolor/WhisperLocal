@@ -177,6 +177,53 @@ struct PolishPipeline: Sendable {
     /// Dictation paste vs spoken session-context distillation.
     var task: PolishTask = .dictation
 
+    /// Polishes a long transcript in pieces. One 20s/30s timeout and one output
+    /// cap used to govern the whole take, so a long one lost all its cleanup at
+    /// once; per piece, a failure costs that piece and the rest still comes back
+    /// polished. Pieces are rejoined in order — nothing is dropped.
+    func runChunked(
+        _ raw: String,
+        targetApp: String? = nil,
+        onProgress: ((Int, Int) -> Void)? = nil
+    ) async -> PolishResult {
+        let pieces = PolishChunker.split(raw)
+        guard pieces.count > 1 else {
+            return await run(raw, targetApp: targetApp)
+        }
+
+        var texts: [String] = []
+        var stages: [String] = []
+        var failures = 0
+        for (index, piece) in pieces.enumerated() {
+            onProgress?(index + 1, pieces.count)
+            let result = await run(piece, targetApp: targetApp)
+            // run() already falls back to the raw piece when cleanup fails, so the
+            // text is never empty here — but be explicit rather than trust it.
+            texts.append(result.text.isEmpty ? piece : result.text)
+            if result.cleanupFailed { failures += 1 }
+            for stage in result.stages where !stages.contains(stage) {
+                stages.append(stage)
+            }
+        }
+
+        let joined = texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let note: String?
+        if failures == pieces.count {
+            note = "Pasted without AI cleanup"
+        } else if failures > 0 {
+            note = "Cleaned \(pieces.count - failures) of \(pieces.count) parts"
+        } else {
+            note = nil
+        }
+        return PolishResult(
+            text: joined.isEmpty ? raw : joined,
+            stages: stages.isEmpty ? ["Raw"] : stages,
+            cleanupFailed: failures == pieces.count,
+            cleanupNote: note,
+            contextRelevant: nil
+        )
+    }
+
     func run(_ raw: String, targetApp: String? = nil) async -> PolishResult {
         guard enableTextCleanup else {
             return PolishResult(

@@ -7,6 +7,16 @@ final class RecordingHUDController: ObservableObject {
     @Published var audioLevel: Float = 0
     /// Shift+hotkey capture — HUD copy and color differ from dictation.
     @Published var isContextCapture = false
+    /// Secondary status appended to the headline: the auto-stop countdown while
+    /// recording, chunk progress while transcribing. A long take used to show a
+    /// bare spinner for minutes with nothing to say how far along it was.
+    @Published var detail: String?
+    @Published var detailIsWarning = false
+
+    func setDetail(_ text: String?, warning: Bool = false) {
+        detail = text
+        detailIsWarning = warning && text != nil
+    }
 
     private var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
@@ -15,6 +25,7 @@ final class RecordingHUDController: ObservableObject {
     func show(phase: DictationPhase, levelPublisher: AudioRecorder, contextCapture: Bool = false) {
         hideTask?.cancel()
         levelTimer?.invalidate()
+        setDetail(nil)
         self.phase = phase
         self.isContextCapture = contextCapture
         ensurePanel()
@@ -49,6 +60,7 @@ final class RecordingHUDController: ObservableObject {
     }
 
     func flashSuccess(note: String? = nil) {
+        setDetail(nil)
         if let note, !note.isEmpty {
             phase = .successNote(note)
             scheduleHide(after: 1.6)
@@ -60,6 +72,7 @@ final class RecordingHUDController: ObservableObject {
 
     func flashError(_ message: String) {
         isContextCapture = false
+        setDetail(nil)
         phase = .error(message)
         scheduleHide(after: 2.0)
     }
@@ -136,7 +149,7 @@ struct RecordingHUDView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(headline)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(controller.detailIsWarning ? Color.yellow : .white)
                     .lineLimit(2)
                 if controller.phase == .recording {
                     ZStack(alignment: .leading) {
@@ -181,6 +194,11 @@ struct RecordingHUDView: View {
     }
 
     private var headline: String {
+        guard let detail = controller.detail, !detail.isEmpty else { return baseHeadline }
+        return "\(baseHeadline) · \(detail)"
+    }
+
+    private var baseHeadline: String {
         if controller.isContextCapture {
             switch controller.phase {
             case .waitingForMic:

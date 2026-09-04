@@ -68,8 +68,16 @@ final class TranscriptionService: ObservableObject {
         }
     }
 
+    static let sampleRate: Double = 16_000
+
     /// Transcribe 16 kHz mono Float32 samples.
-    func transcribe(samples: [Float], extraDictionary: [String] = []) async throws -> String {
+    /// `onProgress` reports (chunk, total) for long takes, which otherwise sit on a
+    /// bare spinner for minutes.
+    func transcribe(
+        samples: [Float],
+        extraDictionary: [String] = [],
+        onProgress: ((Int, Int) -> Void)? = nil
+    ) async throws -> String {
         guard isReady, loadedModel == requestedModel, let model = loadedModel else {
             throw TranscriptionError.modelNotLoaded
         }
@@ -81,6 +89,20 @@ final class TranscriptionService: ObservableObject {
             SettingsStore.shared.dictionaryWords + extraDictionary
         )
 
+        let seconds = Double(samples.count) / Self.sampleRate
+        guard TakeLimits.shouldChunk(seconds: seconds) else {
+            return try await transcribeOnce(samples, model: model, dictionary: dictionary)
+        }
+        return try await transcribeChunked(
+            samples, model: model, dictionary: dictionary, onProgress: onProgress
+        )
+    }
+
+    private func transcribeOnce(
+        _ samples: [Float],
+        model: ASRModelOption,
+        dictionary: [String]
+    ) async throws -> String {
         switch model.engine {
         case .whisper:
             return try await transcribeWhisper(samples)
@@ -92,6 +114,56 @@ final class TranscriptionService: ObservableObject {
                 dictionary: dictionary
             )
         }
+    }
+
+    /// Divide and conquer. A long take used to go in as one piece, so any failure
+    /// lost every word of it; here a failed chunk costs its own span and the rest
+    /// still comes back. It also keeps peak memory on the chunk rather than the
+    /// whole recording, which for an hour was ~3x 220 MB.
+    private func transcribeChunked(
+        _ samples: [Float],
+        model: ASRModelOption,
+        dictionary: [String],
+        onProgress: ((Int, Int) -> Void)?
+    ) async throws -> String {
+        let planned = AudioChunker.plan(sampleCount: samples.count, sampleRate: Self.sampleRate)
+        let ranges = AudioChunker.refine(planned, in: samples, sampleRate: Self.sampleRate)
+        guard ranges.count > 1 else {
+            return try await transcribeOnce(samples, model: model, dictionary: dictionary)
+        }
+
+        logger.info("Chunked transcribe: \(ranges.count, privacy: .public) pieces")
+        var parts: [String] = []
+        var failed = 0
+
+        for (index, range) in ranges.enumerated() {
+            onProgress?(index + 1, ranges.count)
+            let chunk = Array(samples[range])
+            do {
+                parts.append(try await transcribeOnce(chunk, model: model, dictionary: dictionary))
+            } catch {
+                logger.error("Chunk \(index + 1, privacy: .public) failed, retrying: \(error.localizedDescription, privacy: .public)")
+                do {
+                    // One retry. Most failures at this layer are transient — a model
+                    // hiccup or a temp-file write — not a property of the audio.
+                    parts.append(try await transcribeOnce(chunk, model: model, dictionary: dictionary))
+                } catch {
+                    logger.error("Chunk \(index + 1, privacy: .public) failed twice: \(error.localizedDescription, privacy: .public)")
+                    failed += 1
+                    parts.append(TranscriptJoiner.gapMarker)
+                }
+            }
+        }
+
+        // Only give up when nothing at all came back. One bad chunk must never
+        // blank a take the user spent minutes on.
+        if failed == ranges.count {
+            throw TranscriptionError.emptyAudio
+        }
+        if failed > 0 {
+            logger.error("Chunked transcribe finished with \(failed, privacy: .public) gap(s)")
+        }
+        return TranscriptJoiner.join(parts)
     }
 
     private func backendIsReady(for model: ASRModelOption) -> Bool {

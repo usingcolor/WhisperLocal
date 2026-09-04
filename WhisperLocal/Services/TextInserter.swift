@@ -18,6 +18,9 @@ struct InsertionResult {
     let success: Bool
     let method: InsertionMethod
     let appName: String?
+    /// The text is sitting on the clipboard and Cmd-V will recover it. Set when we
+    /// could not type it, so a failed insert never means the take is simply gone.
+    var textOnClipboard: Bool = false
 }
 
 /// Frontmost app at dictation start. Fed to polish LLMs as formatting context, not as transcript text.
@@ -171,14 +174,19 @@ final class TextInserter {
         let appName = frontApp?.localizedName
         let bundleID = frontApp?.bundleIdentifier
 
-        guard AXIsProcessTrusted() else {
-            return InsertionResult(success: false, method: .failed, appName: appName)
-        }
-
         // Strip BEL (\u{0007}) and other C0 controls — Terminal rings the bell on these.
         let sanitized = Self.sanitizeForPaste(text)
         guard !sanitized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return InsertionResult(success: false, method: .failed, appName: appName)
+        }
+
+        guard AXIsProcessTrusted() else {
+            // Nothing can be typed without Accessibility, but the take must not
+            // evaporate — park it where the user can paste it themselves.
+            parkOnClipboard(sanitized)
+            return InsertionResult(
+                success: false, method: .failed, appName: appName, textOnClipboard: true
+            )
         }
 
         let isTerminal = isTerminalApp(bundleID: bundleID, name: appName)
@@ -199,11 +207,29 @@ final class TextInserter {
             into: frontApp,
             preferSlowTiming: useClipboardFirst
         )
+        if method == .failed {
+            parkOnClipboard(sanitized)
+        }
         return InsertionResult(
             success: method != .failed,
             method: method,
-            appName: appName
+            appName: appName,
+            // Unverified already leaves the dictation on the clipboard.
+            textOnClipboard: method == .failed || method == .clipboardUnverified
         )
+    }
+
+    /// Last resort: leave the text somewhere recoverable. A take that got this far
+    /// is real user effort, and silently dropping it is the one outcome with no
+    /// way back. Marked concealed/transient so clipboard managers still skip it.
+    private func parkOnClipboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        pasteboard.writeObjects([item])
     }
 
     /// Keep newlines/tabs/trailing spaces; drop BEL and other control chars that make Terminal beep.

@@ -137,6 +137,8 @@ targets:
       - path: WhisperLocal/Services/UpdateInstallLog.swift
       - path: WhisperLocal/Services/AudioInputRoute.swift
       - path: WhisperLocal/State/SessionContext.swift
+      - path: WhisperLocal/Services/LongTake.swift
+      - path: WhisperLocal/Services/Polishers/PolishChunker.swift
       - path: WhisperLocal/App/AppIdentity.swift
     settings:
       base:

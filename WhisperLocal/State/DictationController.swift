@@ -376,7 +376,13 @@ final class DictationController: ObservableObject {
                     audioSeconds: audioSeconds
                 ))
                 let generation = sessionGeneration
-                if result.cleanupFailed, let note = result.cleanupNote {
+                // An unconfirmed paste keeps the dictation on the clipboard rather
+                // than restoring the old one. Say so — otherwise the user sees an
+                // empty field and has no idea the text is one ⌘V away.
+                if insertion.method == .clipboardUnverified {
+                    hud.flashSuccess(note: "Couldn’t confirm the paste — press ⌘V to insert it")
+                    try? await Task.sleep(nanoseconds: 1_600_000_000)
+                } else if result.cleanupFailed, let note = result.cleanupNote {
                     hud.flashSuccess(note: note)
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
                 } else {

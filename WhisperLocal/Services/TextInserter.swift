@@ -8,7 +8,8 @@ enum InsertionMethod: String {
     /// AXSet returned success but the field could not be confirmed.
     case accessibilityUnverified = "accessibility-unverified"
     case clipboard
-    /// ⌘V was posted but the field could not be confirmed (terminals, Electron).
+    /// ⌘V was posted but the field could not be confirmed. The dictation is left on
+    /// the clipboard so ⌘V recovers it.
     case clipboardUnverified = "clipboard-unverified"
     case failed
 }
@@ -338,13 +339,44 @@ final class TextInserter {
 
         postCommandV(to: targetApp?.processIdentifier)
 
-        // Electron / terminals need longer before it's safe to restore the clipboard.
-        let restoreNs: UInt64 = preferSlowTiming ? 700_000_000 : 450_000_000
-        try? await Task.sleep(nanoseconds: restoreNs)
-        let confirmed = clipboardInsertVisible(text)
-        restore(saved, to: pasteboard)
+        // Poll rather than restoring on a fixed timer. The receiver reads the
+        // pasteboard asynchronously and that read scales with payload size, so a
+        // flat 450/700 ms window put the old clipboard back while a long paste was
+        // still being pulled — and the paste landed empty. Short text still returns
+        // at the old floor; only long text waits longer.
+        let confirmed = await waitForPaste(text, slow: preferSlowTiming)
+        if confirmed {
+            restore(saved, to: pasteboard)
+        }
+        // Unconfirmed: leave the dictation on the clipboard. Restoring here is the
+        // worse failure — the take is destroyed and the clipboard silently changes
+        // under the user, so nothing they press recovers the text. Holding it means
+        // ⌘V still works. The caller says so in the HUD.
         return confirmed ? .clipboard : .clipboardUnverified
     }
+
+    /// Waits the previous fixed floor, then keeps polling up to a length-scaled
+    /// deadline. Strictly additive: identical timing for short pastes.
+    private func waitForPaste(_ text: String, slow: Bool) async -> Bool {
+        let floor: TimeInterval = slow ? 0.7 : 0.45
+        let deadline = min(Self.maxPasteWait, floor + Double(text.count) * 0.003)
+
+        try? await Task.sleep(nanoseconds: UInt64(floor * 1_000_000_000))
+        if clipboardInsertVisible(text) { return true }
+
+        var elapsed = floor
+        while elapsed < deadline {
+            try? await Task.sleep(nanoseconds: Self.pastePollStep)
+            elapsed += Double(Self.pastePollStep) / 1_000_000_000
+            if clipboardInsertVisible(text) { return true }
+        }
+        return false
+    }
+
+    private static let maxPasteWait: TimeInterval = 3.0
+    private static let pastePollStep: UInt64 = 60_000_000
+    /// Enough of the text to identify it, short enough to survive reflow.
+    private static let pasteProbeLength = 64
 
     private func clipboardInsertVisible(_ text: String) -> Bool {
         let systemWide = AXUIElementCreateSystemWide()
@@ -355,7 +387,19 @@ final class TextInserter {
             &focusedRef
         )
         guard focusStatus == .success, let focusedRef else { return false }
-        return accessibilityInsertVisible(on: focusedRef as! AXUIElement, text: text)
+        let element = focusedRef as! AXUIElement
+        if accessibilityInsertVisible(on: element, text: text) { return true }
+        // A long paste is often reflowed, or AX exposes only part of the field, so
+        // whole-string matching fails for exactly the pastes worth confirming.
+        guard text.count > Self.pasteProbeLength else { return false }
+        return accessibilityValueContains(element, String(text.prefix(Self.pasteProbeLength)))
+    }
+
+    private func accessibilityValueContains(_ element: AXUIElement, _ probe: String) -> Bool {
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+              let value = valueRef as? String else { return false }
+        return value.contains(probe)
     }
 
     private func focusTargetApp(_ app: NSRunningApplication?) async {

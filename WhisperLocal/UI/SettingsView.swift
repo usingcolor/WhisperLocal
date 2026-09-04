@@ -179,6 +179,11 @@ struct SettingsView: View {
                         .foregroundStyle(.orange)
                 }
                 Toggle("Insert trailing space", isOn: $settings.insertTrailingSpace)
+                Toggle("Use the built-in mic while headphones are playing", isOn: $settings.preferBuiltInMicOverBluetooth)
+                helpText(
+                    "Keeps music and video playing at full quality while you dictate.",
+                    more: "AirPods and most Bluetooth headsets cannot play high-quality audio and record at the same time — opening their mic drops playback to narrowband mono until the take ends. Their mic is also a worse input for speech recognition than the built-in array. Turn this off if you dictate away from your Mac and need the headset mic."
+                )
             }
 
             Section("Last dictation") {

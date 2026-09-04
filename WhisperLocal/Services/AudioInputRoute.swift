@@ -90,6 +90,72 @@ enum AudioInputTransport: Equatable {
     }
 }
 
+/// Picking an input device rather than accepting the system default.
+enum AudioInputSelection {
+    /// The built-in microphone, if this Mac has one with input channels.
+    ///
+    /// Opening the mic on a Bluetooth headset that is also playing audio forces the
+    /// radio from A2DP to HFP: music collapses to narrowband mono for the duration,
+    /// with an audible break at each transition. The HFP mic is also a worse ASR
+    /// input than the built-in array — roughly 8-16 kHz against full band — so
+    /// preferring built-in helps the transcript and the music at once.
+    static func builtInInputDevice() -> AudioDeviceID? {
+        for device in allDevices() where hasInputStreams(device) {
+            if transportType(of: device) == kAudioDeviceTransportTypeBuiltIn {
+                return device
+            }
+        }
+        return nil
+    }
+
+    /// True when using the current default input would interrupt playback.
+    static func defaultInputWouldDisruptPlayback(_ route: AudioInputRoute) -> Bool {
+        route.transport == .bluetooth && route.bluetoothInputIsAlsoOutput
+    }
+
+    private static func allDevices() -> [AudioDeviceID] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size
+        ) == noErr, size > 0 else { return [] }
+
+        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
+        var devices = [AudioDeviceID](repeating: 0, count: count)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &devices
+        ) == noErr else { return [] }
+        return devices
+    }
+
+    private static func hasInputStreams(_ device: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr, size > 0 else {
+            return false
+        }
+        let buffer = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { buffer.deallocate() }
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, buffer) == noErr else {
+            return false
+        }
+        let list = UnsafeMutableAudioBufferListPointer(
+            buffer.assumingMemoryBound(to: AudioBufferList.self)
+        )
+        return list.contains { $0.mNumberChannels > 0 }
+    }
+}
+
 /// How long to keep the input graph open after a take or prewarm.
 enum AudioIdleHold {
     /// Covers the Bluetooth HFP reconnect so the next take does not drop the first words.

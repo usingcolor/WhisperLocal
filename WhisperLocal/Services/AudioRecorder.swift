@@ -150,6 +150,9 @@ final class AudioRecorder: ObservableObject {
 
         let engine = AVAudioEngine()
         let input = engine.inputNode
+        // Before the format is read: the format belongs to whichever device the
+        // unit is pointed at.
+        applyPreferredInputDevice(to: input)
         var hardwareFormat = input.inputFormat(forBus: 0)
         if hardwareFormat.sampleRate <= 0 || hardwareFormat.channelCount == 0 {
             hardwareFormat = input.outputFormat(forBus: 0)
@@ -202,6 +205,33 @@ final class AudioRecorder: ObservableObject {
             Task { @MainActor in
                 self?.reinstallTapAfterConfigurationChange()
             }
+        }
+    }
+
+    /// Point the input unit at the built-in mic when the default input is a
+    /// Bluetooth device that is also playing. Otherwise leave the user's choice
+    /// alone — someone across the room needs the headset mic, and that is their
+    /// call to make in Settings.
+    private func applyPreferredInputDevice(to input: AVAudioInputNode) {
+        guard SettingsStore.shared.preferBuiltInMicOverBluetooth else { return }
+        let route = AudioInputRoute.current()
+        guard AudioInputSelection.defaultInputWouldDisruptPlayback(route),
+              let builtIn = AudioInputSelection.builtInInputDevice(),
+              let unit = input.audioUnit else { return }
+
+        var deviceID = builtIn
+        let status = AudioUnitSetProperty(
+            unit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &deviceID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        if status == noErr {
+            logger.info("Using built-in mic so Bluetooth playback stays in A2DP")
+        } else {
+            logger.error("Could not select the built-in mic (\(status, privacy: .public))")
         }
     }
 

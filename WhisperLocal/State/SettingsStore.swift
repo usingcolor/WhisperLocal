@@ -130,6 +130,8 @@ final class SettingsStore: ObservableObject {
     @Published var openAIModel: String { didSet { persist(openAIModel, key: "openAIModel") } }
     @Published var anthropicModel: String { didSet { persist(anthropicModel, key: "anthropicModel") } }
     @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
+    /// Use the built-in mic instead of a Bluetooth headset that is also playing audio.
+    @Published var preferBuiltInMicOverBluetooth: Bool { didSet { persist(preferBuiltInMicOverBluetooth, key: "preferBuiltInMicOverBluetooth") } }
     @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
     /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
     @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
@@ -321,6 +323,7 @@ final class SettingsStore: ObservableObject {
         openAIModel = defaults.string(forKey: "openAIModel") ?? CloudModelCatalog.openAIDefault
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
+        preferBuiltInMicOverBluetooth = defaults.object(forKey: "preferBuiltInMicOverBluetooth") as? Bool ?? true
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int

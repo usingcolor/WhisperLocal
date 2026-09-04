@@ -21,6 +21,12 @@ Then grant Microphone and Accessibility. Default ASR is Apple Speech on macOS 26
 - Onboarding's **Quit & Reopen** now reopens, and **Start using WhisperLocal** closes the window.
 - Text lands in the window you started dictating into, even if you switch Spaces mid-take.
 - Updates refuse to install unless they are signed by the release team.
+- Quitting now asks before discarding a dictation that is still recording or being transcribed, instead of throwing it away silently.
+- The menu bar explains when a focused password field is blocking the hotkey. macOS withholds key events while one is focused, which used to leave dictation dead with nothing to explain it.
+- Unplugging a microphone mid-take ends the take with what it captured, rather than carrying on against a dead input and recording nothing.
+- Sleeping mid-take finishes the take on wake instead of truncating it without a word.
+- A full disk says so, instead of surfacing an `OSStatus` code.
+- The recording HUD follows display changes rather than staying on a screen you unplugged.
 - Fixed a case where any multi-channel audio interface would record silence with no error.
 
 ## 0.1.9

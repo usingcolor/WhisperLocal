@@ -40,7 +40,9 @@ If you want Windows or Linux, streaming transcription, or a large model catalog,
 
 ## Download
 
-Apple Silicon only. Grab the DMG from [Releases](https://github.com/usingcolor/WhisperLocal/releases/latest) — no Xcode and no git clone required.
+Apple Silicon only. No Xcode and no git clone required.
+
+**[Download WhisperLocal 0.2.0](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.0/WhisperLocal-0.2.0-arm64.dmg)** (`.dmg`, Apple Silicon) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
 
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
 2. Open **WhisperLocal** and grant **Microphone** and **Accessibility** when asked.

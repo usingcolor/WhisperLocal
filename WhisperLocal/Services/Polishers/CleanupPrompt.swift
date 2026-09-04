@@ -155,7 +155,7 @@ enum CleanupPrompt {
 
     After they copy your output:
     1. Settings → System prompt: paste About you, Examples, Exceptions, then Save system prompt.
-    2. Save the CSV, Settings → Dictionary → Import CSV, then Update dictionary.
+    2. Save the CSV, then Settings → Dictionary → CSV → Import. It applies right away.
     """
 
     static var defaultPersonalContext: String {

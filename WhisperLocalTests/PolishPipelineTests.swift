@@ -693,7 +693,8 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("=== DICTIONARY CSV ==="))
         XCTAssertTrue(prompt.contains(DictionaryCSV.header))
         XCTAssertTrue(prompt.contains("Save system prompt"))
-        XCTAssertTrue(prompt.contains("Import CSV"))
+        // Pins the path the prompt tells the user to follow; update with the UI.
+        XCTAssertTrue(prompt.contains("CSV → Import"))
         XCTAssertTrue(prompt.contains("raw dictation → cleaned text"))
         XCTAssertFalse(prompt.contains("Changho Choi"))
         XCTAssertFalse(prompt.contains("@gmail.com"))

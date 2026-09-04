@@ -141,9 +141,7 @@ struct SettingsView: View {
                 Text(hotKey.mode.helpText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("Press Shift during a take to switch it to session context; press Shift again to switch back. Context is distilled into a short topic (nothing pasted). Edit it from the menu or under Polish.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                helpText("Hold Shift during a take to capture session context instead of pasting. Set it up under Polish.")
 
                 Picker("Speech model", selection: Binding(
                     get: { settings.asrModel },
@@ -157,8 +155,6 @@ struct SettingsView: View {
                     }
                 }
                 speechModelHelp
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 if settings.asrModel == .appleSpeech, !AppleSpeechASR.isAvailable {
                     Text(AppleSpeechASR.availabilityMessage)
                         .font(.caption)
@@ -206,9 +202,10 @@ struct SettingsView: View {
                         .foregroundStyle(.orange)
                 }
                 Toggle("Keep a dictation log", isOn: $settings.enableDictationLog)
-                Text("Saves recent takes as local JSON (text only). Turn off to skip new entries; existing log is not deleted. Polish can optionally reuse these takes — that is off until you enable it on the Polish page.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                helpText(
+                    "Saves recent takes as local JSON, text only.",
+                    more: "Turning this off skips new entries; the existing log is not deleted. Polish can reuse these takes to match your style, but that stays off until you enable it on the Polish page."
+                )
                 Button("Open dictation log…") {
                     AppWindowFocus.present(title: "Dictation Log") {
                         openWindow(id: "log")
@@ -268,17 +265,29 @@ struct SettingsView: View {
                     }
                     .disabled(!settings.enableDictationLog || !settings.enableTextCleanup)
                 }
-                Text(recentPolishLogsHelp)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                recentPolishLogsHelp
 
                 Toggle("Spoken session context", isOn: $settings.enableSessionContext)
                     .disabled(!settings.enableTextCleanup)
-                Text(sessionContextHelp)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                sessionContextHelp
                 if settings.enableSessionContext {
-                    SessionContextEditor(controller: controller)
+                    // The editor has its own window, reachable from the menu bar.
+                    // A second copy here made Polish carry a whole other feature.
+                    LabeledContent("Current context") {
+                        HStack(spacing: 10) {
+                            Text(controller.hasActiveSessionContext
+                                 ? controller.sessionContextText
+                                 : "Not set")
+                                .foregroundStyle(controller.hasActiveSessionContext ? .primary : .secondary)
+                                .lineLimit(2)
+                            Spacer(minLength: 8)
+                            Button("Edit…") {
+                                AppWindowFocus.present(title: "Session context") {
+                                    openWindow(id: "session-context")
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -294,9 +303,9 @@ struct SettingsView: View {
             set: { destination in
                 switch destination {
                 case .onDevice:
-                    applyCloudPolish(.none, revealPolish: false)
+                    applyCloudPolish(.none)
                 case .cloud:
-                    applyCloudPolish(settings.preferredCloudProvider, revealPolish: false)
+                    applyCloudPolish(settings.preferredCloudProvider)
                 }
             }
         )
@@ -494,7 +503,7 @@ struct SettingsView: View {
     private var cloudPolishControls: some View {
         Picker("Provider", selection: Binding(
             get: { displayedCloudProvider },
-            set: { applyCloudPolish($0, revealPolish: false) }
+            set: { applyCloudPolish($0) }
         )) {
             ForEach(CloudPolishProvider.cloudCases) { option in
                 Text(option.displayName).tag(option)
@@ -561,7 +570,8 @@ struct SettingsView: View {
                         get: { settings.cleanupPersonalNotes },
                         set: { settings.cleanupPersonalNotes = $0 }
                     ),
-                    lineLimit: 6...12
+                    lineLimit: 6...12,
+                    onClear: { settings.clearPersonalContext() }
                 )
                 promptEditor(
                     title: "Examples",
@@ -571,7 +581,8 @@ struct SettingsView: View {
                         get: { settings.cleanupPersonalExamples },
                         set: { settings.cleanupPersonalExamples = $0 }
                     ),
-                    lineLimit: 4...10
+                    lineLimit: 4...10,
+                    onClear: { settings.clearPersonalExamples() }
                 )
                 promptEditor(
                     title: "Exceptions",
@@ -581,26 +592,13 @@ struct SettingsView: View {
                         get: { settings.cleanupExceptions },
                         set: { settings.cleanupExceptions = $0 }
                     ),
-                    lineLimit: 5...10
+                    lineLimit: 5...10,
+                    onClear: { settings.clearExceptions() }
                 )
                 VStack(alignment: .leading, spacing: 8) {
-                    prefillCommitControls(.systemPrompt)
-                    HStack {
-                        Button("Restore default drafts") {
-                            settings.restoreDefaultPersonalContext()
-                        }
-                        Button("Clear about you") {
-                            settings.clearPersonalContext()
-                        }
-                        .disabled(settings.cleanupPersonalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button("Clear examples") {
-                            settings.clearPersonalExamples()
-                        }
-                        .disabled(settings.cleanupPersonalExamples.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button("Clear exceptions", role: .destructive) {
-                            settings.clearExceptions()
-                        }
-                        .disabled(settings.cleanupExceptions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    prefillCommitControls
+                    Button("Restore default drafts") {
+                        settings.restoreDefaultPersonalContext()
                     }
                 }
             }
@@ -614,11 +612,21 @@ struct SettingsView: View {
         caption: String,
         placeholder: String,
         text: Binding<String>,
-        lineLimit: ClosedRange<Int>
+        lineLimit: ClosedRange<Int>,
+        onClear: @escaping () -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.headline)
+            // Clear sits on the thing it clears. Three "Clear X" buttons in a shared
+            // footer made the reader pair button to editor themselves.
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Button("Clear", action: onClear)
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .disabled(text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
             Text(caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -771,15 +779,19 @@ struct SettingsView: View {
                 }
                 .disabled(newDictionaryTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            // One menu instead of three equal-weight buttons: importing is the task,
+            // export and template are the occasional helpers around it.
             HStack {
-                Button("Import CSV…", action: importDictionaryCSV)
-                Button("Export CSV…", action: exportDictionaryCSV)
-                Button("Copy template", action: copyDictionaryTemplate)
-                Button("Copy setup prompt") {
-                    copySettingsGeneratorPrompt()
+                Menu("CSV") {
+                    Button("Import…", action: importDictionaryCSV)
+                    Divider()
+                    Button("Export…", action: exportDictionaryCSV)
+                    Button("Copy blank template", action: copyDictionaryTemplate)
                 }
+                .fixedSize()
+                Spacer()
             }
-            Text("Copy setup prompt asks an LLM to draft About you and this CSV. Copy template is an empty CSV. Import, then Update dictionary.")
+            Text("Changes here apply as you make them. To have an LLM draft a dictionary for you, use Copy setup prompt on the System prompt page.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let dictionaryFileNote {
@@ -787,12 +799,12 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            prefillCommitControls(.dictionary)
             if case .app(let id) = dictionaryDestination,
                settings.appDictionaries.contains(where: { $0.id == id }) {
                 Button("Remove app", role: .destructive) {
                     settings.removeAppDictionary(id: id)
                     dictionaryDestination = .everyApp
+                    publishDictionaryChange()
                 }
             }
             if visibleDictionaryWords.isEmpty {
@@ -816,17 +828,16 @@ struct SettingsView: View {
     private var permissionsPane: some View {
         settingsForm {
             Section {
-                LabeledContent("Microphone") {
-                    Text(permissions.microphoneGranted ? "Granted" : "Missing")
-                        .foregroundStyle(permissions.microphoneGranted ? .green : .orange)
+                // The fix belongs on the row that needs it. A flat row of buttons
+                // underneath made the reader match button to permission themselves.
+                permissionRow("Microphone", granted: permissions.microphoneGranted, action: "Grant") {
+                    Task { _ = await permissions.requestMicrophone() }
                 }
-                LabeledContent("Accessibility") {
-                    Text(permissions.accessibilityTrusted ? "Granted" : "Missing")
-                        .foregroundStyle(permissions.accessibilityTrusted ? .green : .orange)
+                permissionRow("Accessibility", granted: permissions.accessibilityTrusted, action: "Open Settings") {
+                    permissions.requestAccessibility()
                 }
-                LabeledContent("Input Monitoring") {
-                    Text(permissions.inputMonitoringTrusted ? "Granted" : "Missing")
-                        .foregroundStyle(permissions.inputMonitoringTrusted ? .green : .orange)
+                permissionRow("Input Monitoring", granted: permissions.inputMonitoringTrusted, action: "Open Settings") {
+                    permissions.requestInputMonitoring()
                 }
                 if !permissions.accessibilityTrusted {
                     Text(permissions.accessibilityHelpText)
@@ -842,20 +853,8 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                HStack {
-                    Button("Request Microphone") {
-                        Task { _ = await permissions.requestMicrophone() }
-                    }
-                    Button("Open Accessibility Settings") {
-                        permissions.requestAccessibility()
-                    }
-                    Button("Open Input Monitoring") {
-                        permissions.requestInputMonitoring()
-                    }
-                    Button("Refresh") {
-                        permissions.refresh()
-                    }
-                }
+                // No Refresh button: this pane polls once a second while it is open,
+                // so the rows above update themselves.
                 if !permissions.accessibilityTrusted || !permissions.inputMonitoringTrusted {
                     Button("Quit & Reopen (needed after enabling these)") {
                         permissions.quitAndRelaunch()
@@ -867,6 +866,54 @@ struct SettingsView: View {
         .onDisappear { permissions.stopPolling() }
     }
 
+    private func permissionRow(
+        _ title: String,
+        granted: Bool,
+        action: String,
+        perform: @escaping () -> Void
+    ) -> some View {
+        LabeledContent(title) {
+            HStack(spacing: 10) {
+                Text(granted ? "Granted" : "Missing")
+                    .foregroundStyle(granted ? .green : .orange)
+                if !granted {
+                    Button(action, action: perform)
+                }
+            }
+        }
+    }
+
+    /// A summary line, with the rest behind a disclosure. Long captions were burying
+    /// the controls they explain, but the detail is real — licensing, privacy, where
+    /// downloads come from — so it is folded away rather than cut.
+    @ViewBuilder
+    private func helpText(_ summary: String, more: String? = nil) -> some View {
+        if let more {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                DisclosureGroup("More") {
+                    Text(more)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 2)
+                }
+                .font(.caption)
+            }
+        } else {
+            Text(summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     private func settingsForm<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         Form {
             content()
@@ -875,14 +922,16 @@ struct SettingsView: View {
         .padding(.trailing, 4)
     }
 
-    @ViewBuilder
-    private func prefillCommitControls(_ copy: PrefillCommitCopy) -> some View {
+    /// The one place the assembled prompt is published. The Dictionary page used to
+    /// show a second copy of this button under a different name, which committed the
+    /// same thing — including whatever was typed here.
+    private var prefillCommitControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
                 settings.commitSystemPrompt()
                 controller.prewarmOnDevicePolish()
             } label: {
-                Label(copy.buttonTitle, systemImage: copy.icon)
+                Label("Save system prompt", systemImage: "square.and.arrow.down")
                     .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }
@@ -890,52 +939,71 @@ struct SettingsView: View {
             .controlSize(.large)
             .frame(maxWidth: .infinity)
             .disabled(!settings.isSystemPromptStale)
-            .help(copy.help)
+            .help("Applies About you, Examples, and Exceptions to polish. Until you save, dictation uses the previous prompt.")
 
             if settings.isSystemPromptStale {
-                Text(copy.staleMessage)
+                Text("Unsaved drafts — polish still uses the last saved system prompt.")
                     .font(.caption)
                     .foregroundStyle(.orange)
             } else if settings.cleanupPersonalContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(copy.emptyMessage)
+                Text("No custom prompt is set. Built-in cleanup rules still run.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text(copy.currentMessage)
+                Text("Prefill is up to date.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
     }
 
-    private var sessionContextHelp: String {
+    private var sessionContextHelp: some View {
         let hotkey = hotKey.selectedKey.displayName
-        let shared = "Press Shift while talking to switch this take to session context; press Shift again to switch back to a normal paste. You can also start with Shift + \(hotkey). The orange CONTEXT badge is the mode that will be used when you finish. Spoken context is rewritten into a short topic with a hidden engine prompt (not shown in Settings); your About you notes still help with names. Nothing is pasted. Later takes send it with polish so names and jargon resolve. It expires after a few off-topic takes or 45 minutes idle, and is not saved into your system prompt or across launches. Edit it below if speech got it wrong."
+        var detail = "It becomes a short topic that rides along with later polish so names and jargon resolve, then clears after 45 minutes idle or a few off-topic takes. Nothing is pasted, and it is never saved into your system prompt or kept across launches."
         if settings.hasUsableCloudPolish {
-            return shared + " With cloud polish, that text also goes to the API."
+            detail += " With cloud polish, that text also goes to the API."
         }
-        return shared
+        return helpText(
+            "Hold Shift during a take, or start with Shift + \(hotkey), to capture context instead of pasting — the orange CONTEXT badge shows which you will get.",
+            more: detail
+        )
     }
 
-    private var recentPolishLogsHelp: String {
+    @ViewBuilder
+    private var recentPolishLogsHelp: some View {
         if !settings.enableDictationLog {
-            return "Turn on the dictation log (Dictation page) first. Recent takes are not written into Save system prompt."
+            helpText("Turn on the dictation log on the Dictation page first.")
+        } else if settings.hasUsableCloudPolish {
+            helpText(
+                "Sends your last few takes with each polish request so the model matches your names and tone.",
+                more: "Off by default. Adds tokens and latency, and with cloud polish that text goes to the API too. These takes are never written into your system prompt."
+            )
+        } else {
+            helpText(
+                "Sends your last few takes with each polish request so the model matches your names and tone.",
+                more: "Off by default. Adds latency. On-device models have a small context window, so at most three shortened examples are sent. These takes are never written into your system prompt."
+            )
         }
-        if settings.hasUsableCloudPolish {
-            return "Off by default. When on, the last successful takes ride along with this polish request so the model can match names and tone. That adds tokens and latency. They are not saved into your system prompt. With cloud polish, that text also goes to the API."
-        }
-        return "Off by default. When on, the last successful takes ride along with this polish request so the model can match names and tone. On-device models have a small window, so WhisperLocal sends at most three shortened examples. They are not saved into your system prompt. Adds latency."
     }
 
     @ViewBuilder
     private var speechModelHelp: some View {
         switch settings.asrModel.engine {
         case .whisper:
-            Text("WhisperKit Core ML. First use downloads weights from Hugging Face.")
+            helpText(
+                "WhisperKit Core ML, running on this Mac.",
+                more: "First use downloads weights from Hugging Face."
+            )
         case .parakeet:
-            Text("Parakeet TDT 0.6B v2 is NVIDIA’s English model (CC-BY-4.0), running on-device via FluidAudio. First load downloads CoreML weights from Hugging Face.")
+            helpText(
+                "NVIDIA Parakeet TDT 0.6B v2, running on this Mac.",
+                more: "English only, CC-BY-4.0, via FluidAudio. First load downloads Core ML weights from Hugging Face."
+            )
         case .appleSpeech:
-            Text("On-device Apple SpeechTranscriber (macOS 26). English, even if that is not the system language. The OS may download a shared speech model on first use. Each take is written to a private temp file and deleted after transcription; audio stays on this Mac.")
+            helpText(
+                "Apple’s on-device transcriber (macOS 26). English only.",
+                more: "English even if that is not your system language. The OS may download a shared speech model on first use. Each take is written to a private temp file and deleted after transcription; audio stays on this Mac."
+            )
         }
     }
 
@@ -956,9 +1024,10 @@ struct SettingsView: View {
                     .foregroundStyle(gemma.isReady ? Color.secondary : Color.orange)
                     .textSelection(.enabled)
             }
-            Text("Text-only 4-bit MLX weights from Hugging Face (`mlx-community/Gemma4-E2B-IT-Text-int4`). Vision and audio towers are omitted. First load downloads ~2.7 GB and compiles Metal kernels; after that polish should take a few seconds. Gemma is released under Google’s license.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            helpText(
+                "Text-only 4-bit MLX weights. First load downloads about 2.7 GB.",
+                more: "Weights come from Hugging Face (`mlx-community/Gemma4-E2B-IT-Text-int4`); the vision and audio towers are omitted. First load also compiles Metal kernels, after which polish should take a few seconds. Gemma is released under Google’s license."
+            )
             if !gemma.isReady {
                 Button(gemma.status.isFailed ? "Retry download" : "Download / Load Gemma") {
                     GemmaMLXPolisher.shared.prewarm()
@@ -1019,6 +1088,7 @@ struct SettingsView: View {
         case .app(let id):
             settings.removeAppDictionaryTerm(id: id, term: word)
         }
+        publishDictionaryChange()
     }
 
     private func sidebarShowsSavedKey(for page: SettingsPage) -> Bool {
@@ -1044,7 +1114,7 @@ struct SettingsView: View {
             if ok, !key.isEmpty {
                 Task { await models.fetchOpenAI(apiKey: key) }
                 if settings.cloudPolishProvider == .none {
-                    applyCloudPolish(.openAI, revealPolish: false)
+                    applyCloudPolish(.openAI)
                 }
             }
             return ok
@@ -1054,14 +1124,14 @@ struct SettingsView: View {
         if ok, !key.isEmpty {
             Task { await models.fetchAnthropic(apiKey: key) }
             if settings.cloudPolishProvider == .none {
-                applyCloudPolish(.anthropic, revealPolish: false)
+                applyCloudPolish(.anthropic)
             }
         }
         return ok
     }
 
     /// Turns cloud polish on for this provider and optionally shows the Polish page.
-    private func applyCloudPolish(_ provider: CloudPolishProvider, revealPolish: Bool) {
+    private func applyCloudPolish(_ provider: CloudPolishProvider) {
         if provider != .none {
             settings.enableTextCleanup = true
         }
@@ -1070,9 +1140,6 @@ struct SettingsView: View {
             controller.prewarmOnDevicePolish()
         } else {
             GemmaMLXPolisher.shared.unload()
-        }
-        if revealPolish {
-            page = .polish
         }
     }
 
@@ -1084,15 +1151,17 @@ struct SettingsView: View {
 
         Section("Cloud polish") {
             if isCurrent {
-                Text("Polish is using \(name). That is the active polish setting. On the Polish page, choose On this Mac if you want Apple Intelligence or Gemma instead.")
+                Text("Polish is using \(name). To polish on this Mac with Apple Intelligence or Gemma instead, change it on the Polish page.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Show Polish settings") {
                     page = .polish
                 }
             } else {
+                // Activates in place. This used to jump to the Polish page, so the two
+                // pages bounced the reader between them mid-setup.
                 Button {
-                    applyCloudPolish(provider, revealPolish: true)
+                    applyCloudPolish(provider)
                 } label: {
                     Label("Use \(name) for cloud polish", systemImage: "checkmark.circle.fill")
                         .font(.body.weight(.semibold))
@@ -1107,16 +1176,26 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 } else if settings.cloudPolishProvider != .none {
-                    Text("This switches cloud polish from \(settings.cloudPolishProvider.displayName) to \(name), then opens Polish.")
+                    Text("Switches cloud polish from \(settings.cloudPolishProvider.displayName) to \(name).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Turns on cloud polish for \(name) and opens the Polish page.")
+                    Text("Turns on cloud polish for \(name).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         }
+    }
+
+    /// App dictionaries reach polish through the assembled system prompt, so a change
+    /// here has to be published to take effect. Every-app words are passed straight to
+    /// the polisher and leave the prompt untouched, so this no-ops for them — which is
+    /// why the old "Update dictionary" button sat greyed out for the commonest edit.
+    private func publishDictionaryChange() {
+        guard settings.isSystemPromptStale else { return }
+        settings.commitSystemPrompt()
+        controller.prewarmOnDevicePolish()
     }
 
     private func addDictionaryTerm() {
@@ -1128,6 +1207,7 @@ struct SettingsView: View {
             settings.addAppDictionaryTerm(id: id, raw: term)
         }
         newDictionaryTerm = ""
+        publishDictionaryChange()
     }
 
     private func addAppDictionary(_ entry: AppDictionaryEntry) {
@@ -1141,6 +1221,7 @@ struct SettingsView: View {
         isAddingOtherApp = false
         customAppName = ""
         customAppKind = .other
+        publishDictionaryChange()
     }
 
     private func addOtherAppDictionary() {
@@ -1163,13 +1244,13 @@ struct SettingsView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         promptCopyNote = "Copied. Paste into ChatGPT, Claude, or another LLM."
-        dictionaryFileNote = "Setup prompt copied. Paste the LLM’s CSV via Import CSV, then Update dictionary."
+        dictionaryFileNote = "Setup prompt copied. Paste the LLM’s CSV via CSV → Import."
     }
 
     private func copyDictionaryTemplate() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(DictionaryCSV.template, forType: .string)
-        dictionaryFileNote = "Template copied. Paste it into ChatGPT or Claude, then Import CSV."
+        dictionaryFileNote = "Template copied. Paste it into ChatGPT or Claude, then CSV → Import."
     }
 
     private func exportDictionaryCSV() {
@@ -1188,7 +1269,7 @@ struct SettingsView: View {
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
             NSWorkspace.shared.activateFileViewerSelecting([url])
-            dictionaryFileNote = "Exported. Fill it with an LLM, then Import CSV."
+            dictionaryFileNote = "Exported. Fill it with an LLM, then CSV → Import."
         } catch {
             presentDictionaryFileError(error)
         }
@@ -1218,7 +1299,8 @@ struct SettingsView: View {
             default:
                 return
             }
-            dictionaryFileNote = "Imported. Click Update dictionary to apply."
+            publishDictionaryChange()
+            dictionaryFileNote = "Imported and applied."
         } catch {
             presentDictionaryFileError(error)
         }
@@ -1261,58 +1343,6 @@ private final class SettingsWindowChromeView: NSView {
     }
 }
 
-private enum PrefillCommitCopy {
-    case systemPrompt
-    case dictionary
-
-    var buttonTitle: String {
-        switch self {
-        case .systemPrompt: return "Save system prompt"
-        case .dictionary: return "Update dictionary"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .systemPrompt: return "square.and.arrow.down"
-        case .dictionary: return "square.and.arrow.down"
-        }
-    }
-
-    var help: String {
-        switch self {
-        case .systemPrompt:
-            return "Applies About you, Examples, and Exceptions to polish. Until you save, dictation uses the previous prompt."
-        case .dictionary:
-            return "Applies dictionary edits to polish. Until you update, dictation uses the previous list."
-        }
-    }
-
-    var staleMessage: String {
-        switch self {
-        case .systemPrompt:
-            return "Unsaved drafts — polish still uses the last saved system prompt."
-        case .dictionary:
-            return "Unsaved changes — polish still uses the last update."
-        }
-    }
-
-    var emptyMessage: String {
-        switch self {
-        case .systemPrompt:
-            return "No custom prompt is set. Built-in cleanup rules still run."
-        case .dictionary:
-            return "No custom dictionary is applied to polish yet."
-        }
-    }
-
-    var currentMessage: String {
-        switch self {
-        case .systemPrompt: return "Prefill is up to date."
-        case .dictionary: return "Dictionary is up to date."
-        }
-    }
-}
 
 private enum DictionaryDestination: Hashable, Identifiable {
     case everyApp
@@ -1352,18 +1382,32 @@ private struct APIKeyField: View {
         VStack(alignment: .leading, spacing: 10) {
             statusBanner
 
-            if showsSavedMask {
-                maskedKeyPreview
-            } else if showKey {
-                TextField(prompt, text: $draft)
-                    .font(.body.monospaced())
-                    .textFieldStyle(.roundedBorder)
-                    .textSelection(.enabled)
-            } else {
-                SecureField(prompt, text: $draft)
-                    .font(.body.monospaced())
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
+            // Reveal belongs in the field, not in the button row underneath. ⌘V
+            // already pastes, so a Paste button was a third way to do one thing.
+            HStack(spacing: 6) {
+                if showsSavedMask {
+                    maskedKeyPreview
+                } else if showKey {
+                    TextField(prompt, text: $draft)
+                        .font(.body.monospaced())
+                        .textFieldStyle(.roundedBorder)
+                        .textSelection(.enabled)
+                } else {
+                    SecureField(prompt, text: $draft)
+                        .font(.body.monospaced())
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.password)
+                }
+                Button {
+                    toggleReveal()
+                } label: {
+                    Image(systemName: showKey ? "eye.slash" : "eye")
+                        .frame(width: 16)
+                }
+                .buttonStyle(.borderless)
+                .disabled(!hasSavedKey && trimmedDraft.isEmpty)
+                .help(showKey ? "Hide API key" : "Show API key")
+                .accessibilityLabel(showKey ? "Hide API key" : "Show API key")
             }
 
             if let fieldHint {
@@ -1383,13 +1427,6 @@ private struct APIKeyField: View {
                 .foregroundStyle(.secondary)
 
             HStack {
-                Button("Paste") {
-                    pasteFromClipboard()
-                }
-                Button(showKey ? "Hide API key" : "Show API key") {
-                    toggleReveal()
-                }
-                .disabled(!hasSavedKey && trimmedDraft.isEmpty)
                 Button("Save key", action: save)
                     .disabled(trimmedDraft.isEmpty)
                 Button("Remove key", role: .destructive, action: remove)
@@ -1412,7 +1449,7 @@ private struct APIKeyField: View {
 
     private var fieldHint: String? {
         if showsSavedMask {
-            return "Click Show API key to see the full key, or Paste a new one to replace it."
+            return "Use the eye button to see the full key, or paste a new one to replace it."
         }
         if !trimmedDraft.isEmpty, !showKey, hasSavedKey {
             return "Unsaved replacement. Click Save key to store it."
@@ -1515,19 +1552,6 @@ private struct APIKeyField: View {
                 draft = ""
             }
         }
-    }
-
-    private func pasteFromClipboard() {
-        let pasted = NSPasteboard.general.string(forType: .string)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !pasted.isEmpty else {
-            saveNoteIsError = true
-            saveNote = "Clipboard is empty."
-            return
-        }
-        draft = pasted
-        showKey = true
-        saveNote = nil
     }
 
     private func save() {

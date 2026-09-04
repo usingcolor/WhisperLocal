@@ -179,9 +179,9 @@ struct SettingsView: View {
                         .foregroundStyle(.orange)
                 }
                 Toggle("Insert trailing space", isOn: $settings.insertTrailingSpace)
-                Toggle("Reduce background audio", isOn: $settings.enableEchoCancellation)
+                Toggle("Ignore playback", isOn: $settings.enableEchoCancellation)
                 helpText(
-                    "Keeps music and video out of your transcript. Playback dips while you talk.",
+                    "Music and video playing on this Mac stay out of your transcript. Their volume dips while you talk.",
                     more: "Echo cancellation and noise suppression, applied to the microphone. Off by default: it changes what the speech model hears whether or not anything is playing, and it does nothing on headphones, where the mic never hears playback at all. Weakest when two voices overlap, so someone talking in a video can still get through while you are talking."
                 )
                 Toggle("Use the built-in mic while headphones are playing", isOn: $settings.preferBuiltInMicOverBluetooth)

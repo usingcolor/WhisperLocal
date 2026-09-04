@@ -126,6 +126,59 @@ payload="${stage}/payload"
 mkdir -p "$payload"
 
 if [[ "$signed_release" == "1" ]]; then
+  # Xcode signs the app, but Swift stdlib dylibs and SPM resource bundles
+  # can land without hardened runtime. Notarization rejects that.
+  echo "==> Re-signing nested Mach-O with hardened runtime"
+  python3 - "$app" "$codesign_identity" "${CODESIGN_KEYCHAIN:-}" <<'PY'
+import os
+import subprocess
+import sys
+
+app, identity, keychain = sys.argv[1], sys.argv[2], sys.argv[3]
+magics = {
+    b"\xfe\xed\xfa\xce",
+    b"\xce\xfa\xed\xfe",
+    b"\xfe\xed\xfa\xcf",
+    b"\xcf\xfa\xed\xfe",
+    b"\xca\xfe\xba\xbe",
+    b"\xbe\xba\xfe\xca",
+}
+main = os.path.join(app, "Contents", "MacOS", "WhisperLocal")
+paths = []
+for dirpath, _, filenames in os.walk(app):
+    for name in filenames:
+        path = os.path.join(dirpath, name)
+        if path == main:
+            continue
+        try:
+            with open(path, "rb") as handle:
+                magic = handle.read(4)
+        except OSError:
+            continue
+        if magic in magics:
+            paths.append(path)
+paths.sort(key=lambda p: p.count(os.sep), reverse=True)
+for path in paths:
+    cmd = [
+        "codesign",
+        "--force",
+        "--options",
+        "runtime",
+        "--timestamp",
+        "--sign",
+        identity,
+    ]
+    if keychain:
+        cmd.extend(["--keychain", keychain])
+    cmd.append(path)
+    subprocess.check_call(cmd)
+PY
+  echo "==> Signing app bundle"
+  codesign --force --options runtime --timestamp \
+    --sign "$codesign_identity" \
+    "${codesign_keychain_args[@]}" \
+    --entitlements WhisperLocal/App/WhisperLocal.entitlements \
+    "$app"
   echo "==> Verifying Developer ID codesign"
 else
   echo "==> Ad-hoc codesign"
@@ -169,16 +222,37 @@ notarize_and_wait() {
     --issuer "$NOTARYTOOL_ISSUER_ID" \
     --wait \
     --output-format json | tee "$result"
-  python3 - "$result" <<'PY'
+  python3 - "$result" "$NOTARYTOOL_KEY_PATH" "$NOTARYTOOL_KEY_ID" "$NOTARYTOOL_ISSUER_ID" <<'PY'
 import json
 import pathlib
+import subprocess
 import sys
 
 result = json.loads(pathlib.Path(sys.argv[1]).read_text())
-if result.get("status") != "Accepted":
-    raise SystemExit(
-        f"error: Apple notarization status was {result.get('status', 'unknown')!r}, not 'Accepted'."
+status = result.get("status", "unknown")
+if status == "Accepted":
+    raise SystemExit(0)
+submission_id = result.get("id")
+if submission_id:
+    print(f"==> Fetching notarization log for {submission_id}", flush=True)
+    subprocess.run(
+        [
+            "xcrun",
+            "notarytool",
+            "log",
+            submission_id,
+            "--key",
+            sys.argv[2],
+            "--key-id",
+            sys.argv[3],
+            "--issuer",
+            sys.argv[4],
+        ],
+        check=False,
     )
+raise SystemExit(
+    f"error: Apple notarization status was {status!r}, not 'Accepted'."
+)
 PY
 }
 

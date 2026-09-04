@@ -13,6 +13,15 @@ Then grant Microphone and Accessibility. Default ASR is Apple Speech on macOS 26
 - The HUD shows an orange CONTEXT badge while that take is in progress, so it is obvious this will not paste.
 - Polish no longer strips spoken millimetres (`5 mm`, `50 mm`) after LLM cleanup.
 
+## 0.1.8
+
+- Release packaging only — no changes to the app itself.
+- The release workflow can now sign with a Developer ID certificate, notarize with
+  `notarytool`, and staple the ticket, when the Apple secrets are configured.
+- The 0.1.8 DMG itself was still ad-hoc signed: the workflow fell back because those
+  secrets were not set, so that download is blocked by Gatekeeper on first launch. Its
+  release notes explain how to open it.
+
 ## 0.1.7
 
 - **Cleanup is LLM-only.** The old heuristic rewrite is gone. Fillers (`um`, `uh`, `hmm`) still strip. False starts and “wait, no — actually” need Apple Intelligence (default on macOS 26), Gemma 4, or a cloud API key. On macOS 14–15, turn on Gemma or cloud polish for that cleanup.

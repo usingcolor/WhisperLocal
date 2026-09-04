@@ -195,6 +195,7 @@ private final class HUDPanel: NSPanel {
 
 struct RecordingHUDView: View {
     @ObservedObject var controller: RecordingHUDController
+    @State private var cancelHovering = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -220,11 +221,20 @@ struct RecordingHUDView: View {
                 Button {
                     controller.onCancel?()
                 } label: {
+                    // Two-tone: a solid disc carries the contrast and the glyph is
+                    // punched out of it, so it stays legible whatever the material
+                    // picks up from behind the panel. A single translucent white
+                    // glyph vanished against a light background.
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(
+                            Color.black.opacity(0.7),
+                            Color.white.opacity(cancelHovering ? 1 : 0.85)
+                        )
+                        .font(.system(size: 17))
                 }
                 .buttonStyle(.plain)
+                .onHover { cancelHovering = $0 }
                 .help("Cancel this dictation")
                 .accessibilityLabel("Cancel this dictation")
             }

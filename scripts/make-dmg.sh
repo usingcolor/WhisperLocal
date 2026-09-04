@@ -100,7 +100,13 @@ if [[ "$id" != "com.usingcolor.WhisperLocal" ]]; then
 fi
 
 stage="$(mktemp -d "${TMPDIR:-/tmp}/whisperlocal-dmg.XXXXXX")"
-cleanup() { rm -rf "$stage"; }
+cleanup() {
+  # Capture first: the trap's own last command would otherwise become the script's
+  # exit status, turning a fatal error into a silent success.
+  local status=$?
+  rm -rf "$stage"
+  exit "$status"
+}
 trap cleanup EXIT
 payload="${stage}/payload"
 mkdir -p "$payload"
@@ -112,11 +118,11 @@ if [[ "$signed_release" == "1" ]]; then
   echo "==> Developer ID codesign (hardened runtime and timestamp)"
   codesign --force --deep --options runtime --timestamp \
     --sign "$codesign_identity" \
-    "${codesign_keychain_args[@]}" \
+    ${codesign_keychain_args[@]+"${codesign_keychain_args[@]}"} \
     "$app"
   codesign --force --options runtime --timestamp \
     --sign "$codesign_identity" \
-    "${codesign_keychain_args[@]}" \
+    ${codesign_keychain_args[@]+"${codesign_keychain_args[@]}"} \
     --entitlements WhisperLocal/App/WhisperLocal.entitlements \
     "$app"
   echo "==> Verifying Developer ID codesign"
@@ -275,7 +281,7 @@ if [[ "$signed_release" == "1" ]]; then
   codesign --force \
     --timestamp \
     --sign "$codesign_identity" \
-    "${codesign_keychain_args[@]}" \
+    ${codesign_keychain_args[@]+"${codesign_keychain_args[@]}"} \
     "$dmg"
   codesign --verify --verbose=2 "$dmg"
 fi

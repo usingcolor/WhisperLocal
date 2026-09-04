@@ -13,6 +13,7 @@ fi
 
 codesign_identity="${CODESIGN_IDENTITY:--}"
 notarize="${NOTARIZE:-0}"
+notary_timeout="${NOTARY_TIMEOUT:-30m}"
 signed_release=0
 if [[ "$codesign_identity" != "-" ]]; then
   signed_release=1
@@ -153,13 +154,26 @@ notarize_and_wait() {
   local label="$2"
   local result="${stage}/${label}-notary-result.json"
 
-  echo "==> Submitting $label to Apple notarization"
+  echo "==> Submitting $label to Apple notarization (waiting up to ${notary_timeout})"
+  # Do not let a non-zero exit kill the script here: on a timeout notarytool exits
+  # non-zero, and `set -e` would skip the log fetch below — the one thing that
+  # explains a failure. Capture the status and decide afterwards.
+  local notary_status=0
   xcrun notarytool submit "$submission" \
     --key "$NOTARYTOOL_KEY_PATH" \
     --key-id "$NOTARYTOOL_KEY_ID" \
     --issuer "$NOTARYTOOL_ISSUER_ID" \
     --wait \
-    --output-format json | tee "$result"
+    --timeout "$notary_timeout" \
+    --output-format json > "$result" || notary_status=$?
+  cat "$result"
+
+  if [[ ! -s "$result" ]] || ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$result" 2>/dev/null; then
+    echo "error: notarytool returned no usable result for $label (exit ${notary_status})." >&2
+    echo "       A timeout means Apple's notary service did not answer within ${notary_timeout};" >&2
+    echo "       re-running the tag is usually enough. Anything else is a credential or network fault." >&2
+    exit 1
+  fi
   python3 - "$result" "$NOTARYTOOL_KEY_PATH" "$NOTARYTOOL_KEY_ID" "$NOTARYTOOL_ISSUER_ID" <<'PY'
 import json
 import pathlib
@@ -194,16 +208,8 @@ raise SystemExit(
 PY
 }
 
-if [[ "$notarize" == "1" ]]; then
-  app_archive="${stage}/WhisperLocal.zip"
-  echo "==> Archiving app for notarization"
-  ditto -c -k --keepParent "$app" "$app_archive"
-  notarize_and_wait "$app_archive" app
-  echo "==> Stapling notarization ticket to app"
-  xcrun stapler staple "$app"
-  xcrun stapler validate "$app"
-fi
-
+# The app is not submitted on its own. Notarizing the DMG below covers the app
+# inside it in a single round trip through Apple's queue, which is what we wait on.
 ditto "$app" "${payload}/WhisperLocal.app"
 ln -s /Applications "${payload}/Applications"
 

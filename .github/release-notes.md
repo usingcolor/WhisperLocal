@@ -6,6 +6,23 @@ Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applic
 
 Then grant Microphone and Accessibility. Default ASR is Apple Speech on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
 
+## 0.2.0
+
+- **Long dictations no longer come out empty.** The clipboard was being restored on a fixed timer while a long paste was still being read, so the text was replaced mid-paste. Over 300 characters this failed most of the time. The app now waits for the paste to land, and if it still cannot confirm it, leaves the dictation on the clipboard and tells you to press ⌘V rather than discarding it.
+- **A take now stops at ten minutes** instead of recording without limit. It transcribes what you said — it never throws the audio away — and the HUD counts down over the last minute.
+- **Long takes are transcribed in pieces**, cut at natural pauses, so a failure costs one piece instead of everything you just said. Polish is split the same way, so a slow or failing cleanup no longer loses the whole take.
+- **Cloud outages fall back to the on-device model** rather than pasting uncleaned text. Being offline is detected before the request, so there is no waiting for a timeout, and the HUD says which model actually ran.
+- **Ignore playback** (Dictation settings, off by default) keeps music and video coming from this Mac out of your transcript. Playback dips while you talk. It has no effect on headphones.
+- While headphones are playing, dictation uses the built-in mic so music stays at full quality. Bluetooth headsets cannot play high quality and record at once, and their mic is the worse input for speech anyway.
+- **The dictation log has search and day grouping**, and its detail view leads with the transcript. Clearing it now asks first.
+- The session context window shows whether a context is active, how old it is, and what will clear it.
+- Settings lost roughly half its buttons. Permissions offers the fix on the row that needs it, API key pages are down to Save and Remove, and long explanations fold away behind More.
+- The menu bar has real hierarchy — title, status, and grouped actions — instead of a flat list.
+- Onboarding's **Quit & Reopen** now reopens, and **Start using WhisperLocal** closes the window.
+- Text lands in the window you started dictating into, even if you switch Spaces mid-take.
+- Updates refuse to install unless they are signed by the release team.
+- Fixed a case where any multi-channel audio interface would record silence with no error.
+
 ## 0.1.9
 
 - **Spoken session context.** Press Shift during a take to store a short, temporary note about what you are working on. Nothing is pasted. Later dictations send it with polish so names and jargon resolve. Press Shift again to switch back to a normal paste. Edit or clear it from the menu or Settings. It is not saved across launches.

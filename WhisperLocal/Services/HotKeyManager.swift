@@ -101,6 +101,27 @@ final class HotKeyManager: ObservableObject {
         }
     }
 
+    /// Is the hotkey modifier physically down *right now*?
+    ///
+    /// The state machine is edge-driven, so a `flagsChanged` it never receives
+    /// leaves it stuck: `isHolding` stays true, the next press is swallowed by the
+    /// `pressed && !isHolding` guard, and the app goes completely silent. A Space
+    /// switch is one way to lose that edge. This is the ground truth to reconcile
+    /// against, rather than trusting we saw every transition.
+    static func hotkeyIsDown(_ key: KeyChoice, flags: NSEvent.ModifierFlags = NSEvent.modifierFlags) -> Bool {
+        switch key {
+        case .rightOption, .leftOption: return flags.contains(.option)
+        case .rightCommand: return flags.contains(.command)
+        case .fn: return flags.contains(.function)
+        }
+    }
+
+    /// True when we believe a hold is running but the key is not actually held.
+    var missedHotkeyRelease: Bool {
+        guard mode == .hold, isHolding else { return false }
+        return !Self.hotkeyIsDown(selectedKey)
+    }
+
     func markSessionActive(_ active: Bool) {
         isSessionActive = active
         if !active {

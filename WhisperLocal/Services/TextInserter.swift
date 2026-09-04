@@ -47,6 +47,10 @@ struct TargetAppContext: Sendable, Equatable {
     let name: String
     let bundleID: String?
     let kind: Kind
+    /// The process this take was aimed at. Insertion resolves this rather than
+    /// asking for the frontmost app again, which after a Space switch is somebody
+    /// else entirely.
+    var pid: pid_t?
 
     var promptLine: String {
         kind == .other ? name : "\(name) — \(kind.rawValue)"
@@ -63,7 +67,8 @@ struct TargetAppContext: Sendable, Equatable {
         return TargetAppContext(
             name: name,
             bundleID: bundleID,
-            kind: kind(bundleID: bundleID, name: name)
+            kind: kind(bundleID: bundleID, name: name),
+            pid: app.processIdentifier
         )
     }
 
@@ -169,8 +174,11 @@ final class TextInserter {
         "wezterm", "hyper", "tabby", "termius", "waveterm", "console"
     ]
 
-    func insert(_ text: String) async -> InsertionResult {
-        let frontApp = NSWorkspace.shared.frontmostApplication
+    func insert(_ text: String, into target: TargetAppContext? = nil) async -> InsertionResult {
+        // Prefer the app the take was aimed at. Re-reading the frontmost app here
+        // means a Space switch mid-dictation pastes into whatever happens to be in
+        // front of the new Space.
+        let frontApp = Self.resolveTarget(target) ?? NSWorkspace.shared.frontmostApplication
         let appName = frontApp?.localizedName
         let bundleID = frontApp?.bundleIdentifier
 
@@ -230,6 +238,21 @@ final class TextInserter {
         item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
         item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
         pasteboard.writeObjects([item])
+    }
+
+    /// The captured process if it is still alive, else nil so the caller falls back
+    /// to whatever is frontmost.
+    private static func resolveTarget(_ target: TargetAppContext?) -> NSRunningApplication? {
+        guard let target else { return nil }
+        if let pid = target.pid,
+           let app = NSRunningApplication(processIdentifier: pid),
+           !app.isTerminated {
+            return app
+        }
+        guard let bundleID = target.bundleID else { return nil }
+        return NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID)
+            .first { !$0.isTerminated }
     }
 
     /// Keep newlines/tabs/trailing spaces; drop BEL and other control chars that make Terminal beep.

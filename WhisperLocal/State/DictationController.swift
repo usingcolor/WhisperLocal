@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import AppKit
 import Combine
+import os
 
 enum DictationPhase: Equatable {
     case idle
@@ -65,6 +66,9 @@ final class DictationController: ObservableObject {
     private var takeLimitTask: Task<Void, Never>?
     /// True when this take was stopped by the limit rather than by the user.
     private var hitTakeLimit = false
+    /// Consecutive watch ticks that saw the hotkey up while we thought it was held.
+    private var missedReleaseTicks = 0
+    private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "dictation")
     /// MenuBarExtra onAppear also calls start(); only load speech once.
     private var didBootstrapSpeech = false
     /// Bumped at the start of each take so a late success-sleeper cannot idle a newer session.
@@ -254,6 +258,22 @@ final class DictationController: ObservableObject {
                 guard self.phase == .recording || self.phase == .waitingForMic,
                       let began = self.recordingBeganAt else { return }
 
+                // Recover from a key-up we never saw. Confirmed over consecutive
+                // ticks so a momentary misread cannot truncate a live take; a
+                // genuinely stuck session lasts forever, so the extra second costs
+                // nothing.
+                if self.hotKey.missedHotkeyRelease {
+                    self.missedReleaseTicks += 1
+                    if self.missedReleaseTicks >= 3 {
+                        self.logger.error("Hotkey release was missed — finishing the stuck take")
+                        self.missedReleaseTicks = 0
+                        self.finishRecording()
+                        return
+                    }
+                } else {
+                    self.missedReleaseTicks = 0
+                }
+
                 let elapsed = Date().timeIntervalSince(began)
                 if TakeLimits.shouldAutoStop(elapsed: elapsed) {
                     self.hitTakeLimit = true
@@ -268,6 +288,7 @@ final class DictationController: ObservableObject {
     private func stopTakeLimitWatch() {
         takeLimitTask?.cancel()
         takeLimitTask = nil
+        missedReleaseTicks = 0
         hud.setDetail(nil)
     }
 
@@ -355,6 +376,8 @@ final class DictationController: ObservableObject {
     private func process(samples: [Float]) async {
         let audioSeconds = Double(samples.count) / 16_000
         let targetApp = dictationTargetApp?.promptLine
+        // Kept whole, not just its prompt line: insertion needs the process.
+        let insertTarget = dictationTargetApp
         let intentTake = isIntentTake
         // Snapshot: chunk progress overwrites the HUD detail within a second, so
         // the reason the take ended has to survive to the completion note.
@@ -426,7 +449,7 @@ final class DictationController: ObservableObject {
             phase = .inserting
             hud.update(phase: .inserting)
 
-            let insertion = await TextInserter.shared.insert(output)
+            let insertion = await TextInserter.shared.insert(output, into: insertTarget)
             if insertion.success {
                 phase = .success
                 if let app = insertion.appName {

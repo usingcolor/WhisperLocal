@@ -144,6 +144,9 @@ final class DictationController: ObservableObject {
         hotKey.onCancel = { [weak self] in
             Task { @MainActor in self?.cancelRecording() }
         }
+        hud.onCancel = { [weak self] in
+            self?.abandonProcessing()
+        }
         hotKey.onIntentModifierChanged = { [weak self] intent in
             self?.setRecordingIntent(intent)
         }
@@ -193,13 +196,11 @@ final class DictationController: ObservableObject {
     // MARK: - Hotkey routing (hold vs tap)
 
     private func handleHotkeyPress(intentModifierHeld: Bool) {
-        // A second press while the take is being worked on abandons it. This used to
-        // be ignored, which left no way out of a long take at all — your hand is
-        // already on the key, so that is where the gesture belongs.
-        if isBusyProcessing {
-            abandonProcessing()
-            return
-        }
+        // Ignored while the take is being worked on. Cancelling from the hotkey read
+        // well until you consider the reflex it collides with: finishing a take and
+        // pressing again to start the next one would have killed the first. Cancel
+        // is a button on the HUD and the Escape key, both of which are deliberate.
+        if isBusyProcessing { return }
 
         switch hotKey.mode {
         case .hold:

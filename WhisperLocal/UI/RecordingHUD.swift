@@ -12,6 +12,17 @@ final class RecordingHUDController: ObservableObject {
     /// bare spinner for minutes with nothing to say how far along it was.
     @Published var detail: String?
     @Published var detailIsWarning = false
+    /// Called when the user clicks the HUD's cancel button.
+    var onCancel: (() -> Void)?
+
+    /// Transcription and polish can be abandoned; an insert already in flight cannot
+    /// be usefully stopped, so the button goes away for it.
+    var isCancellable: Bool {
+        switch phase {
+        case .processing, .settingContext, .polishing: return true
+        default: return false
+        }
+    }
 
     func setDetail(_ text: String?, warning: Bool = false) {
         detail = text
@@ -53,6 +64,7 @@ final class RecordingHUDController: ObservableObject {
         self.isContextCapture = contextCapture
         ensurePanel()
         positionOnActiveScreen()
+        panel?.ignoresMouseEvents = !isCancellable
         panel?.orderFrontRegardless()
 
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak levelPublisher] timer in
@@ -75,6 +87,7 @@ final class RecordingHUDController: ObservableObject {
         self.phase = phase
         ensurePanel()
         positionOnActiveScreen()
+        panel?.ignoresMouseEvents = !isCancellable
         panel?.orderFrontRegardless()
     }
 
@@ -84,6 +97,7 @@ final class RecordingHUDController: ObservableObject {
 
     func flashSuccess(note: String? = nil) {
         setDetail(nil)
+        panel?.ignoresMouseEvents = true
         if let note, !note.isEmpty {
             phase = .successNote(note)
             scheduleHide(after: 1.6)
@@ -96,6 +110,7 @@ final class RecordingHUDController: ObservableObject {
     func flashError(_ message: String) {
         isContextCapture = false
         setDetail(nil)
+        panel?.ignoresMouseEvents = true
         phase = .error(message)
         scheduleHide(after: 2.0)
     }
@@ -122,7 +137,7 @@ final class RecordingHUDController: ObservableObject {
     private func ensurePanel() {
         if panel != nil { return }
 
-        let hosting = NSHostingView(rootView: RecordingHUDView(controller: self))
+        let hosting = HUDHostingView(rootView: RecordingHUDView(controller: self))
         hosting.sizingOptions = []
         hosting.frame = NSRect(x: 0, y: 0, width: 300, height: 72)
 
@@ -157,6 +172,21 @@ final class RecordingHUDController: ObservableObject {
     }
 }
 
+/// The HUD never becomes key, and a non-key window normally swallows the first click
+/// just to focus itself. Without this the cancel button would need two clicks: one
+/// discarded to focus a window that will never take focus, and one that lands.
+private final class HUDHostingView: NSHostingView<RecordingHUDView> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    required init(rootView: RecordingHUDView) {
+        super.init(rootView: rootView)
+    }
+
+    @MainActor @preconcurrency required dynamic init?(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
+}
+
 /// HUD must never become key — otherwise ⌘V lands in WhisperLocal instead of Cursor / Chrome.
 private final class HUDPanel: NSPanel {
     override var canBecomeKey: Bool { false }
@@ -186,6 +216,18 @@ struct RecordingHUDView: View {
                 }
             }
             Spacer(minLength: 0)
+            if controller.isCancellable {
+                Button {
+                    controller.onCancel?()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .help("Cancel this dictation")
+                .accessibilityLabel("Cancel this dictation")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

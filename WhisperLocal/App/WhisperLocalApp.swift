@@ -52,9 +52,9 @@ struct WhisperLocalApp: App {
         .defaultPosition(.center)
 
         Window("Session context", id: "session-context") {
-            SessionContextEditor(controller: controller, showsIntro: true)
+            SessionContextEditor(controller: controller, showsIntro: true, closesAfterSave: true)
                 .padding(20)
-                .frame(minWidth: 440, minHeight: 180)
+                .frame(minWidth: 460, minHeight: 220)
                 .raiseWindowOnAppear()
         }
         .windowResizability(.contentSize)

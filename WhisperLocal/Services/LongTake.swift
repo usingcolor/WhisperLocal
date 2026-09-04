@@ -1,44 +1,18 @@
 import Foundation
 
-/// How long a single take may run, and how it is broken up once it gets long.
+/// How a take is broken up once it gets long.
 ///
-/// The app used to have no ceiling at all: the capture buffer grew until you let
-/// go, and a long take then went to ASR in one piece — so a single failure lost
-/// everything you had just said. These limits exist so a long take degrades into
-/// *some* text rather than a blank paste.
+/// There is deliberately no time limit. A ten-minute ceiling existed while the whole
+/// recording sat in memory and the entire wait came after you let go; streaming
+/// removed both — the buffer is now constant at about four megabytes however long
+/// you talk — and abandoning a take in progress covers the case a ceiling was
+/// really guarding.
 enum TakeLimits {
-    /// Auto-finish here. This stops the take and transcribes it; it never discards.
-    static let maxSeconds: TimeInterval = 10 * 60
-    /// Show the countdown once this much time is left.
-    static let warnSeconds: TimeInterval = 60
     /// Longer than this goes through the chunked path.
     static let chunkAboveSeconds: TimeInterval = 120
 
-    static func remaining(elapsed: TimeInterval) -> TimeInterval {
-        max(0, maxSeconds - elapsed)
-    }
-
-    static func shouldAutoStop(elapsed: TimeInterval) -> Bool {
-        elapsed >= maxSeconds
-    }
-
     static func shouldChunk(seconds: TimeInterval) -> Bool {
         seconds > chunkAboveSeconds
-    }
-
-    /// `nil` until the take is close to the ceiling — a countdown that runs the
-    /// whole time is just a stopwatch, and reads as pressure rather than warning.
-    static func countdownLabel(elapsed: TimeInterval) -> String? {
-        let left = remaining(elapsed: elapsed)
-        guard left <= warnSeconds else { return nil }
-        let whole = Int(left.rounded(.up))
-        if whole <= 0 { return "Stopping now" }
-        return "Auto-stops in \(whole)s"
-    }
-
-    static func limitNote(seconds: TimeInterval) -> String {
-        let minutes = Int(seconds / 60)
-        return "Reached the \(minutes)-minute limit — transcribing what you said."
     }
 }
 

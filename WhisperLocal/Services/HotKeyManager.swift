@@ -244,10 +244,12 @@ final class HotKeyManager: ObservableObject {
     }
 
     private func handleKeyDown(_ event: NSEvent) {
-        if event.keyCode == UInt16(kVK_Escape), isSessionActive {
-            isHolding = false
-            isSessionActive = false
-            onCancel?()
-        }
+        guard event.keyCode == UInt16(kVK_Escape) else { return }
+        // Not gated on isSessionActive any more: the session is already over while a
+        // take is being transcribed, and that is exactly when Escape needs to reach
+        // the controller. The controller decides whether there is anything to cancel.
+        isHolding = false
+        isSessionActive = false
+        onCancel?()
     }
 }

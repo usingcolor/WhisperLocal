@@ -280,6 +280,9 @@ struct PolishPipeline: Sendable {
         var cloudDown = false
 
         for (index, piece) in pieces.enumerated() {
+            // Checked per piece so abandoning a long take takes about one request to
+            // take effect, rather than the whole remaining queue.
+            if Task.isCancelled { break }
             onProgress?(index + 1, pieces.count)
             let result = await run(
                 piece,

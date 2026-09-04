@@ -2,28 +2,6 @@ import XCTest
 
 
 final class TakeLimitsTests: XCTestCase {
-    func testCountdownStaysHiddenUntilTheEnd() {
-        XCTAssertNil(TakeLimits.countdownLabel(elapsed: 0))
-        XCTAssertNil(TakeLimits.countdownLabel(elapsed: 60))
-        // Warn window opens exactly `warnSeconds` before the ceiling.
-        let opensAt = TakeLimits.maxSeconds - TakeLimits.warnSeconds
-        XCTAssertNil(TakeLimits.countdownLabel(elapsed: opensAt - 1))
-        XCTAssertNotNil(TakeLimits.countdownLabel(elapsed: opensAt))
-    }
-
-    func testCountdownCountsDown() {
-        XCTAssertEqual(TakeLimits.countdownLabel(elapsed: TakeLimits.maxSeconds - 30), "Auto-stops in 30s")
-        XCTAssertEqual(TakeLimits.countdownLabel(elapsed: TakeLimits.maxSeconds - 1), "Auto-stops in 1s")
-        XCTAssertEqual(TakeLimits.countdownLabel(elapsed: TakeLimits.maxSeconds), "Stopping now")
-    }
-
-    func testAutoStopAndRemainingNeverGoNegative() {
-        XCTAssertFalse(TakeLimits.shouldAutoStop(elapsed: TakeLimits.maxSeconds - 0.1))
-        XCTAssertTrue(TakeLimits.shouldAutoStop(elapsed: TakeLimits.maxSeconds))
-        XCTAssertTrue(TakeLimits.shouldAutoStop(elapsed: TakeLimits.maxSeconds * 10))
-        XCTAssertEqual(TakeLimits.remaining(elapsed: TakeLimits.maxSeconds * 10), 0)
-    }
-
     func testOnlyLongTakesAreChunked() {
         XCTAssertFalse(TakeLimits.shouldChunk(seconds: 30))
         XCTAssertFalse(TakeLimits.shouldChunk(seconds: TakeLimits.chunkAboveSeconds))

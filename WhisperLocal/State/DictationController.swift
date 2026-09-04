@@ -62,14 +62,15 @@ final class DictationController: ObservableObject {
     /// Frontmost app when dictation started. Passed to polish LLMs as formatting context.
     private var dictationTargetApp: TargetAppContext?
     private var recordingBeganAt: Date?
-    /// Watches the take against TakeLimits and auto-finishes at the ceiling.
-    private var takeLimitTask: Task<Void, Never>?
-    /// True when this take was stopped by the limit rather than by the user.
-    private var hitTakeLimit = false
+    /// Watches a running take for conditions that must end it early.
+    private var takeWatchTask: Task<Void, Never>?
     /// Consecutive watch ticks that saw the hotkey up while we thought it was held.
     private var missedReleaseTicks = 0
     /// Transcribes completed chunks while the take is still running. Nil between takes.
     private var streamer: StreamingTranscriber?
+    /// The transcribe → polish → insert run. Held so it can be abandoned: without a
+    /// way out, a long take committed you to the whole wait.
+    private var processingTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "dictation")
     /// MenuBarExtra onAppear also calls start(); only load speech once.
     private var didBootstrapSpeech = false
@@ -192,8 +193,11 @@ final class DictationController: ObservableObject {
     // MARK: - Hotkey routing (hold vs tap)
 
     private func handleHotkeyPress(intentModifierHeld: Bool) {
-        // Ignore while processing/inserting (OpenWhispr pattern).
-        if phase == .processing || phase == .settingContext || phase == .polishing || phase == .inserting {
+        // A second press while the take is being worked on abandons it. This used to
+        // be ignored, which left no way out of a long take at all — your hand is
+        // already on the key, so that is where the gesture belongs.
+        if isBusyProcessing {
+            abandonProcessing()
             return
         }
 
@@ -247,9 +251,8 @@ final class DictationController: ObservableObject {
             dictationTargetApp = TargetAppContext.captureFrontmost()
             try recorder.start()
             recordingBeganAt = Date()
-            hitTakeLimit = false
             hotKey.markSessionActive(true)
-            startTakeLimitWatch()
+            startTakeWatch()
             startStreaming()
             if recorder.isInputReady {
                 phase = .recording
@@ -287,27 +290,29 @@ final class DictationController: ObservableObject {
         streamer.start()
     }
 
-    private func startTakeLimitWatch() {
-        takeLimitTask?.cancel()
-        takeLimitTask = Task { @MainActor [weak self] in
+    /// Watches a running take for the two conditions it cannot survive: an input
+    /// graph that died, and a key-up we never received. Both end the take with
+    /// whatever was captured. There is no time ceiling — see `TakeLimits`.
+    private func startTakeWatch() {
+        takeWatchTask?.cancel()
+        takeWatchTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard !Task.isCancelled, let self else { return }
-                guard self.phase == .recording || self.phase == .waitingForMic,
-                      let began = self.recordingBeganAt else { return }
+                guard self.phase == .recording || self.phase == .waitingForMic else { return }
 
-                // Recover from a key-up we never saw. Confirmed over consecutive
-                // ticks so a momentary misread cannot truncate a live take; a
-                // genuinely stuck session lasts forever, so the extra second costs
-                // nothing.
                 // The mic died mid-take (device unplugged, interface removed). Keep
-                // what was captured rather than recording silence to the ceiling.
+                // what was captured rather than recording silence indefinitely.
                 if self.recorder.inputFailed {
                     self.logger.error("Input graph failed mid-take — finishing with what was captured")
                     self.finishRecording()
                     return
                 }
 
+                // Recover from a key-up we never saw. Confirmed over consecutive
+                // ticks so a momentary misread cannot truncate a live take; a stuck
+                // session lasts forever, so the extra second costs nothing. With no
+                // time ceiling this is the only thing that ends a runaway take.
                 if self.hotKey.missedHotkeyRelease {
                     self.missedReleaseTicks += 1
                     if self.missedReleaseTicks >= 3 {
@@ -319,26 +324,13 @@ final class DictationController: ObservableObject {
                 } else {
                     self.missedReleaseTicks = 0
                 }
-
-                let elapsed = Date().timeIntervalSince(began)
-                if TakeLimits.shouldAutoStop(elapsed: elapsed) {
-                    self.hitTakeLimit = true
-                    self.finishRecording()
-                    return
-                }
-                // Only overwrite when there is actually a countdown to show. Setting
-                // it unconditionally wiped the streaming progress every half second,
-                // since the label is nil for all but the last minute.
-                if let countdown = TakeLimits.countdownLabel(elapsed: elapsed) {
-                    self.hud.setDetail(countdown, warning: true)
-                }
             }
         }
     }
 
-    private func stopTakeLimitWatch() {
-        takeLimitTask?.cancel()
-        takeLimitTask = nil
+    private func stopTakeWatch() {
+        takeWatchTask?.cancel()
+        takeWatchTask = nil
         missedReleaseTicks = 0
         hud.setDetail(nil)
     }
@@ -349,8 +341,33 @@ final class DictationController: ObservableObject {
         hud.setContextCapture(isIntentTake)
     }
 
+    var isBusyProcessing: Bool {
+        phase == .processing || phase == .settingContext || phase == .polishing || phase == .inserting
+    }
+
+    /// Drop everything for this take: no transcript, no polish, no paste.
+    private func abandonProcessing() {
+        logger.info("Take abandoned by the user")
+        processingTask?.cancel()
+        processingTask = nil
+        streamer?.cancel()
+        streamer = nil
+        dictationTargetApp = nil
+        isIntentTake = false
+        sessionGeneration += 1
+        phase = .idle
+        hud.setDetail(nil)
+        hud.flashError("Cancelled")
+    }
+
     private func cancelRecording() {
-        stopTakeLimitWatch()
+        // Escape reaches here during processing too, where there is no recording to
+        // stop but plenty of work to abandon.
+        if isBusyProcessing {
+            abandonProcessing()
+            return
+        }
+        stopTakeWatch()
         streamer?.cancel()
         streamer = nil
         cancelRequested = true
@@ -365,7 +382,7 @@ final class DictationController: ObservableObject {
 
     private func finishRecording() {
         guard phase == .recording || phase == .waitingForMic else { return }
-        stopTakeLimitWatch()
+        stopTakeWatch()
         // Paste vs context is the Shift switch at the end of the take, not the first press.
         setRecordingIntent(hotKey.intentModifierHeld)
         let samples = recorder.stop()
@@ -421,14 +438,10 @@ final class DictationController: ObservableObject {
 
         phase = isIntentTake ? .settingContext : .processing
         hud.update(phase: phase)
-        if hitTakeLimit {
-            // Said here rather than at the end: the take vanishing mid-sentence
-            // needs explaining now, not after the paste lands.
-            hud.setDetail(TakeLimits.limitNote(seconds: TakeLimits.maxSeconds), warning: true)
-        }
 
-        Task {
+        processingTask = Task {
             await process(samples: samples)
+            self.processingTask = nil
         }
     }
 
@@ -440,12 +453,8 @@ final class DictationController: ObservableObject {
         // Kept whole, not just its prompt line: insertion needs the process.
         let insertTarget = dictationTargetApp
         let intentTake = isIntentTake
-        // Snapshot: chunk progress overwrites the HUD detail within a second, so
-        // the reason the take ended has to survive to the completion note.
-        let limited = hitTakeLimit
         dictationTargetApp = nil
         isIntentTake = false
-        hitTakeLimit = false
         lastTranscript = ""
         lastPolished = ""
         lastStages = []
@@ -473,6 +482,9 @@ final class DictationController: ObservableObject {
                 )
             }
             hud.setDetail(nil)
+            // Cancellation is cooperative: the model call in flight runs to the end,
+            // but nothing after it starts.
+            if Task.isCancelled { return }
             lastTranscript = raw
 
             guard !raw.isEmpty else {
@@ -548,9 +560,6 @@ final class DictationController: ObservableObject {
                 // empty field and has no idea the text is one ⌘V away.
                 if insertion.method == .clipboardUnverified {
                     hud.flashSuccess(note: "Couldn’t confirm the paste — press ⌘V to insert it")
-                    try? await Task.sleep(nanoseconds: 1_600_000_000)
-                } else if limited {
-                    hud.flashSuccess(note: "Stopped at the \(Int(TakeLimits.maxSeconds / 60))-minute limit — this is everything up to there")
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
                 } else if let note = result.cleanupNote {
                     // Not gated on cleanupFailed: a successful on-device fallback

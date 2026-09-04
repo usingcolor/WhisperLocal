@@ -106,7 +106,7 @@ final class AudioRecorder: ObservableObject {
             logger.info("Prepended \(prepended, privacy: .public) preroll frames")
         }
 
-        let wantsVoiceProcessing = AppIdentity.isDevBuild && SettingsStore.shared.enableEchoCancellation
+        let wantsVoiceProcessing = SettingsStore.shared.enableEchoCancellation
         if isEngineLive, engineUsesVoiceProcessing != wantsVoiceProcessing {
             logger.info("Rebuilding the input graph for a voice-processing change")
             stopEngineHardware()
@@ -167,11 +167,9 @@ final class AudioRecorder: ObservableObject {
         // device it points at.
         applyVoiceProcessing(to: input)
         applyPreferredInputDevice(to: input)
-        // A `format: nil` tap delivers the node's *output* format. Those match on a
-        // plain input node, but voice processing makes them diverge — the input side
-        // stays the raw 7-channel mic array while the output side is processed mono.
-        // Building the converter from the input side then fed a 7-channel converter
-        // with mono buffers, and it answered with perfectly silent frames.
+        // A `format: nil` tap delivers the node's *output* format, so read that.
+        // (Under voice processing both sides report the same 7-channel discrete
+        // layout; the downmix that handles it lives in `ingest`.)
         var hardwareFormat = input.outputFormat(forBus: 0)
         if hardwareFormat.sampleRate <= 0 || hardwareFormat.channelCount == 0 {
             hardwareFormat = input.inputFormat(forBus: 0)
@@ -233,19 +231,25 @@ final class AudioRecorder: ObservableObject {
     /// gain control along with it, and their effect on transcript quality has not
     /// been measured. Failure is non-fatal: dictation continues on the raw input.
     private func applyVoiceProcessing(to input: AVAudioInputNode) {
-        let wanted = AppIdentity.isDevBuild && SettingsStore.shared.enableEchoCancellation
+        let wanted = SettingsStore.shared.enableEchoCancellation
         engineUsesVoiceProcessing = false
         guard wanted else { return }
         do {
             try input.setVoiceProcessingEnabled(true)
             engineUsesVoiceProcessing = true
-            // Do not duck other audio. The point is to remove playback from the mic
-            // signal, not to turn the user's music down while they dictate.
+            // Duck other audio while you speak. Cancellation alone cannot cope with
+            // double-talk — two voices at once is where the adaptive filter stops
+            // adapting and residual speech leaks into the transcript. Dipping the
+            // far end is the direct remedy: less echo to cancel in the moment that
+            // cancellation is worst at.
             var ducking = AVAudioVoiceProcessingOtherAudioDuckingConfiguration()
-            ducking.enableAdvancedDucking = false
-            ducking.duckingLevel = .min
+            ducking.enableAdvancedDucking = true
+            ducking.duckingLevel = .default
             input.voiceProcessingOtherAudioDuckingConfiguration = ducking
-            logger.info("Voice processing ON (echo cancellation)")
+            // AGC rides gain up through quiet passages, which pumps whatever residual
+            // survived cancellation. Steady levels suit the speech model better.
+            input.isVoiceProcessingAGCEnabled = false
+            logger.info("Voice processing ON (echo cancellation, ducking, AGC off)")
         } catch {
             logger.error("Voice processing failed, using raw input: \(error.localizedDescription, privacy: .public)")
         }

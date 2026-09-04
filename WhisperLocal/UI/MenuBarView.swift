@@ -117,10 +117,18 @@ struct MenuBarView: View {
     /// Missing permissions are the one status worth colouring — everything else is
     /// informational and stays secondary so the title keeps the emphasis.
     private var statusIsWarning: Bool {
-        !permissions.inputMonitoringTrusted || !permissions.accessibilityTrusted
+        HotKeyManager.secureInputActive
+            || !permissions.inputMonitoringTrusted
+            || !permissions.accessibilityTrusted
     }
 
     private var statusLine: String {
+        // Checked before the permission lines: with secure input on, the hotkey is
+        // dead no matter how the permissions look, and this is the only place the
+        // user can be told — the hotkey cannot fire to show anything itself.
+        if HotKeyManager.secureInputActive {
+            return "A password field is focused — the hotkey won’t fire until you click elsewhere"
+        }
         if !permissions.inputMonitoringTrusted {
             return "Input Monitoring missing — hotkey won’t fire in other apps"
         }

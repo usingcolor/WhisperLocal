@@ -8,6 +8,10 @@ final class AudioRecorder: ObservableObject {
     @Published private(set) var isRecording = false
     /// Hardware is actually passing audio — not just the first (often silent) Bluetooth buffer.
     @Published private(set) var isInputReady = false
+    /// The input graph died mid-take and could not be restarted. Capture is over;
+    /// whatever was recorded up to that point is still in the buffer. Watched by the
+    /// controller so the take ends there instead of silently recording nothing.
+    @Published private(set) var inputFailed = false
 
     private var engine: AVAudioEngine?
     private var tapInstalled = false
@@ -123,6 +127,7 @@ final class AudioRecorder: ObservableObject {
         didLogFirstBuffer = false
         lock.unlock()
         isInputReady = false
+        inputFailed = false
 
         try startEngine()
         isRecording = true
@@ -350,6 +355,10 @@ final class AudioRecorder: ObservableObject {
                 try engine.start()
             } catch {
                 logger.error("Mic restart after reconfigure failed: \(error.localizedDescription, privacy: .public)")
+                // Unplugging an interface mid-take used to leave the take running
+                // against a dead graph: no audio arrived, nothing said so, and the
+                // transcript simply stopped where the device did.
+                if isRecording { inputFailed = true }
             }
         }
         if !isRecording {
@@ -410,6 +419,7 @@ final class AudioRecorder: ObservableObject {
         stopEngineHardware()
         isRecording = false
         isInputReady = false
+        inputFailed = false
         lock.lock()
         isCapturing = false
         didAnnounceInputReady = false

@@ -101,6 +101,14 @@ final class HotKeyManager: ObservableObject {
         }
     }
 
+    /// macOS Secure Event Input, which a focused password field turns on and some
+    /// apps leave on. While it is active the system withholds key events from other
+    /// processes, so the global monitors this class relies on stop firing and the
+    /// hotkey goes completely dead with nothing to explain it.
+    static var secureInputActive: Bool {
+        IsSecureEventInputEnabled()
+    }
+
     /// Is the hotkey modifier physically down *right now*?
     ///
     /// The state machine is edge-driven, so a `flagsChanged` it never receives

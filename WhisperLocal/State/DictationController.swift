@@ -262,6 +262,14 @@ final class DictationController: ObservableObject {
                 // ticks so a momentary misread cannot truncate a live take; a
                 // genuinely stuck session lasts forever, so the extra second costs
                 // nothing.
+                // The mic died mid-take (device unplugged, interface removed). Keep
+                // what was captured rather than recording silence to the ceiling.
+                if self.recorder.inputFailed {
+                    self.logger.error("Input graph failed mid-take — finishing with what was captured")
+                    self.finishRecording()
+                    return
+                }
+
                 if self.hotKey.missedHotkeyRelease {
                     self.missedReleaseTicks += 1
                     if self.missedReleaseTicks >= 3 {

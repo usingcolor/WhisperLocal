@@ -33,6 +33,7 @@ final class AudioRecorder: ObservableObject {
     nonisolated(unsafe) private var didAnnounceInputReady = false
     nonisolated(unsafe) private var samplesSinceEngineStart = 0
     nonisolated(unsafe) private var latestLevel: Float = 0
+    nonisolated(unsafe) private var didLogFirstBuffer = false
 
     private let targetSampleRate: Double = 16_000
     private let prerollCapacity = Int(16_000 * 0.6)
@@ -119,6 +120,7 @@ final class AudioRecorder: ObservableObject {
         lock.lock()
         didAnnounceInputReady = false
         samplesSinceEngineStart = 0
+        didLogFirstBuffer = false
         lock.unlock()
         isInputReady = false
 
@@ -165,13 +167,19 @@ final class AudioRecorder: ObservableObject {
         // device it points at.
         applyVoiceProcessing(to: input)
         applyPreferredInputDevice(to: input)
-        var hardwareFormat = input.inputFormat(forBus: 0)
+        // A `format: nil` tap delivers the node's *output* format. Those match on a
+        // plain input node, but voice processing makes them diverge — the input side
+        // stays the raw 7-channel mic array while the output side is processed mono.
+        // Building the converter from the input side then fed a 7-channel converter
+        // with mono buffers, and it answered with perfectly silent frames.
+        var hardwareFormat = input.outputFormat(forBus: 0)
         if hardwareFormat.sampleRate <= 0 || hardwareFormat.channelCount == 0 {
-            hardwareFormat = input.outputFormat(forBus: 0)
+            hardwareFormat = input.inputFormat(forBus: 0)
         }
         if hardwareFormat.sampleRate > 0 {
+            let raw = input.inputFormat(forBus: 0)
             logger.info(
-                "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch"
+                "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch (device \(raw.sampleRate, privacy: .public) Hz, \(raw.channelCount, privacy: .public) ch)"
             )
         }
 
@@ -198,7 +206,7 @@ final class AudioRecorder: ObservableObject {
             on: engine,
             outputFormat: outputFormat,
             converter: converter,
-            converterSourceRate: hardwareFormat.sampleRate
+            converterSourceFormat: hardwareFormat
         )
 
         do {
@@ -274,7 +282,7 @@ final class AudioRecorder: ObservableObject {
         on engine: AVAudioEngine,
         outputFormat: AVAudioFormat,
         converter: AVAudioConverter?,
-        converterSourceRate: Double
+        converterSourceFormat: AVAudioFormat
     ) {
         let input = engine.inputNode
         // nil format = hardware bus format. Passing a guessed format after prepare() is what
@@ -284,7 +292,7 @@ final class AudioRecorder: ObservableObject {
                 buffer,
                 outputFormat: outputFormat,
                 converter: converter,
-                converterSourceRate: converterSourceRate
+                converterSourceFormat: converterSourceFormat
             )
         }
         tapInstalled = true
@@ -327,7 +335,7 @@ final class AudioRecorder: ObservableObject {
             on: engine,
             outputFormat: outputFormat,
             converter: converter,
-            converterSourceRate: hardwareFormat.sampleRate
+            converterSourceFormat: hardwareFormat
         )
         if !engine.isRunning {
             do {
@@ -425,14 +433,32 @@ final class AudioRecorder: ObservableObject {
         _ buffer: AVAudioPCMBuffer,
         outputFormat: AVAudioFormat,
         converter: AVAudioConverter?,
-        converterSourceRate: Double
+        converterSourceFormat: AVAudioFormat
     ) {
         guard buffer.frameLength > 0 else { return }
+
+        // Diagnostic: separates "the unit hands us silence" from "our conversion
+        // produces silence". Logged once per engine start.
+        if !didLogFirstBuffer {
+            didLogFirstBuffer = true
+            let rawPeak = Self.peakAndLive(Self.monoFloats(from: buffer)).0
+            logger.info(
+                "First tap buffer: \(buffer.format.channelCount, privacy: .public) ch, layoutTag \(buffer.format.channelLayout?.layoutTag ?? 0, privacy: .public), raw peak \(rawPeak, privacy: .public)"
+            )
+        }
 
         var appended = 0
         var peak: Float = 0
         var live = false
-        let converterUsable = converter != nil && abs(buffer.format.sampleRate - converterSourceRate) < 1
+        // Mono only. AVAudioConverter has no mixing rules for a DiscreteInOrder
+        // layout — voice processing hands us 7 such channels — and rather than
+        // failing it returns frames of zeros, which `appended > 0` then treats as
+        // real audio and hides the manual path that would have worked. Anything
+        // multi-channel is downmixed explicitly below instead.
+        let converterUsable = converter != nil
+            && abs(buffer.format.sampleRate - converterSourceFormat.sampleRate) < 1
+            && buffer.format.channelCount == 1
+            && converterSourceFormat.channelCount == 1
         if converterUsable, let converter {
             (appended, peak, live) = convertAndAppend(buffer, outputFormat: outputFormat, converter: converter)
         }

@@ -14,6 +14,7 @@ fi
 codesign_identity="${CODESIGN_IDENTITY:--}"
 notarize="${NOTARIZE:-0}"
 notary_timeout="${NOTARY_TIMEOUT:-30m}"
+build_timeout_seconds="${BUILD_TIMEOUT_SECONDS:-1500}"
 signed_release=0
 if [[ "$codesign_identity" != "-" ]]; then
   signed_release=1
@@ -66,9 +67,56 @@ echo "==> Building WhisperLocal ${version} (Release, arm64)"
 if [[ "$signed_release" == "1" && -n "${CODESIGN_KEYCHAIN:-}" ]]; then
   security default-keychain -d user -s "$CODESIGN_KEYCHAIN"
 fi
+# macOS has no timeout(1), so this is the watchdog: run the build in the
+# background and kill it if it stops making progress. appintentsmetadataprocessor
+# hangs intermittently on cold CI builds — it ran 23 times without incident on two
+# earlier runs and then froze a third for an hour — and without a ceiling one stall
+# consumes the whole job and produces nothing. The sentinel file is how a stall is
+# told apart from an ordinary compile error afterwards.
+run_with_watchdog() {
+  local seconds="$1"
+  shift
+  local marker
+  marker="$(mktemp "${TMPDIR:-/tmp}/whisperlocal-build-timeout.XXXXXX")"
+  rm -f "$marker"
+
+  "$@" &
+  local build_pid=$!
+
+  (
+    local waited=0
+    while [[ "$waited" -lt "$seconds" ]]; do
+      sleep 5
+      waited=$((waited + 5))
+      kill -0 "$build_pid" 2>/dev/null || exit 0
+    done
+    : > "$marker"
+    kill -TERM "$build_pid" 2>/dev/null || true
+    sleep 10
+    kill -KILL "$build_pid" 2>/dev/null || true
+  ) &
+  local watchdog_pid=$!
+
+  local status=0
+  wait "$build_pid" || status=$?
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+
+  if [[ -f "$marker" ]]; then
+    rm -f "$marker"
+    echo "error: the build made no progress within $((seconds / 60)) minutes and was killed." >&2
+    echo "       appintentsmetadataprocessor stalls intermittently on cold builds;" >&2
+    echo "       re-running the tag is usually enough." >&2
+    return 124
+  fi
+  rm -f "$marker"
+  return "$status"
+}
+
 # Compile ad-hoc. Developer ID + timestamp on SPM objects (Cmlx especially)
 # is what stretched an 11-minute compile past an hour. The .app is signed
 # once after it exists.
+run_with_watchdog "$build_timeout_seconds" \
 xcodebuild \
   -scheme WhisperLocal \
   -configuration Release \

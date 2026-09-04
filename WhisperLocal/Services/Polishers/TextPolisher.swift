@@ -150,6 +150,70 @@ enum PolishOutput {
     }
 }
 
+/// Why a polish attempt failed, to the resolution the caller actually needs.
+///
+/// The distinction that matters is whether the *provider* is unusable for the rest
+/// of this take, or whether this one request was bad. The first justifies falling
+/// back to the on-device model and not asking the cloud again; the second does not.
+enum PolishFailureKind: Sendable, Equatable {
+    /// No route to the network at all.
+    case offline
+    /// Reached the provider, or tried to, and it cannot serve this take: transport
+    /// error, 5xx, rate limit, or a key problem.
+    case providerUnavailable
+    /// The provider answered and this particular request failed — a truncated or
+    /// empty completion. Another piece of the same take may still succeed.
+    case requestFailed
+
+    init(_ error: Error) {
+        if error is URLError {
+            self = (error as! URLError).code == .notConnectedToInternet ? .offline : .providerUnavailable
+            return
+        }
+        guard let polisher = error as? PolisherError else {
+            self = .requestFailed
+            return
+        }
+        switch polisher {
+        case .missingAPIKey, .notAvailable:
+            self = .providerUnavailable
+        case .http(let code, _):
+            // 401/403 (key) and 429 (rate limit) will not resolve inside one take,
+            // so they are provider-level even though they are 4xx.
+            self = (code >= 500 || code == 429 || code == 401 || code == 403)
+                ? .providerUnavailable
+                : .requestFailed
+        case .truncated, .emptyResponse:
+            self = .requestFailed
+        }
+    }
+
+    /// True when there is no point asking this provider again for this take.
+    var stopsFurtherCloudAttempts: Bool {
+        switch self {
+        case .offline, .providerUnavailable: return true
+        case .requestFailed: return false
+        }
+    }
+
+    /// Shown when the on-device model picked the work up instead.
+    var fallbackNote: String {
+        switch self {
+        case .offline: return "Offline — polished on this Mac"
+        case .providerUnavailable, .requestFailed: return "Cloud failed — polished on this Mac"
+        }
+    }
+
+    /// Shown when nothing could clean the text.
+    var rawNote: String {
+        switch self {
+        case .offline: return "Offline — pasted without cleanup"
+        case .providerUnavailable: return "Cloud unavailable — pasted without cleanup"
+        case .requestFailed: return "Pasted without AI cleanup"
+        }
+    }
+}
+
 struct PolishResult: Sendable {
     let text: String
     let stages: [String]
@@ -158,6 +222,9 @@ struct PolishResult: Sendable {
     let cleanupNote: String?
     /// Apple Intelligence judgment against `<session-intent>`. Nil if not judged.
     let contextRelevant: Bool?
+    /// Set when the cloud provider looked unusable for the rest of this take, so a
+    /// chunked run can stop paying its timeout on every remaining piece.
+    var cloudUnavailable: Bool = false
 }
 
 /// Chains polishers: filler strip, then either one on-device LLM or cloud polish.
@@ -167,6 +234,14 @@ struct PolishPipeline: Sendable {
     let localLLM: (any TextPolisher)?
     let cloud: (any TextPolisher)?
     let useLocalLLM: Bool
+    /// The on-device model is loaded and can run *now*. Gemma is unloaded whenever
+    /// cloud is selected, and letting it cold-start mid-dictation (2.7 GB plus
+    /// kernel compilation) is worse than pasting without cleanup — so a fallback
+    /// only happens when this is true.
+    var localIsReady: Bool = false
+    /// Injected by the caller. Defaults to "online" so the pipeline carries no
+    /// dependency on the Network framework and stays in the test target.
+    var isOnline: @Sendable () -> Bool = { true }
     let enableTextCleanup: Bool
     let dictionary: [String]
     var personalContext: String = ""
@@ -194,9 +269,15 @@ struct PolishPipeline: Sendable {
         var texts: [String] = []
         var stages: [String] = []
         var failures = 0
+        // Circuit breaker. Without it an outage costs the full request timeout on
+        // every piece — a ten-minute take is ~10 pieces, so up to five minutes of
+        // waiting to arrive at the same answer the first piece already gave us.
+        var cloudDown = false
+
         for (index, piece) in pieces.enumerated() {
             onProgress?(index + 1, pieces.count)
-            let result = await run(piece, targetApp: targetApp)
+            let result = await run(piece, targetApp: targetApp, cloudDisabled: cloudDown)
+            if result.cloudUnavailable { cloudDown = true }
             // run() already falls back to the raw piece when cleanup fails, so the
             // text is never empty here — but be explicit rather than trust it.
             texts.append(result.text.isEmpty ? piece : result.text)
@@ -209,9 +290,12 @@ struct PolishPipeline: Sendable {
         let joined = texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         let note: String?
         if failures == pieces.count {
-            note = "Pasted without AI cleanup"
+            note = cloudDown ? "Cloud unavailable — pasted without cleanup" : "Pasted without AI cleanup"
         } else if failures > 0 {
             note = "Cleaned \(pieces.count - failures) of \(pieces.count) parts"
+        } else if cloudDown {
+            // Every piece is cleaned, just not by the cloud.
+            note = "Cloud unavailable — polished on this Mac"
         } else {
             note = nil
         }
@@ -220,11 +304,16 @@ struct PolishPipeline: Sendable {
             stages: stages.isEmpty ? ["Raw"] : stages,
             cleanupFailed: failures == pieces.count,
             cleanupNote: note,
-            contextRelevant: nil
+            contextRelevant: nil,
+            cloudUnavailable: cloudDown
         )
     }
 
     func run(_ raw: String, targetApp: String? = nil) async -> PolishResult {
+        await run(raw, targetApp: targetApp, cloudDisabled: false)
+    }
+
+    func run(_ raw: String, targetApp: String?, cloudDisabled: Bool) async -> PolishResult {
         guard enableTextCleanup else {
             return PolishResult(
                 text: raw.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -248,33 +337,52 @@ struct PolishPipeline: Sendable {
         let polishRecent = task == .sessionContext ? "" : recentDictations
         let polishIntent = task == .sessionContext ? "" : sessionIntent
 
-        // Cloud polish replaces the on-device LLM so we do not wait for both.
-        if useLocalLLM, let localLLM, cloud == nil {
-            llmAttempted = true
-            do {
-                let polished = try await localLLM.polish(
-                    text,
-                    dictionary: dictionary,
-                    personalContext: personalContext,
-                    targetApp: polishApp,
-                    recentDictations: polishRecent,
-                    sessionIntent: polishIntent,
-                    task: task
-                )
-                text = polished.text
-                contextRelevant = task == .sessionContext ? nil : polished.contextRelevant
-                stages.append(localLLM.name)
-            } catch {
-                stages.append("\(localLLM.name) failed")
-                cleanupFailed = true
-                cleanupNote = (error as? PolisherError)?.pasteNote ?? "Pasted without AI cleanup"
+        // Cloud first when configured, then the on-device model, then the raw text.
+        // The on-device step used to be gated on `cloud == nil`, so a cloud outage
+        // dropped straight to no cleanup while a capable local model sat idle.
+        var cloudFailure: PolishFailureKind?
+        // The polisher's own reason is more specific than the kind for per-request
+        // failures ("Cleanup was cut short"), so keep both and pick per case.
+        var cloudPasteNote: String?
+        var localPasteNote: String?
+        var polished = false
+
+        if let cloud, !cloudDisabled {
+            if !isOnline() {
+                cloudFailure = .offline
+                stages.append("\(cloud.name) offline")
+            } else {
+                llmAttempted = true
+                do {
+                    let result = try await cloud.polish(
+                        text,
+                        dictionary: dictionary,
+                        personalContext: personalContext,
+                        targetApp: polishApp,
+                        recentDictations: polishRecent,
+                        sessionIntent: polishIntent,
+                        task: task
+                    )
+                    text = result.text
+                    // Cloud does not judge session context (plain-text output).
+                    contextRelevant = nil
+                    stages.append(cloud.name)
+                    polished = true
+                } catch {
+                    cloudFailure = PolishFailureKind(error)
+                    cloudPasteNote = (error as? PolisherError)?.pasteNote
+                    stages.append("\(cloud.name) failed")
+                }
             }
         }
 
-        if let cloud {
+        // On-device: primary when no cloud is configured, fallback when cloud could
+        // not deliver. Falling back this direction only ever sends less data out.
+        let wantsLocal = cloud == nil || cloudDisabled ? useLocalLLM : (cloudFailure != nil && localIsReady)
+        if !polished, wantsLocal, let localLLM {
             llmAttempted = true
             do {
-                let polished = try await cloud.polish(
+                let result = try await localLLM.polish(
                     text,
                     dictionary: dictionary,
                     personalContext: personalContext,
@@ -283,17 +391,29 @@ struct PolishPipeline: Sendable {
                     sessionIntent: polishIntent,
                     task: task
                 )
-                text = polished.text
-                // Cloud does not judge session context (plain-text output).
-                contextRelevant = nil
-                stages.append(cloud.name)
-                // Cloud success clears earlier local-LLM failure note
-                cleanupFailed = false
-                cleanupNote = nil
+                text = result.text
+                contextRelevant = task == .sessionContext ? nil : result.contextRelevant
+                stages.append(localLLM.name)
+                polished = true
+                // The take *is* cleaned — just not by the cloud. Say which, rather
+                // than reporting a failure the user cannot see the effect of.
+                cleanupNote = cloudFailure?.fallbackNote
             } catch {
-                stages.append("\(cloud.name) failed")
-                cleanupFailed = true
-                cleanupNote = (error as? PolisherError)?.pasteNote ?? "Pasted without AI cleanup"
+                stages.append("\(localLLM.name) failed")
+                localPasteNote = (error as? PolisherError)?.pasteNote
+            }
+        }
+
+        if !polished, llmAttempted || cloudFailure != nil {
+            cleanupFailed = true
+            if let cloudFailure {
+                // For an outage the outage is the useful message; for a one-off bad
+                // response the polisher's own reason says more.
+                cleanupNote = cloudFailure == .requestFailed
+                    ? (cloudPasteNote ?? cloudFailure.rawNote)
+                    : cloudFailure.rawNote
+            } else {
+                cleanupNote = localPasteNote ?? "Pasted without AI cleanup"
             }
         }
 
@@ -314,7 +434,8 @@ struct PolishPipeline: Sendable {
             stages: stages,
             cleanupFailed: cleanupFailed,
             cleanupNote: cleanupNote,
-            contextRelevant: contextRelevant
+            contextRelevant: contextRelevant,
+            cloudUnavailable: cloudFailure?.stopsFurtherCloudAttempts ?? false
         )
     }
 

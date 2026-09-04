@@ -147,6 +147,8 @@ final class DictationController: ObservableObject {
             showOnboarding = true
         }
 
+        NetworkReachability.shared.start()
+
         guard !didBootstrapSpeech else { return }
         didBootstrapSpeech = true
         Task {
@@ -526,6 +528,8 @@ final class DictationController: ObservableObject {
             localLLM: onDevicePolisher(),
             cloud: cloud,
             useLocalLLM: settings.shouldRunOnDevicePolish,
+            localIsReady: localFallbackReady(),
+            isOnline: { NetworkReachability.shared.isOnline },
             enableTextCleanup: settings.enableTextCleanup,
             dictionary: CleanupPrompt.mergedDictionary(settings.dictionaryWords),
             personalContext: settings.cleanupPersonalContext,
@@ -637,6 +641,21 @@ final class DictationController: ObservableObject {
             )
         case .gemma4_e2b:
             GemmaMLXPolisher.shared.prewarm()
+        }
+    }
+
+    /// Can the on-device model take over *right now*, without a download or a load?
+    /// Gemma is unloaded whenever cloud polish is selected, so falling back to it
+    /// would mean a 2.7 GB cold start mid-dictation — worse than pasting the text
+    /// uncleaned. Apple Intelligence is a system model with no such cost.
+    private func localFallbackReady() -> Bool {
+        switch settings.localPolishEngine {
+        case .none:
+            return false
+        case .appleIntelligence:
+            return LocalLLMPolisher.isAvailable
+        case .gemma4_e2b:
+            return GemmaMLXPolisher.shared.isReady
         }
     }
 

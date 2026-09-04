@@ -134,6 +134,13 @@ On-device cleanup waits up to 20 s; cloud cleanup waits up to 30 s. A timeout pa
 
 API keys live in the Keychain under `com.usingcolor.WhisperLocal`.
 
+**Picking a cloud model.** If you turn cloud cleanup on, `gpt-5.6-luna` is the one to
+start with — fast enough not to sit in the way, and cheap enough not to watch. In
+everyday use here, 154 dictations came to 7 cents; your own cost will track how long
+your takes are. On-device polish is still faster and free, and keeps the text on your
+Mac. Cloud is worth it when you want the cleanup to be noticeably better, and the price
+stays small even if you dictate all day.
+
 ## Privacy
 
 | | What leaves your Mac |
@@ -250,9 +257,10 @@ WhisperLocal is free and MIT licensed, and it stays that way. Nothing is paywall
 no feature is held back, and there is no paid tier — sponsoring only says the work is
 worth continuing.
 
-If it saves you typing, you can [sponsor it on GitHub](https://github.com/sponsors/usingcolor).
-One-off or monthly, any amount. If you would rather not, that is genuinely fine: filing a
-good bug report is worth more than a dollar. See [Contributing](#contributing).
+If it saves you typing, you can [sponsor it on GitHub](https://github.com/sponsors/usingcolor) —
+one-off or monthly, any amount. There is also [Buy Me a Coffee](https://buymeacoffee.com/usingcolor)
+if you prefer that. If you would rather not, that is genuinely fine: filing a good bug
+report is worth more than a dollar. See [Contributing](#contributing).
 
 ## Related projects
 

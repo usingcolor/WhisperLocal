@@ -77,7 +77,8 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
         targetApp: String? = nil,
         recentDictations: String = "",
         sessionIntent: String = "",
-        task: PolishTask = .dictation
+        task: PolishTask = .dictation,
+        part: CleanupPrompt.TranscriptPart? = nil
     ) async throws -> PolishedText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return PolishedText(text: trimmed) }
@@ -91,7 +92,8 @@ final class LocalLLMPolisher: TextPolisher, @unchecked Sendable {
                 targetApp: targetApp,
                 recentDictations: recentDictations,
                 sessionIntent: sessionIntent,
-                task: task
+                task: task,
+                part: part
             )
         }
         #endif
@@ -145,7 +147,8 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
         targetApp: String? = nil,
         recentDictations: String = "",
         sessionIntent: String = "",
-        task: PolishTask = .dictation
+        task: PolishTask = .dictation,
+        part: CleanupPrompt.TranscriptPart? = nil
     ) async throws -> PolishedText {
         guard SystemLanguageModel.default.isAvailable else {
             throw PolisherError.notAvailable(LocalLLMPolisher.statusMessage)
@@ -166,7 +169,8 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
             targetApp: targetApp,
             personalContext: personalContext,
             recentDictations: recentDictations,
-            sessionIntent: sessionIntent
+            sessionIntent: sessionIntent,
+            part: part
         )
         let options = GenerationOptions(
             sampling: .greedy,

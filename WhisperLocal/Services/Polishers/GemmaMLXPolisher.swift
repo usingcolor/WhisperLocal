@@ -72,7 +72,8 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
         targetApp: String? = nil,
         recentDictations: String = "",
         sessionIntent: String = "",
-        task: PolishTask = .dictation
+        task: PolishTask = .dictation,
+        part: CleanupPrompt.TranscriptPart? = nil
     ) async throws -> PolishedText {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return PolishedText(text: trimmed) }
@@ -91,7 +92,8 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
             personalContext: personalContext,
             recentDictations: recentDictations,
             sessionIntent: sessionIntent,
-            onDevice: true
+            onDevice: true,
+            part: part
         )
         let maxTokens = task == .sessionContext
             ? min(Self.tokenBudget(for: trimmed), 128)

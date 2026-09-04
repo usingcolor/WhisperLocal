@@ -231,7 +231,8 @@ private final class JudgmentPolisher: TextPolisher {
         targetApp _: String?,
         recentDictations _: String,
         sessionIntent _: String,
-        task _: PolishTask
+        task _: PolishTask,
+        part _: CleanupPrompt.TranscriptPart?
     ) async throws -> PolishedText {
         PolishedText(text: text, contextRelevant: relevant)
     }
@@ -247,7 +248,8 @@ private final class TruncatingPolisher: TextPolisher {
         targetApp _: String?,
         recentDictations _: String,
         sessionIntent _: String,
-        task _: PolishTask
+        task _: PolishTask,
+        part _: CleanupPrompt.TranscriptPart?
     ) async throws -> PolishedText {
         throw PolisherError.truncated
     }
@@ -263,7 +265,8 @@ private final class FillerReinjectingPolisher: TextPolisher {
         targetApp _: String?,
         recentDictations _: String,
         sessionIntent _: String,
-        task _: PolishTask
+        task _: PolishTask,
+        part _: CleanupPrompt.TranscriptPart?
     ) async throws -> PolishedText {
         PolishedText(text: "um \(text) uh")
     }
@@ -289,7 +292,8 @@ private final class ProbePolisher: TextPolisher, @unchecked Sendable {
         targetApp: String?,
         recentDictations _: String,
         sessionIntent: String,
-        task: PolishTask
+        task: PolishTask,
+        part: CleanupPrompt.TranscriptPart?
     ) async throws -> PolishedText {
         lock.lock()
         callCount += 1

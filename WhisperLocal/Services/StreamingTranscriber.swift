@@ -43,7 +43,14 @@ final class StreamingTranscriber {
                     try? await Task.sleep(nanoseconds: self.pollNanoseconds)
                     continue
                 }
+                let seconds = Double(chunk.count) / 16_000
+                let started = Date()
                 let text = await self.transcribeWithRetry(chunk)
+                // Chunk seconds against characters returned: separates "the drain
+                // handed over a short chunk" from "ASR returned little for a full one".
+                self.logger.info(
+                    "Streamed chunk \(self.completedChunks + 1, privacy: .public): \(seconds, privacy: .public)s audio -> \(text.count, privacy: .public) chars in \(Date().timeIntervalSince(started), privacy: .public)s"
+                )
                 // Appended after the await on purpose: a chunk already in flight when
                 // the take ends still counts, rather than being thrown away.
                 self.parts.append(text)

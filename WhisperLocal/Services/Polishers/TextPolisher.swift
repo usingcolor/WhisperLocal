@@ -22,7 +22,10 @@ protocol TextPolisher: Sendable {
         targetApp: String?,
         recentDictations: String,
         sessionIntent: String,
-        task: PolishTask
+        task: PolishTask,
+        /// Set when one dictation is split for length, so a piece is not polished as
+        /// if it were a whole document.
+        part: CleanupPrompt.TranscriptPart?
     ) async throws -> PolishedText
 }
 
@@ -35,7 +38,8 @@ extension TextPolisher {
             targetApp: nil,
             recentDictations: "",
             sessionIntent: "",
-            task: .dictation
+            task: .dictation,
+            part: nil
         )
     }
 
@@ -47,7 +51,8 @@ extension TextPolisher {
             targetApp: nil,
             recentDictations: "",
             sessionIntent: "",
-            task: .dictation
+            task: .dictation,
+            part: nil
         )
     }
 }
@@ -276,7 +281,14 @@ struct PolishPipeline: Sendable {
 
         for (index, piece) in pieces.enumerated() {
             onProgress?(index + 1, pieces.count)
-            let result = await run(piece, targetApp: targetApp, cloudDisabled: cloudDown)
+            let result = await run(
+                piece,
+                targetApp: targetApp,
+                cloudDisabled: cloudDown,
+                // Only when there is genuinely more than one piece: a single-piece
+                // take must produce the prompt it always did.
+                part: CleanupPrompt.TranscriptPart(index: index + 1, total: pieces.count)
+            )
             if result.cloudUnavailable { cloudDown = true }
             // run() already falls back to the raw piece when cleanup fails, so the
             // text is never empty here — but be explicit rather than trust it.
@@ -313,7 +325,12 @@ struct PolishPipeline: Sendable {
         await run(raw, targetApp: targetApp, cloudDisabled: false)
     }
 
-    func run(_ raw: String, targetApp: String?, cloudDisabled: Bool) async -> PolishResult {
+    func run(
+        _ raw: String,
+        targetApp: String?,
+        cloudDisabled: Bool,
+        part: CleanupPrompt.TranscriptPart? = nil
+    ) async -> PolishResult {
         guard enableTextCleanup else {
             return PolishResult(
                 text: raw.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -361,7 +378,8 @@ struct PolishPipeline: Sendable {
                         targetApp: polishApp,
                         recentDictations: polishRecent,
                         sessionIntent: polishIntent,
-                        task: task
+                        task: task,
+                        part: part
                     )
                     text = result.text
                     // Cloud does not judge session context (plain-text output).
@@ -401,7 +419,8 @@ struct PolishPipeline: Sendable {
                     targetApp: polishApp,
                     recentDictations: polishRecent,
                     sessionIntent: polishIntent,
-                    task: task
+                    task: task,
+                    part: part
                 )
                 text = result.text
                 contextRelevant = task == .sessionContext ? nil : result.contextRelevant

@@ -15,7 +15,8 @@ struct AnthropicPolisher: TextPolisher {
         targetApp: String? = nil,
         recentDictations: String = "",
         sessionIntent: String = "",
-        task: PolishTask = .dictation
+        task: PolishTask = .dictation,
+        part: CleanupPrompt.TranscriptPart? = nil
     ) async throws -> PolishedText {
         guard !apiKey.isEmpty else { throw PolisherError.missingAPIKey("Anthropic") }
 
@@ -44,7 +45,8 @@ struct AnthropicPolisher: TextPolisher {
                     text: text,
                     targetApp: targetApp,
                     recentDictations: recentDictations,
-                    sessionIntent: sessionIntent
+                    sessionIntent: sessionIntent,
+                    part: part
                 )]
             ]
         ]

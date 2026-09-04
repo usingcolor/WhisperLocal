@@ -205,7 +205,8 @@ enum CleanupPrompt {
         personalContext: String = "",
         recentDictations: String = "",
         sessionIntent: String = "",
-        onDevice: Bool = false
+        onDevice: Bool = false,
+        part: TranscriptPart? = nil
     ) -> String {
         switch task {
         case .sessionContext:
@@ -217,14 +218,16 @@ enum CleanupPrompt {
                     targetApp: targetApp,
                     personalContext: personalContext,
                     recentDictations: recentDictations,
-                    sessionIntent: sessionIntent
+                    sessionIntent: sessionIntent,
+                    part: part
                 )
             }
             return wrapTranscript(
                 text,
                 targetApp: targetApp,
                 recentDictations: recentDictations,
-                sessionIntent: sessionIntent
+                sessionIntent: sessionIntent,
+                part: part
             )
         }
     }
@@ -468,7 +471,8 @@ enum CleanupPrompt {
         _ text: String,
         targetApp: String? = nil,
         recentDictations: String = "",
-        sessionIntent: String = ""
+        sessionIntent: String = "",
+        part: TranscriptPart? = nil
     ) -> String {
         wrapTranscript(
             text,
@@ -476,7 +480,8 @@ enum CleanupPrompt {
             appNotes: "",
             appDictionary: [],
             recentDictations: recentDictations,
-            sessionIntent: sessionIntent
+            sessionIntent: sessionIntent,
+            part: part
         )
     }
 
@@ -486,7 +491,8 @@ enum CleanupPrompt {
         targetApp: String?,
         personalContext: String,
         recentDictations: String = "",
-        sessionIntent: String = ""
+        sessionIntent: String = "",
+        part: TranscriptPart? = nil
     ) -> String {
         wrapTranscript(
             text,
@@ -494,8 +500,36 @@ enum CleanupPrompt {
             appNotes: matchingExceptionNotes(personalContext: personalContext, targetApp: targetApp),
             appDictionary: matchingPromptDictionaryTerms(personalContext: personalContext, targetApp: targetApp),
             recentDictations: recentDictations,
-            sessionIntent: sessionIntent
+            sessionIntent: sessionIntent,
+            part: part
         )
+    }
+
+    /// Position of this piece when one dictation is split for length.
+    struct TranscriptPart: Sendable, Equatable {
+        let index: Int
+        let total: Int
+        var isFirst: Bool { index <= 1 }
+        var isLast: Bool { index >= total }
+    }
+
+    /// Tells a piece it is a fragment. Without it each piece is polished as a whole
+    /// document, so a middle piece gets its first word capitalised and a full stop
+    /// added where the sentence actually runs on.
+    static func partNotice(_ part: TranscriptPart) -> String {
+        var rules: [String] = []
+        if !part.isFirst {
+            rules.append("It continues the previous piece: do not capitalise the first word unless it is a proper noun.")
+        }
+        if !part.isLast {
+            rules.append("It runs into the next piece: do not add a closing full stop unless the speaker clearly finished the sentence.")
+        }
+        let body = rules.isEmpty ? "Clean it as a whole dictation." : rules.joined(separator: " ")
+        return """
+        <part index="\(part.index)" of="\(part.total)">
+        One dictation, split for length. \(body) Clean only this piece and never mention the split.
+        </part>
+        """
     }
 
     static func wrapTranscript(
@@ -504,7 +538,8 @@ enum CleanupPrompt {
         appNotes: String,
         appDictionary: [String],
         recentDictations: String = "",
-        sessionIntent: String = ""
+        sessionIntent: String = "",
+        part: TranscriptPart? = nil
     ) -> String {
         var parts: [String] = []
         if let targetApp {
@@ -536,6 +571,14 @@ enum CleanupPrompt {
                 </session-intent>
                 """
             )
+        }
+        // Last thing before the transcript, deliberately. Everything above is stable
+        // across takes into the same app and stays a cacheable prefix; this varies
+        // per piece, so putting it earlier would invalidate the cache for all of it.
+        // The block is self-describing, which is why the shared system prompt does
+        // not need to declare it and stays byte-identical.
+        if let part, part.total > 1 {
+            parts.append(partNotice(part))
         }
         parts.append("<transcript>\n\(Self.neutralizeTranscriptDelimiters(text))\n</transcript>")
         parts.append("\nOutput only the cleaned transcript.")

@@ -21,7 +21,8 @@ private final class StubPolisher: TextPolisher, @unchecked Sendable {
         targetApp: String?,
         recentDictations: String,
         sessionIntent: String,
-        task: PolishTask
+        task: PolishTask,
+        part: CleanupPrompt.TranscriptPart?
     ) async throws -> PolishedText {
         calls += 1
         if let error { throw error }

@@ -242,6 +242,16 @@ If insertion stops working after a rebuild:
 
 The onboarding window shows the exact binary path that needs to be enabled.
 
+## Supporting this project
+
+WhisperLocal is free and MIT licensed, and it stays that way. Nothing is paywalled,
+no feature is held back, and there is no paid tier — sponsoring only says the work is
+worth continuing.
+
+If it saves you typing, you can [sponsor it on GitHub](https://github.com/sponsors/usingcolor).
+One-off or monthly, any amount. If you would rather not, that is genuinely fine: filing a
+good bug report is worth more than a dollar. See [Contributing](#contributing).
+
 ## Related projects
 
 Worth a look if WhisperLocal isn't the right shape for you:

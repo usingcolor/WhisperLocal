@@ -141,6 +141,36 @@ if grep -q 'get-task-allow' <<<"$app_entitlements"; then
   exit 1
 fi
 
+# The mirror image: the re-sign must not drop what the app actually needs. Under the
+# hardened runtime com.apple.security.device.audio-input gates the microphone even
+# though this app is unsandboxed, so losing it signs, notarizes, and ships a build
+# that never hears anything. Compare against the entitlements file rather than a
+# hardcoded list, so a new entitlement is covered the day it is added.
+printf '%s' "$app_entitlements" > "${stage}/signed-entitlements.plist"
+python3 - WhisperLocal/App/WhisperLocal.entitlements "${stage}/signed-entitlements.plist" <<'PYENT'
+import pathlib
+import plistlib
+import sys
+
+declared = plistlib.loads(pathlib.Path(sys.argv[1]).read_bytes())
+raw = pathlib.Path(sys.argv[2]).read_bytes().strip()
+if not raw:
+    raise SystemExit("error: the signed app carries no entitlements; the re-sign dropped them.")
+try:
+    actual = plistlib.loads(raw)
+except Exception as error:
+    raise SystemExit(f"error: could not parse entitlements from the signed app: {error}")
+
+missing = sorted(k for k in declared if k not in actual)
+changed = sorted(k for k in declared if k in actual and actual[k] != declared[k])
+for key in missing:
+    print(f"error: signed app is missing entitlement {key}", file=sys.stderr)
+for key in changed:
+    print(f"error: entitlement {key} is {actual[key]!r}, expected {declared[key]!r}", file=sys.stderr)
+if missing or changed:
+    raise SystemExit("error: signed entitlements do not match WhisperLocal.entitlements.")
+PYENT
+
 if [[ "$signed_release" == "1" ]]; then
   signature_info="$(codesign --display --verbose=4 "$app" 2>&1)"
   printf '%s\n' "$signature_info"

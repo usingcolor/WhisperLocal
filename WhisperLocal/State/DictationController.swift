@@ -68,6 +68,8 @@ final class DictationController: ObservableObject {
     private var hitTakeLimit = false
     /// Consecutive watch ticks that saw the hotkey up while we thought it was held.
     private var missedReleaseTicks = 0
+    /// Transcribes completed chunks while the take is still running. Nil between takes.
+    private var streamer: StreamingTranscriber?
     private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "dictation")
     /// MenuBarExtra onAppear also calls start(); only load speech once.
     private var didBootstrapSpeech = false
@@ -248,6 +250,7 @@ final class DictationController: ObservableObject {
             hitTakeLimit = false
             hotKey.markSessionActive(true)
             startTakeLimitWatch()
+            startStreaming()
             if recorder.isInputReady {
                 phase = .recording
                 hud.show(phase: .recording, levelPublisher: recorder, contextCapture: isIntentTake)
@@ -266,6 +269,24 @@ final class DictationController: ObservableObject {
     /// A take had no ceiling at all: the buffer grew until the key came up, and a
     /// failure anywhere downstream then cost every word of it. The limit stops the
     /// take and transcribes what it has — it never throws the audio away.
+    /// Transcription runs alongside the recording, so letting go of a long take only
+    /// costs the final partial chunk instead of the whole thing. Nothing is emitted
+    /// until there is enough audio to place a cut, so short takes never stream and
+    /// behave exactly as they did before.
+    private func startStreaming() {
+        let extraTerms = settings.matchingAppDictionaryTerms(targetApp: dictationTargetApp?.promptLine)
+        let streamer = StreamingTranscriber(
+            recorder: recorder,
+            transcription: transcription,
+            dictionary: extraTerms
+        )
+        self.streamer = streamer
+        streamer.start { [weak self] chunks in
+            guard let self, self.phase == .recording || self.phase == .waitingForMic else { return }
+            self.hud.setDetail("\(chunks) part\(chunks == 1 ? "" : "s") transcribed")
+        }
+    }
+
     private func startTakeLimitWatch() {
         takeLimitTask?.cancel()
         takeLimitTask = Task { @MainActor [weak self] in
@@ -305,7 +326,12 @@ final class DictationController: ObservableObject {
                     self.finishRecording()
                     return
                 }
-                self.hud.setDetail(TakeLimits.countdownLabel(elapsed: elapsed), warning: true)
+                // Only overwrite when there is actually a countdown to show. Setting
+                // it unconditionally wiped the streaming progress every half second,
+                // since the label is nil for all but the last minute.
+                if let countdown = TakeLimits.countdownLabel(elapsed: elapsed) {
+                    self.hud.setDetail(countdown, warning: true)
+                }
             }
         }
     }
@@ -325,6 +351,8 @@ final class DictationController: ObservableObject {
 
     private func cancelRecording() {
         stopTakeLimitWatch()
+        streamer?.cancel()
+        streamer = nil
         cancelRequested = true
         isIntentTake = false
         dictationTargetApp = nil
@@ -347,6 +375,8 @@ final class DictationController: ObservableObject {
             dictationTargetApp = nil
             isIntentTake = false
             recordingBeganAt = nil
+            streamer?.cancel()
+            streamer = nil
             phase = .idle
             hud.hide()
             return
@@ -358,13 +388,17 @@ final class DictationController: ObservableObject {
         if held < 0.28 {
             dictationTargetApp = nil
             isIntentTake = false
+            streamer?.cancel()
+            streamer = nil
             phase = .idle
             hud.hide()
             return
         }
-        if Self.peakAbsolute(samples) < 0.003 {
+        if Self.peakAbsolute(samples) < 0.003, streamer?.didStream != true {
             dictationTargetApp = nil
             isIntentTake = false
+            streamer?.cancel()
+            streamer = nil
             phase = .error("No microphone input")
             hud.flashError("No microphone input")
             // Logged so this failure class stops being invisible: it was the one
@@ -399,7 +433,9 @@ final class DictationController: ObservableObject {
     }
 
     private func process(samples: [Float]) async {
-        let audioSeconds = Double(samples.count) / 16_000
+        // Filled in after the streamer settles: most of a long take has already been
+        // drained out of `samples` by then, so its length is not the take's length.
+        var audioSeconds = Double(samples.count) / TranscriptionService.sampleRate
         let targetApp = dictationTargetApp?.promptLine
         // Kept whole, not just its prompt line: insertion needs the process.
         let insertTarget = dictationTargetApp
@@ -416,11 +452,28 @@ final class DictationController: ObservableObject {
         lastCleanupNote = nil
         do {
             let extraTerms = settings.matchingAppDictionaryTerms(targetApp: targetApp)
-            let raw = try await transcription.transcribe(
-                samples: samples,
-                extraDictionary: extraTerms
-            ) { [weak self] chunk, total in
-                self?.hud.setDetail("part \(chunk) of \(total)")
+            let raw: String
+            if let streamer, streamer.didStream {
+                // Most of this take is already transcribed; only the tail is left.
+                hud.setDetail("finishing")
+                raw = await streamer.finish(tail: samples)
+                audioSeconds = Double(streamer.streamedSamples + samples.count)
+                    / TranscriptionService.sampleRate
+                self.streamer = nil
+                // Every chunk failed. Joining leaves a lone gap marker, which is not
+                // something to paste at somebody.
+                if raw.trimmingCharacters(in: .whitespacesAndNewlines) == TranscriptJoiner.gapMarker {
+                    throw TranscriptionError.allChunksFailed
+                }
+            } else {
+                streamer?.cancel()
+                self.streamer = nil
+                raw = try await transcription.transcribe(
+                    samples: samples,
+                    extraDictionary: extraTerms
+                ) { [weak self] chunk, total in
+                    self?.hud.setDetail("part \(chunk) of \(total)")
+                }
             }
             hud.setDetail(nil)
             lastTranscript = raw

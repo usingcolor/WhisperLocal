@@ -139,6 +139,24 @@ final class AudioRecorder: ObservableObject {
         isRecording = true
     }
 
+    /// Hand off the first complete chunk of a take in progress, so it can be
+    /// transcribed while recording continues. Nil until there is enough audio to
+    /// place a cut — which for a short take is never, so those behave exactly as
+    /// they did before streaming existed.
+    ///
+    /// Removing the prefix here is what bounds memory: the buffer holds the
+    /// untranscribed tail rather than the whole recording.
+    func drainCompletedChunk() -> [Float]? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isCapturing else { return nil }
+        guard let cut = AudioChunker.streamingCut(in: captured, sampleRate: targetSampleRate),
+              cut > 0, cut <= captured.count else { return nil }
+        let chunk = Array(captured[0..<cut])
+        captured.removeFirst(cut)
+        return chunk
+    }
+
     /// Stop this take and return Float32 mono samples at 16 kHz. Leaves the engine warm.
     func stop() -> [Float] {
         lock.lock()

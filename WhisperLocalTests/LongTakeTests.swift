@@ -168,3 +168,63 @@ final class PolishChunkerTests: XCTestCase {
         XCTAssertEqual(pieces.joined(), giant)
     }
 }
+
+final class StreamingCutTests: XCTestCase {
+    private let rate: Double = 16_000
+
+    func testWaitsUntilThereIsEnoughAudioToLookBothWays() {
+        // A full target's worth is not enough on its own: the quiet search needs
+        // audio *after* the boundary too.
+        let justTarget = [Float](repeating: 0.5, count: Int(rate * AudioChunker.targetSeconds))
+        XCTAssertNil(AudioChunker.streamingCut(in: justTarget, sampleRate: rate))
+
+        let enough = [Float](repeating: 0.5, count: Int(rate * (AudioChunker.targetSeconds + AudioChunker.searchSeconds + 1)))
+        XCTAssertNotNil(AudioChunker.streamingCut(in: enough, sampleRate: rate))
+    }
+
+    func testCutsAtSilenceNearTheBoundary() {
+        let n = Int(rate * 70)
+        var samples = [Float](repeating: 0.5, count: n)
+        // Quiet gap just before the 60s target.
+        let gapStart = Int(rate * 58.5)
+        let gapEnd = Int(rate * 59.0)
+        for i in gapStart..<gapEnd { samples[i] = 0 }
+
+        let cut = AudioChunker.streamingCut(in: samples, sampleRate: rate, searchSeconds: 4)
+        XCTAssertNotNil(cut)
+        XCTAssertGreaterThanOrEqual(cut!, gapStart)
+        XCTAssertLessThanOrEqual(cut!, gapEnd)
+    }
+
+    func testCutIsAlwaysInsideTheBuffer() {
+        for seconds in [63.0, 80.0, 121.0, 200.0] {
+            let samples = [Float](repeating: 0.2, count: Int(rate * seconds))
+            guard let cut = AudioChunker.streamingCut(in: samples, sampleRate: rate) else { continue }
+            XCTAssertGreaterThan(cut, 0)
+            XCTAssertLessThan(cut, samples.count, "a cut at the end would emit the whole buffer")
+        }
+    }
+
+    func testDegenerateInputs() {
+        XCTAssertNil(AudioChunker.streamingCut(in: [], sampleRate: rate))
+        XCTAssertNil(AudioChunker.streamingCut(in: [Float](repeating: 0, count: 100), sampleRate: 0))
+        XCTAssertNil(AudioChunker.streamingCut(in: [Float](repeating: 0, count: 10_000_000), sampleRate: rate, targetSeconds: 0))
+    }
+
+    func testRepeatedCutsWalkForwardAndCoverEverything() {
+        // Simulate the drain loop: cut, drop the prefix, repeat.
+        var remaining = [Float](repeating: 0.3, count: Int(rate * 200))
+        let original = remaining.count
+        var emitted = 0
+        var pieces = 0
+        while let cut = AudioChunker.streamingCut(in: remaining, sampleRate: rate) {
+            XCTAssertGreaterThan(cut, 0)
+            emitted += cut
+            remaining.removeFirst(cut)
+            pieces += 1
+            XCTAssertLessThan(pieces, 20, "loop must terminate")
+        }
+        XCTAssertGreaterThan(pieces, 1)
+        XCTAssertEqual(emitted + remaining.count, original, "no samples lost or duplicated")
+    }
+}

@@ -66,6 +66,7 @@
 		C95BBC1A2136CBE32CCE248C /* PolishChunker.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFDFA4E1C92A8DDA98C67A3 /* PolishChunker.swift */; };
 		CBA348D127EC79309CBBFEA0 /* GemmaMLXPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */; };
 		CD6A40D1A41DC73BDAAF178B /* CloudFallbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02094467E1587FC75CCC8A7 /* CloudFallbackTests.swift */; };
+		CE56330AA71E956A5A5EF601 /* StreamingTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = D397411F2FAC3ECA1546964F /* StreamingTranscriber.swift */; };
 		DC4C53ADA10C148A6467AF8E /* LongTake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9769980C86707AB396B34360 /* LongTake.swift */; };
 		E5B382402026A0EA34458CA6 /* DictationLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B2368773CE8F483F2B05DC9 /* DictationLogView.swift */; };
 		F4C3CE0FA33D73AC4444CF46 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A99161BEE11539679C79444C /* FluidAudio */; };
@@ -115,6 +116,7 @@
 		D02094467E1587FC75CCC8A7 /* CloudFallbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFallbackTests.swift; sourceTree = "<group>"; };
 		D036D4D666946E1E4C5A30F9 /* WhisperLocal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhisperLocal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputRouteTests.swift; sourceTree = "<group>"; };
+		D397411F2FAC3ECA1546964F /* StreamingTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingTranscriber.swift; sourceTree = "<group>"; };
 		D3A0E540785AF85E8AAB0D1B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D3C75C3C8A0CD848C604E695 /* TextPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPolisher.swift; sourceTree = "<group>"; };
 		DCFDFA4E1C92A8DDA98C67A3 /* PolishChunker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishChunker.swift; sourceTree = "<group>"; };
@@ -229,6 +231,7 @@
 				9769980C86707AB396B34360 /* LongTake.swift */,
 				15D0999BC498FE3DD45A01A5 /* NetworkReachability.swift */,
 				B38C1D3FD905430B8186554D /* PermissionManager.swift */,
+				D397411F2FAC3ECA1546964F /* StreamingTranscriber.swift */,
 				F5D1E69A1A5E6E68B60D9D97 /* TextInserter.swift */,
 				AFF3498DCEDC9A6C7A5A13A6 /* TranscriptionService.swift */,
 				098B35DAE350505F007B6800 /* UpdateInstallLog.swift */,
@@ -441,6 +444,7 @@
 				22AB783D17862B8DDB743D56 /* SessionContextEditor.swift in Sources */,
 				3734CB93A0CCF86BB2613CEC /* SettingsStore.swift in Sources */,
 				82932228A06406AFBCB3ABDE /* SettingsView.swift in Sources */,
+				CE56330AA71E956A5A5EF601 /* StreamingTranscriber.swift in Sources */,
 				3FDBFD6B24BF76442776DEE2 /* TextInserter.swift in Sources */,
 				C0D2F80461008C6015974BDA /* TextPolisher.swift in Sources */,
 				2FF5D8B56F80FE4E08146279 /* TranscriptionService.swift in Sources */,

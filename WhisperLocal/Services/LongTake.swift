@@ -83,6 +83,34 @@ enum AudioChunker {
         return ranges
     }
 
+    /// Cut point for the first complete chunk of a *growing* buffer, or nil while
+    /// there is not enough audio to place one.
+    ///
+    /// Streaming cannot use `plan`/`refine`, which need the whole take up front. It
+    /// needs `target + search` seconds before cutting so the quiet search still has
+    /// audio on both sides of the boundary — which is why the cut trails live audio
+    /// by a couple of seconds. Nobody sees that: it happens while you are still
+    /// talking.
+    static func streamingCut(
+        in samples: [Float],
+        sampleRate: Double,
+        targetSeconds: Double = targetSeconds,
+        searchSeconds: Double = searchSeconds
+    ) -> Int? {
+        guard sampleRate > 0, targetSeconds > 0 else { return nil }
+        let target = Int(targetSeconds * sampleRate)
+        let search = max(1, Int(searchSeconds * sampleRate))
+        let probe = max(1, Int(probeSeconds * sampleRate))
+        // Enough audio to look both ways around the boundary, and to take a probe
+        // window at the far end of the search.
+        guard samples.count >= target + search + probe else { return nil }
+
+        let lower = max(probe, target - search)
+        let upper = min(samples.count - probe, target + search)
+        guard lower < upper else { return nil }
+        return quietestOffset(in: samples, from: lower, to: upper, probe: probe)
+    }
+
     /// Move each interior boundary to the quietest nearby window.
     static func refine(
         _ ranges: [Range<Int>],

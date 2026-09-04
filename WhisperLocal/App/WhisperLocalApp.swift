@@ -8,7 +8,7 @@ struct WhisperLocalApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarContent(controller: controller)
+            MenuBarView(controller: controller)
         } label: {
             if AppIdentity.isDevBuild {
                 HStack(spacing: 4) {
@@ -24,7 +24,9 @@ struct WhisperLocalApp: App {
                 }
             }
         }
-        .menuBarExtraStyle(.menu)
+        // .window, not .menu: NSMenuItems ignore font and colour, so the
+        // Battery-menu style hierarchy is only possible in a panel.
+        .menuBarExtraStyle(.window)
 
         Window(AppIdentity.settingsWindowTitle, id: "settings") {
             SettingsView(controller: controller)
@@ -80,90 +82,3 @@ struct WhisperLocalApp: App {
     }
 }
 
-struct MenuBarContent: View {
-    @ObservedObject var controller: DictationController
-    @ObservedObject private var permissions = PermissionManager.shared
-    @ObservedObject private var hotKey = HotKeyManager.shared
-    @ObservedObject private var updater = AppUpdater.shared
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        Text(AppIdentity.menuVersionLine)
-        Text(statusLine)
-        Text(controller.polishStatusLine)
-        if let contextLine = controller.sessionContextLine {
-            Text(contextLine)
-            Button("Edit context…") {
-                AppWindowFocus.present(title: "Session context") {
-                    openWindow(id: "session-context")
-                }
-            }
-            if controller.hasActiveSessionContext {
-                Button("Clear context") {
-                    controller.clearSessionContext()
-                }
-            }
-        }
-        Button(updater.menuTitle) {
-            Task { await updater.handleMenuClick() }
-        }
-        .disabled(updater.isBusy && !AppIdentity.isDevBuild)
-        Divider()
-        Button("Settings…") {
-            AppWindowFocus.present(title: AppIdentity.settingsWindowTitle) {
-                openWindow(id: "settings")
-            }
-            controller.showSettings = true
-        }
-        .keyboardShortcut(",", modifiers: .command)
-        Button("Dictation Log…") {
-            AppWindowFocus.present(title: "Dictation Log") {
-                openWindow(id: "log")
-            }
-        }
-        Button("Permissions / Onboarding…") {
-            AppWindowFocus.present(title: "Welcome") {
-                openWindow(id: "onboarding")
-            }
-            controller.showOnboarding = true
-        }
-        Divider()
-        Button("Reload speech model") {
-            Task { await controller.transcription.ensureModel(named: controller.settings.asrModel, force: true) }
-        }
-        Divider()
-        Button("Quit \(AppIdentity.productName)") {
-            controller.stop()
-            NSApplication.shared.terminate(nil)
-        }
-        .keyboardShortcut("q", modifiers: .command)
-        .onAppear {
-            controller.start()
-            if controller.showOnboarding {
-                AppWindowFocus.present(title: "Welcome") {
-                    openWindow(id: "onboarding")
-                }
-            }
-        }
-    }
-
-    private var statusLine: String {
-        if !permissions.inputMonitoringTrusted {
-            return "Input Monitoring missing — hotkey won’t fire in other apps"
-        }
-        if !permissions.accessibilityTrusted {
-            return "Accessibility missing — text won’t paste into other apps"
-        }
-        if controller.transcription.isLoadingModel || !controller.transcription.isReady {
-            return controller.transcription.statusMessage
-        }
-        switch controller.phase {
-        case .idle, .success:
-            return controller.readyStatusLine
-        case .recording, .waitingForMic:
-            return controller.isIntentTake ? "Listening for context…" : controller.phase.label
-        default:
-            return controller.phase.label
-        }
-    }
-}

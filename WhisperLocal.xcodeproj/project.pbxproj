@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0419BE025A39877373BDBDFB /* UpdateInstallLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098B35DAE350505F007B6800 /* UpdateInstallLog.swift */; };
+		132A50F2FDD7D01010C7EE19 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60608F356F0FD1CEB252ECB7 /* MenuBarView.swift */; };
 		18B6B2A9941C3D8D4041791B /* OpenAIPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005FD23F400A298F93508D18 /* OpenAIPolisher.swift */; };
 		1BBDFC011CF6AA23F30046CD /* AppUpdateFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */; };
 		1D50AA3CEE8B37409DA4B35B /* AudioInputRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */; };
@@ -84,6 +85,7 @@
 		4BB256320A449D858060B134 /* GemmaMLXPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GemmaMLXPolisher.swift; sourceTree = "<group>"; };
 		4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateFeed.swift; sourceTree = "<group>"; };
 		4EEFF6A4C488C19CF87AF301 /* SessionContextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionContextEditor.swift; sourceTree = "<group>"; };
+		60608F356F0FD1CEB252ECB7 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		68A7E52EF80A958922373895 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		6FCC628C5CD310EC5C6F34E0 /* AnthropicPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnthropicPolisher.swift; sourceTree = "<group>"; };
 		748E974DF04BD7DC99D7796A /* WhisperLocalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperLocalApp.swift; sourceTree = "<group>"; };
@@ -235,6 +237,7 @@
 			isa = PBXGroup;
 			children = (
 				9B2368773CE8F483F2B05DC9 /* DictationLogView.swift */,
+				60608F356F0FD1CEB252ECB7 /* MenuBarView.swift */,
 				68A7E52EF80A958922373895 /* OnboardingView.swift */,
 				22AEB3874E72F1200F202546 /* RecordingHUD.swift */,
 				4EEFF6A4C488C19CF87AF301 /* SessionContextEditor.swift */,
@@ -405,6 +408,7 @@
 				CBA348D127EC79309CBBFEA0 /* GemmaMLXPolisher.swift in Sources */,
 				2DE43BEE1ABCCCDE4B8FEB29 /* HotKeyManager.swift in Sources */,
 				3652AD33B51E663C9EF4B337 /* LocalLLMPolisher.swift in Sources */,
+				132A50F2FDD7D01010C7EE19 /* MenuBarView.swift in Sources */,
 				257AE55C48A885FAEF6FADFC /* OnboardingView.swift in Sources */,
 				18B6B2A9941C3D8D4041791B /* OpenAIPolisher.swift in Sources */,
 				ACAF76996E8C668DA5DD5B75 /* PermissionManager.swift in Sources */,

@@ -281,10 +281,10 @@ final class DictationController: ObservableObject {
             dictionary: extraTerms
         )
         self.streamer = streamer
-        streamer.start { [weak self] chunks in
-            guard let self, self.phase == .recording || self.phase == .waitingForMic else { return }
-            self.hud.setDetail("\(chunks) part\(chunks == 1 ? "" : "s") transcribed")
-        }
+        // No progress reporting by design. How a take is cut up is our problem, not
+        // something to narrate at someone who is mid-sentence — and streaming made
+        // the end-of-take wait short enough that progress no longer earns its place.
+        streamer.start()
     }
 
     private func startTakeLimitWatch() {
@@ -455,7 +455,6 @@ final class DictationController: ObservableObject {
             let raw: String
             if let streamer, streamer.didStream {
                 // Most of this take is already transcribed; only the tail is left.
-                hud.setDetail("finishing")
                 raw = await streamer.finish(tail: samples)
                 audioSeconds = Double(streamer.streamedSamples + samples.count)
                     / TranscriptionService.sampleRate
@@ -471,9 +470,7 @@ final class DictationController: ObservableObject {
                 raw = try await transcription.transcribe(
                     samples: samples,
                     extraDictionary: extraTerms
-                ) { [weak self] chunk, total in
-                    self?.hud.setDetail("part \(chunk) of \(total)")
-                }
+                )
             }
             hud.setDetail(nil)
             lastTranscript = raw
@@ -510,10 +507,7 @@ final class DictationController: ObservableObject {
                 phase = .polishing
                 hud.update(phase: .polishing)
             }
-            let result = await makePipeline().runChunked(raw, targetApp: targetApp) { [weak self] piece, total in
-                self?.hud.setDetail("part \(piece) of \(total)")
-            }
-            hud.setDetail(nil)
+            let result = await makePipeline().runChunked(raw, targetApp: targetApp)
             var output = result.text
             if settings.insertTrailingSpace, !output.hasSuffix(" ") {
                 output += " "

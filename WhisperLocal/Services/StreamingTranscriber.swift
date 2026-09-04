@@ -34,7 +34,7 @@ final class StreamingTranscriber {
         self.dictionary = dictionary
     }
 
-    func start(onChunk: @escaping (Int) -> Void) {
+    func start() {
         loop?.cancel()
         loop = Task { @MainActor [weak self] in
             while !Task.isCancelled {
@@ -56,7 +56,6 @@ final class StreamingTranscriber {
                 self.parts.append(text)
                 self.streamedSamples += chunk.count
                 self.completedChunks += 1
-                onChunk(self.completedChunks)
             }
         }
     }

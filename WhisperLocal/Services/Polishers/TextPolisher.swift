@@ -304,7 +304,8 @@ struct PolishPipeline: Sendable {
         if failures == pieces.count {
             note = cloudDown ? "Cloud unavailable — pasted without cleanup" : "Pasted without AI cleanup"
         } else if failures > 0 {
-            note = "Cleaned \(pieces.count - failures) of \(pieces.count) parts"
+            // Says what it means for the text, not how the work was divided.
+            note = "Some of this was pasted without cleanup"
         } else if cloudDown {
             // Every piece is cleaned, just not by the cloud.
             note = "Cloud unavailable — polished on this Mac"

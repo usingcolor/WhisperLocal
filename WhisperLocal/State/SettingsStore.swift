@@ -132,6 +132,9 @@ final class SettingsStore: ObservableObject {
     @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
     /// Use the built-in mic instead of a Bluetooth headset that is also playing audio.
     @Published var preferBuiltInMicOverBluetooth: Bool { didSet { persist(preferBuiltInMicOverBluetooth, key: "preferBuiltInMicOverBluetooth") } }
+    /// Dev-only experiment: macOS voice processing (echo cancellation). Off until
+    /// its effect on transcript quality has actually been measured.
+    @Published var enableEchoCancellation: Bool { didSet { persist(enableEchoCancellation, key: "enableEchoCancellation") } }
     @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
     /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
     @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
@@ -324,6 +327,7 @@ final class SettingsStore: ObservableObject {
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
         preferBuiltInMicOverBluetooth = defaults.object(forKey: "preferBuiltInMicOverBluetooth") as? Bool ?? true
+        enableEchoCancellation = defaults.object(forKey: "enableEchoCancellation") as? Bool ?? false
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int

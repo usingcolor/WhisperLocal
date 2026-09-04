@@ -20,6 +20,9 @@ final class AudioRecorder: ObservableObject {
     /// Snapshot for idle-hold length. Refreshed when the engine starts or the
     /// graph reconfigures — not on every take, so `stop()` stays off coreaudiod.
     private var cachedInputRoute: AudioInputRoute?
+    /// What the live engine was actually built with, so a settings change forces a
+    /// rebuild instead of appearing to do nothing until the idle hold expires.
+    private var engineUsesVoiceProcessing = false
 
     private let lock = NSLock()
     /// Filled on the audio tap thread; `stop()` reads it after capturing ends.
@@ -102,6 +105,12 @@ final class AudioRecorder: ObservableObject {
             logger.info("Prepended \(prepended, privacy: .public) preroll frames")
         }
 
+        let wantsVoiceProcessing = AppIdentity.isDevBuild && SettingsStore.shared.enableEchoCancellation
+        if isEngineLive, engineUsesVoiceProcessing != wantsVoiceProcessing {
+            logger.info("Rebuilding the input graph for a voice-processing change")
+            stopEngineHardware()
+        }
+
         if isEngineLive {
             isRecording = true
             return
@@ -150,8 +159,11 @@ final class AudioRecorder: ObservableObject {
 
         let engine = AVAudioEngine()
         let input = engine.inputNode
-        // Before the format is read: the format belongs to whichever device the
-        // unit is pointed at.
+        // Voice processing first: turning it on rebuilds the underlying audio unit,
+        // which would discard a device selection made before it. Both must happen
+        // before the format is read, since the format belongs to the unit and the
+        // device it points at.
+        applyVoiceProcessing(to: input)
         applyPreferredInputDevice(to: input)
         var hardwareFormat = input.inputFormat(forBus: 0)
         if hardwareFormat.sampleRate <= 0 || hardwareFormat.channelCount == 0 {
@@ -205,6 +217,29 @@ final class AudioRecorder: ObservableObject {
             Task { @MainActor in
                 self?.reinstallTapAfterConfigurationChange()
             }
+        }
+    }
+
+    /// macOS voice processing: acoustic echo cancellation, so the mic stops hearing
+    /// this Mac's own speakers. Dev-only for now — it brings noise suppression and
+    /// gain control along with it, and their effect on transcript quality has not
+    /// been measured. Failure is non-fatal: dictation continues on the raw input.
+    private func applyVoiceProcessing(to input: AVAudioInputNode) {
+        let wanted = AppIdentity.isDevBuild && SettingsStore.shared.enableEchoCancellation
+        engineUsesVoiceProcessing = false
+        guard wanted else { return }
+        do {
+            try input.setVoiceProcessingEnabled(true)
+            engineUsesVoiceProcessing = true
+            // Do not duck other audio. The point is to remove playback from the mic
+            // signal, not to turn the user's music down while they dictate.
+            var ducking = AVAudioVoiceProcessingOtherAudioDuckingConfiguration()
+            ducking.enableAdvancedDucking = false
+            ducking.duckingLevel = .min
+            input.voiceProcessingOtherAudioDuckingConfiguration = ducking
+            logger.info("Voice processing ON (echo cancellation)")
+        } catch {
+            logger.error("Voice processing failed, using raw input: \(error.localizedDescription, privacy: .public)")
         }
     }
 

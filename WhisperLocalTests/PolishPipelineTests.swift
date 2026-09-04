@@ -439,7 +439,10 @@ final class CleanupPromptTests: XCTestCase {
         XCTAssertTrue(context.contains("You write session context for WhisperLocal"))
         XCTAssertTrue(context.lowercased().contains("menu-bar"))
         XCTAssertTrue(context.contains("never pasted"))
-        XCTAssertTrue(context.contains("MambaEye"))
+        // A split-name example must survive here — it is what teaches the engine to
+        // rejoin a camel-case name ASR broke apart.
+        XCTAssertTrue(context.contains("DeepField"))
+        XCTAssertFalse(context.contains("MambaEye"))
         XCTAssertTrue(context.contains("WhisperLocal"))
         XCTAssertFalse(context.contains("Output only the cleaned transcript"))
         XCTAssertFalse(context.contains("<target-app>"))

@@ -14,6 +14,7 @@ struct MenuBarView: View {
     @ObservedObject private var hotKey = HotKeyManager.shared
     @ObservedObject private var updater = AppUpdater.shared
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,12 +27,15 @@ struct MenuBarView: View {
                     .padding(.bottom, 2)
                 MenuRow("Edit Context…") { present("Session context", "session-context") }
                 if controller.hasActiveSessionContext {
+                    // Deliberately no dismiss(): seeing the context line disappear is
+                    // the only confirmation this worked.
                     MenuRow("Clear Context") { controller.clearSessionContext() }
                 }
                 MenuSeparator()
             }
 
             MenuRow(updater.menuTitle, isEnabled: !(updater.isBusy && !AppIdentity.isDevBuild)) {
+                dismiss()
                 Task { await updater.handleMenuClick() }
             }
             MenuSeparator()
@@ -48,6 +52,7 @@ struct MenuBarView: View {
             MenuSeparator()
 
             MenuRow("Reload Speech Model") {
+                dismiss()
                 Task {
                     await controller.transcription.ensureModel(
                         named: controller.settings.asrModel, force: true
@@ -66,7 +71,9 @@ struct MenuBarView: View {
         .onAppear {
             controller.start()
             if controller.showOnboarding {
-                present("Welcome", "onboarding")
+                // openOnly: present() dismisses, and dismissing the panel from inside
+                // its own onAppear is not a state change worth making.
+                openOnly("Welcome", "onboarding")
             }
         }
     }
@@ -96,7 +103,14 @@ struct MenuBarView: View {
         .padding(.vertical, 4)
     }
 
+    /// A `.window` style panel does not dismiss itself the way an NSMenu does, so
+    /// every row that leads somewhere has to close it explicitly.
     private func present(_ title: String, _ id: String) {
+        dismiss()
+        openOnly(title, id)
+    }
+
+    private func openOnly(_ title: String, _ id: String) {
         AppWindowFocus.present(title: title) { openWindow(id: id) }
     }
 

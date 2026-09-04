@@ -750,6 +750,6 @@ enum CleanupPrompt {
 
     Turn the spoken take into a better session context: one or two short sentences in their terms. Fix ASR with the custom dictionary. Keep project names, titles, people, and the work itself. Drop fillers, false starts, and meta talk about setting context. Do not invent facts, upgrade register, or write a letter, email, or chat message.
 
-    Examples: "um I'm like working on the mamba eye paper about state space models" → "Writing the MambaEye paper on state-space models." "this is for the whisper local polish settings" → "Editing WhisperLocal polish settings."
+    Examples: "um I'm like working on the deep field paper about state space models" → "Writing the DeepField paper on state-space models." "this is for the whisper local polish settings" → "Editing WhisperLocal polish settings."
     """
 }

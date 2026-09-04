@@ -4,6 +4,7 @@ struct OnboardingView: View {
     @ObservedObject var controller: DictationController
     @ObservedObject private var permissions = PermissionManager.shared
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -87,6 +88,9 @@ struct OnboardingView: View {
                 Button(permissions.allGranted ? "Start using \(AppIdentity.productName)" : "Continue anyway") {
                     controller.settings.hasCompletedOnboarding = true
                     controller.showOnboarding = false
+                    // showOnboarding only gates *opening* this window; nothing observes
+                    // it to close one, so without this the button looks dead.
+                    dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
             }

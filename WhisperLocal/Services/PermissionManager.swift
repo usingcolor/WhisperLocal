@@ -3,10 +3,13 @@ import ApplicationServices
 import AVFoundation
 import CoreGraphics
 import Foundation
+import os
 
 @MainActor
 final class PermissionManager: ObservableObject {
     static let shared = PermissionManager()
+
+    private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "permissions")
 
     @Published private(set) var microphoneGranted: Bool = false
     @Published private(set) var accessibilityTrusted: Bool = false
@@ -126,19 +129,41 @@ final class PermissionManager: ObservableObject {
     }
 
     /// Quit and relaunch — often required after enabling Accessibility for a rebuilt binary.
+    /// Relaunch after a permission change.
+    ///
+    /// Asking NSWorkspace to open our own bundle and then terminating does not work:
+    /// the new instance is spawned by a process that is already dying and gets torn
+    /// down with it, and the 0.8s fallback terminate fired whether or not the launch
+    /// had finished — which on a cold start it had not. Hand the reopen to a detached
+    /// process that waits for this pid to exit first, the same way the updater
+    /// relaunches after replacing the app.
     func quitAndRelaunch() {
-        let url = Bundle.main.bundleURL
-        let config = NSWorkspace.OpenConfiguration()
-        config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in
-            DispatchQueue.main.async {
-                NSApp.terminate(nil)
-            }
+        let bundlePath = Bundle.main.bundleURL.path
+        let pid = ProcessInfo.processInfo.processIdentifier
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [
+            "-c",
+            // Poll rather than sleep a fixed amount: the wait is however long we take
+            // to quit, which varies with whatever model is resident.
+            #"""
+            while /bin/kill -0 "$1" 2>/dev/null; do sleep 0.2; done
+            sleep 0.3
+            /usr/bin/open "$2"
+            """#,
+            "bash",
+            String(pid),
+            bundlePath
+        ]
+        do {
+            try process.run()
+        } catch {
+            // Nothing reopens us, but quitting anyway would look like a crash.
+            logger.error("Relaunch helper failed: \(error.localizedDescription, privacy: .public)")
+            return
         }
-        // Fallback terminate if openApplication callback is slow
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            NSApp.terminate(nil)
-        }
+        NSApp.terminate(nil)
     }
 
     var accessibilityHelpText: String {

@@ -38,10 +38,14 @@ You get:   I need to rewrite the parser.
 
 Your audio never leaves the Mac. Transcription and cleanup both run on-device by default.
 
-<!-- Demo slot. Drop a ~5-10s recording at assets/demo.gif (hold Globe/Fn → HUD →
-     cleaned text lands in a field) and uncomment the line below. It belongs here,
-     above the fold, rather than further down the page. -->
-<!-- <p align="center"><img src="assets/demo.gif" alt="WhisperLocal in use" width="720"></p> -->
+<!-- GitHub serves a repo-hosted .mp4 as text/plain, so a <video> tag pointed here
+     would not play. The poster links to the file instead, and GitHub's own blob
+     viewer plays it. -->
+<p align="center">
+  <a href="assets/demo.mp4"><img src="assets/demo-poster.png" alt="WhisperLocal in use: hold Globe/Fn, speak, and cleaned text lands at the cursor" width="720"></a>
+  <br>
+  <sub><a href="assets/demo.mp4"><b>▶ Watch the 21-second demo</b></a></sub>
+</p>
 
 > Early preview (`0.2.0`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
 

@@ -178,6 +178,27 @@ final class RecordingHUDController: ObservableObject {
     }
 }
 
+/// An indeterminate spinner we can actually colour.
+///
+/// `ProgressView` wraps `NSProgressIndicator`, which ignores `.tint` for the
+/// spinning style, so on clear glass over a light document it faded to almost
+/// nothing next to the white headline.
+private struct HUDSpinner: View {
+    @State private var spinning = false
+
+    var body: some View {
+        Circle()
+            .trim(from: 0, to: 0.72)
+            .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .frame(width: 14, height: 14)
+            .shadow(color: .black.opacity(0.45), radius: 1.5)
+            .rotationEffect(.degrees(spinning ? 360 : 0))
+            .animation(.linear(duration: 0.85).repeatForever(autoreverses: false), value: spinning)
+            .onAppear { spinning = true }
+            .accessibilityHidden(true)
+    }
+}
+
 /// Liquid Glass where the OS has it, the older material treatment below.
 ///
 /// The manual version needs a dark scrim: a material alone lightens toward whatever
@@ -191,7 +212,7 @@ private struct HUDSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: shape)
+            content.glassEffect(.clear, in: shape)
         } else {
             content
                 .background {
@@ -235,7 +256,7 @@ struct RecordingHUDView: View {
                 Text(headline)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(controller.detailIsWarning ? Color.yellow : .white)
-                    .shadow(color: .black.opacity(0.35), radius: 1, y: 0.5)
+                    .shadow(color: .black.opacity(0.55), radius: 2, y: 0.5)
                     .lineLimit(2)
                 if controller.phase == .recording {
                     ZStack(alignment: .leading) {
@@ -337,8 +358,7 @@ struct RecordingHUDView: View {
                     lineWidth: 6
                 ))
         case .processing, .settingContext, .polishing, .inserting:
-            ProgressView()
-                .controlSize(.small)
+            HUDSpinner()
         case .success:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)

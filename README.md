@@ -4,6 +4,23 @@
 
 # WhisperLocal
 
+<p align="center">
+  <a href="https://github.com/usingcolor/WhisperLocal/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/usingcolor/WhisperLocal?label=latest&color=blue"></a>
+  <a href="https://github.com/usingcolor/WhisperLocal/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/usingcolor/WhisperLocal/total?label=downloads&color=brightgreen"></a>
+  <img alt="macOS 14+ · Apple Silicon" src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20Silicon-black?logo=apple">
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/github/license/usingcolor/WhisperLocal?color=lightgrey"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.0/WhisperLocal-0.2.0-arm64.dmg"><b>⬇&nbsp; Download 0.2.0 for Apple Silicon</b></a>
+  &nbsp;·&nbsp;
+  <a href="#usage">Usage</a>
+  &nbsp;·&nbsp;
+  <a href="#privacy">Privacy</a>
+  &nbsp;·&nbsp;
+  <a href="#contributing">Contributing</a>
+</p>
+
 **Dictation for Apple Silicon Macs that cleans up how you actually talk — without sending your voice anywhere.**
 
 Hold a key, speak, let go. The filler words, false starts, and "period" / "comma" you said out loud get turned into real text, and it lands at your cursor in whatever app you were already in.
@@ -21,7 +38,9 @@ You get:   I need to rewrite the parser.
 
 Your audio never leaves the Mac. Transcription and cleanup both run on-device by default.
 
-<!-- TODO: replace with a ~5s screen recording: hold Globe/Fn → HUD appears → cleaned text lands in a text field. -->
+<!-- Demo slot. Drop a ~5-10s recording at assets/demo.gif (hold Globe/Fn → HUD →
+     cleaned text lands in a field) and uncomment the line below. It belongs here,
+     above the fold, rather than further down the page. -->
 <!-- <p align="center"><img src="assets/demo.gif" alt="WhisperLocal in use" width="720"></p> -->
 
 > Early preview (`0.2.0`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).

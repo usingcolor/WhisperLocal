@@ -19,6 +19,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fails before the 25-minute build rather than after it, and before anything
+      # is published. The README carries the DMG URL in two places and the version
+      # lives in project.yml; all three have to agree with the tag or the release
+      # page ships a download button pointing at the wrong build.
+      - name: Check the tag matches the tree
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          fail=0
+
+          declared="$(grep -m1 'MARKETING_VERSION' project.yml | tr -d ' "' | cut -d: -f2)"
+          if [[ "$declared" != "$version" ]]; then
+            echo "::error::project.yml MARKETING_VERSION is $declared, tag says $version"
+            fail=1
+          fi
+
+          if ! grep -q "^## ${version}\b" .github/release-notes.md; then
+            echo "::error::.github/release-notes.md has no '## ${version}' section"
+            fail=1
+          fi
+
+          expected="releases/download/${tag}/WhisperLocal-${version}-arm64.dmg"
+          found=$(grep -c "$expected" README.md || true)
+          stale=$(grep -oE 'releases/download/v[0-9.]+/WhisperLocal-[0-9.]+-arm64\.dmg' README.md \
+                  | grep -v "download/${tag}/" | sort -u || true)
+          if [[ "$found" -lt 1 ]]; then
+            echo "::error::README.md has no download link for ${tag}"
+            fail=1
+          fi
+          if [[ -n "$stale" ]]; then
+            echo "::error::README.md still links to another version:"
+            echo "$stale"
+            fail=1
+          fi
+
+          [[ "$fail" == "0" ]] && echo "tag ${tag} agrees with project.yml, release notes, and ${found} README link(s)"
+          exit "$fail"
+
       - name: Install XcodeGen
         run: brew install xcodegen
 

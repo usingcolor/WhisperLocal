@@ -152,7 +152,14 @@ final class RecordingHUDController: ObservableObject {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        // Liquid Glass draws its own edge and depth. An AppKit window shadow on top
+        // of translucent content is computed from that content's alpha, so instead
+        // of a soft drop shadow it hugs the rounded rect as a thin dark rim.
+        if #available(macOS 26.0, *) {
+            panel.hasShadow = false
+        } else {
+            panel.hasShadow = true
+        }
         panel.ignoresMouseEvents = true
         panel.becomesKeyOnlyIfNeeded = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

@@ -48,6 +48,7 @@ struct SettingsView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var permissions = PermissionManager.shared
     @ObservedObject private var hotKey = HotKeyManager.shared
+    @ObservedObject private var launchAtLogin = LaunchAtLogin.shared
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var models = CloudModelCatalog.shared
     @ObservedObject private var gemma = GemmaMLXPolisher.shared
@@ -189,6 +190,10 @@ struct SettingsView: View {
                     "Keeps music and video playing at full quality while you dictate.",
                     more: "AirPods and most Bluetooth headsets cannot play high-quality audio and record at the same time — opening their mic drops playback to narrowband mono until the take ends. Their mic is also a worse input for speech recognition than the built-in array. Turn this off if you dictate away from your Mac and need the headset mic."
                 )
+            }
+
+            Section("Startup") {
+                startupControls
             }
 
             Section("Last dictation") {
@@ -833,6 +838,45 @@ struct SettingsView: View {
             }
         }
         .padding(16)
+    }
+
+    /// The toggle reads `SMAppService`, not a stored preference, so it still tells
+    /// the truth after the user changes the login item in System Settings. That
+    /// means it can refuse to move — hence the states underneath, which say why and
+    /// point at the one place that can fix it.
+    @ViewBuilder
+    private var startupControls: some View {
+        Toggle("Open at login", isOn: Binding(
+            get: { launchAtLogin.isOn },
+            set: { launchAtLogin.setEnabled($0) }
+        ))
+        .disabled(launchAtLogin.state.isBlocked)
+
+        switch launchAtLogin.state {
+        case .unavailable(let reason):
+            Text(reason)
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        case .blockedByUser:
+            Text("Turned off for \(AppIdentity.productName) in System Settings. Only you can switch it back on there.")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open Login Items") { launchAtLogin.openSystemSettings() }
+        default:
+            helpText(
+                "\(AppIdentity.productName) appears in the menu bar when you log in. No window opens and no dictation starts on its own.",
+                more: "This adds a login item, the same one listed under System Settings › General › Login Items. Turning it off there is respected — this toggle follows whatever that pane says."
+            )
+        }
+
+        if let failure = launchAtLogin.failure {
+            Text(failure)
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var permissionsPane: some View {

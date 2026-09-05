@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // MenuBarExtra `.menu` content often does not appear until the user
         // clicks the status item — so hotkeys must start here, not in onAppear.
         AppleSpeechASR.sweepStaleTempAudio()
+        LaunchAtLogin.shared.reconcileAfterLaunch()
         DictationController.shared.start()
         if !AppIdentity.isDevBuild {
             AppUpdater.shared.presentPendingInstallFailureIfNeeded()

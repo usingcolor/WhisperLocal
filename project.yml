@@ -118,6 +118,7 @@ targets:
       - package: swift-transformers
         product: Tokenizers
       - sdk: Speech.framework
+      - sdk: ServiceManagement.framework
     scheme:
       testTargets:
         - WhisperLocalTests
@@ -138,6 +139,7 @@ targets:
       - path: WhisperLocal/Services/AudioInputRoute.swift
       - path: WhisperLocal/State/SessionContext.swift
       - path: WhisperLocal/Services/LongTake.swift
+      - path: WhisperLocal/Services/LaunchAtLogin.swift
       - path: WhisperLocal/Services/Polishers/PolishChunker.swift
       - path: WhisperLocal/App/AppIdentity.swift
     settings:

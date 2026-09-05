@@ -42,26 +42,28 @@ If you want Windows or Linux, streaming transcription, or a large model catalog,
 
 Apple Silicon only. No Xcode and no git clone required.
 
-**[Download WhisperLocal 0.2.0](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.0/WhisperLocal-0.2.0-arm64.dmg)** (`.dmg`, Apple Silicon) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
+**[Download WhisperLocal 0.2.0](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.0/WhisperLocal-0.2.0-arm64.dmg)** (`.dmg`) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
 
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
-2. Open **WhisperLocal** and grant **Microphone** and **Accessibility** when asked.
+2. Open it and grant **Microphone** and **Accessibility** when asked.
 
-Current releases are Developer ID signed, Apple-notarized, and stapled, so Gatekeeper lets them open. **Check for Updates** is in the menu bar.
+Releases are Developer ID signed, notarized, and stapled, so Gatekeeper lets them open. WhisperLocal lives in the menu bar — no Dock icon, no window to keep open. **Check for Updates** is in the menu, and verifies a SHA-256 checksum when a release publishes one.
 
-Verify what you downloaded against the `SHA256SUMS` published with each release:
+<details>
+<summary>Verifying a download, and opening older builds</summary>
+
+Check against the `SHA256SUMS` published with each release:
 
 ```bash
 shasum -a 256 ~/Downloads/WhisperLocal-*-arm64.dmg
 ```
 
-WhisperLocal lives in the menu bar — there's no Dock icon and no window to keep open.
-
-Older **0.1.8** and earlier DMGs were ad-hoc signed. If macOS blocks one of those, use **System Settings → Privacy & Security → Open Anyway**, or:
+**0.1.8** and earlier were ad-hoc signed. If macOS blocks one, use **System Settings → Privacy & Security → Open Anyway**, or:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
 ```
+</details>
 
 ## Usage
 
@@ -69,9 +71,9 @@ xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
 2. Hold **Globe / Fn**, speak, and release.
 3. Cleaned text appears at the cursor.
 
-**Esc** cancels a dictation in progress. In Settings you can switch to tap-to-toggle, or move the hotkey to Right Option, Left Option, or Right Command.
+**Esc** cancels — while recording, and while a take is still being transcribed. Long dictations are transcribed as you speak, so letting go is quick however long you talked. In Settings you can switch to tap-to-toggle, or move the hotkey to Right Option, Left Option, or Right Command.
 
-**Shift** during a take stores a short session context instead of pasting — what you are working on, so later dictations resolve names and jargon. Press Shift again to switch back to a normal paste. The HUD shows an orange **CONTEXT** badge when that take will not be pasted. Edit or clear the phrase from the menu bar or Settings. It is not saved across launches.
+**Shift** during a take stores a short session context instead of pasting — what you are working on, so later dictations resolve names and jargon. Press Shift again to switch back. The HUD shows an orange **CONTEXT** badge when a take will not be pasted. Not saved across launches.
 
 ## What you get on your macOS version
 
@@ -82,22 +84,9 @@ The defaults assume macOS 26. Older versions still work, with more setup:
 | **26 or later** | Apple Speech, built in — nothing to download | Apple Intelligence, on-device — nothing to download |
 | **14 – 15** | Whisper `small.en`, downloaded on first use | Fillers stripped; turn on Gemma 4 (~2.7 GB) or a cloud API key for LLM polish |
 
-Everything below the defaults is optional and switchable in Settings.
+Everything else is optional and switchable in Settings: other speech models (WhisperKit `tiny.en` / `base.en` / Large v3 Turbo, NVIDIA Parakeet TDT 0.6B v2), cloud cleanup, custom instructions, per-app rules, a personal dictionary, and a local dictation log with JSON / CSV export.
 
-## Features
-
-- Menu-bar agent — no Dock icon, no window to manage
-- Global hotkey, hold-to-talk or tap-to-toggle; **Esc** cancels
-- On-device English transcription: Apple Speech, or WhisperKit (`tiny.en` / `base.en` / `small.en` / Large v3 Turbo), or NVIDIA Parakeet TDT 0.6B v2
-- On-device cleanup: Apple Intelligence or Gemma 4 E2B IT
-- Optional OpenAI or Anthropic cleanup — **transcript text only**, keys stored in the Keychain
-- Editable custom instructions, per-app rules, and a personal dictionary for names and jargon
-- Fail-open: if cleanup fails or times out, the previous stage is pasted anyway — you never lose a dictation
-- Smart insertion: Accessibility API first, clipboard ⌘V for terminals and Electron apps that need it
-- Optional dictation log (text only, never audio) with JSON / CSV / plain-text export
-- Spoken session context: Shift during a take stores a temporary polish hint (not pasted, not saved across launches)
-- Floating recording HUD with a live input meter
-- In-app updates from GitHub Releases, with SHA-256 verification when a release publishes checksums
+**Picking a cloud model.** Cloud cleanup is off unless you turn it on, and API keys live in the Keychain. If you do turn it on, `gpt-5.6-luna` is the one to start with — fast enough not to sit in the way, and cheap enough not to watch. In everyday use here, 154 dictations came to 7 cents. On-device polish is still faster, free, and keeps the text on your Mac.
 
 ## How it works
 
@@ -112,47 +101,21 @@ hold hotkey → record 16 kHz audio
 
 The cleanup step is **not a chatbot**. If you dictate a question, you get the question as text — it is never answered.
 
-A Shift take skips insertion: the spoken sentence is distilled into a short session context and kept in memory for later polish.
+**Nothing is ever lost to a failure.** If cleanup fails or times out, the previous stage is pasted anyway. If the cloud is unreachable, the on-device model takes over. If the text cannot be typed, it is left on the clipboard for ⌘V. Long takes are transcribed in pieces, so one bad piece costs its own span rather than the whole recording.
 
-Native Swift and AppKit. Transcription uses Apple's `SpeechTranscriber`, [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift), or [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) via [FluidAudio](https://github.com/FluidInference/FluidAudio). On-device cleanup uses Apple's `SystemLanguageModel` or Gemma 4 E2B IT through MLX. There is no sidecar LLM process to install or run.
-
-On-device cleanup waits up to 20 s; cloud cleanup waits up to 30 s. A timeout pastes the previous stage rather than hanging.
-
-## Settings
-
-| Setting | Default |
-|---|---|
-| Speech model | Apple Speech (macOS 26); falls back to Whisper `small.en`. Also `tiny.en`, `base.en`, Large v3 Turbo, Parakeet TDT 0.6B v2 |
-| Text cleanup | On — LLM polish (on-device or cloud). Um / uh / hmm are stripped. |
-| On-device cleanup | Apple Intelligence, or Gemma 4 E2B IT; skipped automatically while cloud cleanup is on |
-| Cloud cleanup | Off (OpenAI / Anthropic; pick a model in Settings) |
-| Recent dictations in polish | Off. Optional; you choose 1–8 previous takes. Not written into the system prompt. |
-| Session context | On. Shift during a take stores a short topic for later polish; nothing is pasted; edit from the menu or Settings; not saved across launches. |
-| Custom instructions | Generic starter notes; edit or clear in Settings |
-| Dictionary | Editable list, with CSV import |
-| Trailing space after paste | On |
-
-API keys live in the Keychain under `com.usingcolor.WhisperLocal`.
-
-**Picking a cloud model.** If you turn cloud cleanup on, `gpt-5.6-luna` is the one to
-start with — fast enough not to sit in the way, and cheap enough not to watch. In
-everyday use here, 154 dictations came to 7 cents; your own cost will track how long
-your takes are. On-device polish is still faster and free, and keeps the text on your
-Mac. Cloud is worth it when you want the cleanup to be noticeably better, and the price
-stays small even if you dictate all day.
+Native Swift and AppKit. Transcription uses Apple's `SpeechTranscriber`, [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift), or [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) via [FluidAudio](https://github.com/FluidInference/FluidAudio). On-device cleanup uses Apple's `SystemLanguageModel` or Gemma 4 E2B IT through MLX. Insertion goes through the Accessibility API, falling back to clipboard ⌘V for terminals and Electron apps. There is no sidecar LLM process to install or run.
 
 ## Privacy
 
 | | What leaves your Mac |
 |---|---|
 | **Default setup** | **Nothing.** Transcription and on-device cleanup all stay local. |
-| Cloud cleanup, if you turn it on | Transcript **text** only, to OpenAI or Anthropic. Never audio. If you also turn on recent dictations in polish, those earlier takes (text) go with the request. Spoken session context, while it is active, goes with the request too. |
+| Cloud cleanup, if you turn it on | Transcript **text** only, to OpenAI or Anthropic. Never audio. Recent dictations and session context go with the request if you enable them. |
 | Audio | Never uploaded. Apple Speech writes a private temp `.caf` per take and deletes it right after; Whisper and Parakeet stay in memory. |
-| Microphone indicator | After you let go, the input graph stays open briefly so the next take starts faster. Built-in mics drop it after about 2 seconds. A Bluetooth headset used only as input can stay open up to 45 seconds — the orange Control Center dot stays lit. If those headphones are also playing audio, the graph drops after 2 seconds so they can leave the hands-free profile. Nothing is recorded or uploaded during that idle hold. |
-| Keystrokes | The hotkey and Esc are observed through Accessibility. Keystrokes are never stored or logged. |
+| Microphone indicator | The input graph stays open briefly after a take so the next one starts faster — about 2 seconds, or up to 45 for a Bluetooth headset used only as input. Nothing is recorded during that idle hold. |
+| Keystrokes | The hotkey and Esc are observed through Accessibility. Never stored or logged. |
 | Clipboard | Clipboard-paste mode briefly uses the general pasteboard, marked so clipboard managers skip it. |
-| Session context | Spoken or typed text only, in memory until it expires or you clear it. Not written to disk. With cloud polish, that text also goes to the API. |
-| Dictation log | Optional, off-switchable, local only: `~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`, text with no audio. Polish does not read it unless you enable recent dictations in polish. |
+| Dictation log | Optional and local only: `~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`, text with no audio. |
 
 The app is **not sandboxed** — global hotkeys, Accessibility insertion, and synthetic paste all require that.
 
@@ -162,7 +125,7 @@ Security reports: see [SECURITY.md](SECURITY.md). Please don't file them as publ
 
 Contributions are genuinely welcome, and this project is easier to work on than most Mac apps.
 
-**The test suite is fast and needs nothing.** Unit tests run in about a tenth of a second — no microphone, no model download, no network, no API key:
+**The test suite is fast and needs nothing.** Unit tests run in about a quarter of a second — no microphone, no model download, no network, no API key:
 
 ```bash
 brew install xcodegen   # once
@@ -170,22 +133,19 @@ xcodegen generate
 xcodebuild test -scheme PolishTests -destination 'platform=macOS,arch=arm64'
 ```
 
-Most of the interesting logic — text cleanup, prompt assembly, dictionary handling, log export — is pure functions covered by that suite. You can fix a real bug and prove it without ever launching the app.
+Most of the interesting logic — text cleanup, prompt assembly, audio chunking, dictionary handling, log export — is pure functions covered by that suite. You can fix a real bug and prove it without ever launching the app.
 
-### Good places to start
+**Good places to start:**
 
-- **"WhisperLocal pastes wrong in *my* app."** Insertion quirks are handled by hand-maintained lists in [`TextInserter.swift`](WhisperLocal/Services/TextInserter.swift). Adding an app is often a one-line change. Bug reports here are just as useful as patches — tell us the app and what happened.
-- **Cleanup that gets it wrong.** Polish is LLM-only (plus a small um / uh / hmm strip). The prompt lives in [`CleanupPrompt.swift`](WhisperLocal/Services/Polishers/CleanupPrompt.swift). If a phrase you dictate often is mangled, that's a great first issue — paste what you said and what you expected.
-- **Languages other than English.** Currently English-only by design. Broadening this is a real, well-scoped project.
+- **"WhisperLocal pastes wrong in *my* app."** Insertion quirks are hand-maintained lists in [`TextInserter.swift`](WhisperLocal/Services/TextInserter.swift) — often a one-line change. Bug reports are as useful as patches: tell us the app and what happened.
+- **Cleanup that gets it wrong.** The prompt lives in [`CleanupPrompt.swift`](WhisperLocal/Services/Polishers/CleanupPrompt.swift). Paste what you said and what you expected.
+- **Languages other than English.** English-only by design today. Broadening this is a real, well-scoped project.
 - **Documentation.** If something here confused you, that's a bug in this file.
 
-### Before opening a PR
+Before a PR: run `xcodegen generate` and the `PolishTests` scheme, add a test when you fix a behavior, keep changes focused, and never commit API keys or signing identities.
 
-- Run `xcodegen generate` and the `PolishTests` scheme; add a test when you fix a behavior
-- Keep changes focused — one concern per PR
-- Never commit API keys, signing identities, or personal dictionary contents
-
-### Project layout
+<details>
+<summary>Project layout</summary>
 
 ```
 WhisperLocal/
@@ -198,15 +158,13 @@ project.yml    XcodeGen spec — regenerate after adding or moving files
 ```
 
 Cleanup pipeline: filler strip → `LocalLLMPolisher` (Apple Foundation Models) or `GemmaMLXPolisher` (MLX) → optional `OpenAIPolisher` / `AnthropicPolisher`. The shared prompt lives in `CleanupPrompt.swift`.
+</details>
 
 ## Build from source
 
-Building it yourself sidesteps Gatekeeper entirely — an app you compiled locally never
-gets a quarantine flag, so macOS does not block it. The trade is setup cost: Xcode is a
-large download and the first build resolves around fifteen Swift packages, including MLX.
-For most people the [DMG](#download) is the faster route.
+Building it yourself sidesteps Gatekeeper entirely — a locally compiled app never gets a quarantine flag. The trade is setup cost: Xcode is a large download and the first build resolves around fifteen Swift packages, including MLX. For most people the [DMG](#download) is faster.
 
-You need an Apple Silicon Mac, **Xcode 26 or later**, and [XcodeGen](https://github.com/yonaskolb/XcodeGen). Xcode 26 is required because mlx-swift 0.31.6 needs Swift 6.3 tools — Xcode 16.4 ships Swift 6.1 and cannot resolve the package.
+You need an Apple Silicon Mac, **Xcode 26 or later**, and [XcodeGen](https://github.com/yonaskolb/XcodeGen). Xcode 26 is required because mlx-swift 0.31.6 needs Swift 6.3 tools.
 
 ```bash
 brew install xcodegen   # if needed
@@ -214,9 +172,12 @@ xcodegen generate
 open WhisperLocal.xcodeproj
 ```
 
-In Xcode, set your own **Development Team** under Signing & Capabilities, then Run. This repo does not include an Apple team ID.
+Set your own **Development Team** under Signing & Capabilities, then Run — this repo has no Apple team ID. Speech models are not in this repo; Whisper and Parakeet download from Hugging Face on first use.
 
-Command line (arm64 only — FluidAudio uses `Float16`, which x86_64 lacks):
+<details>
+<summary>Command-line build, the Dev app, and Accessibility troubleshooting</summary>
+
+arm64 only — FluidAudio uses `Float16`, which x86_64 lacks:
 
 ```bash
 xcodegen generate
@@ -227,40 +188,22 @@ xcodebuild -scheme WhisperLocal -configuration Release \
   build
 ```
 
-Build an ad-hoc signed Release DMG locally with `bash scripts/make-dmg.sh`. GitHub Releases are Developer ID signed and notarized. Re-run `xcodegen generate` after changing `project.yml` or moving files.
+`bash scripts/make-dmg.sh` builds an ad-hoc signed Release DMG. Re-run `xcodegen generate` after changing `project.yml` or moving files.
 
-Speech models are not in this repo — Whisper and Parakeet download from Hugging Face into the engine cache on first use.
-
-### Public app and Dev app on one Mac
-
-Release installs as `/Applications/WhisperLocal.app` (`com.usingcolor.WhisperLocal`). Debug / `Dev` builds use `/Applications/WhisperLocal Dev.app` (`com.usingcolor.WhisperLocal.dev`) so they can run together: separate settings, dictation log, and TCC prompts. API keys stay in the same Keychain service. The Dev app does not run Check for Updates (that would replace the public copy). Dev defaults the hotkey to Right Option so Globe / Fn stays on the public app.
+**Public app and Dev app together.** Release installs as `/Applications/WhisperLocal.app` (`com.usingcolor.WhisperLocal`); Debug / `Dev` builds use `/Applications/WhisperLocal Dev.app` (`com.usingcolor.WhisperLocal.dev`), with separate settings, log, and TCC prompts. The Dev app skips Check for Updates and defaults its hotkey to Right Option.
 
 ```bash
 DEVELOPMENT_TEAM=YourTeamID bash scripts/install-dev.sh
 ```
 
-### Signing and Accessibility
-
-Use **Apple Development** signing for local installs. Ad-hoc and hardened-runtime-only builds often make Accessibility read as "Missing."
-
-If insertion stops working after a rebuild:
-
-1. System Settings → Privacy & Security → Accessibility
-2. Remove WhisperLocal, then add it back
-3. Quit and reopen from the menu bar
-
-The onboarding window shows the exact binary path that needs to be enabled.
+**If insertion stops working after a rebuild.** Use **Apple Development** signing for local installs — ad-hoc builds often make Accessibility read as "Missing." Then: System Settings → Privacy & Security → Accessibility, remove WhisperLocal, add it back, and reopen from the menu bar. The onboarding window shows the exact binary path.
+</details>
 
 ## Supporting this project
 
-WhisperLocal is free and MIT licensed, and it stays that way. Nothing is paywalled,
-no feature is held back, and there is no paid tier — sponsoring only says the work is
-worth continuing.
+WhisperLocal is free and MIT licensed, and it stays that way. Nothing is paywalled, no feature is held back, and there is no paid tier — sponsoring only says the work is worth continuing.
 
-If it saves you typing, you can [sponsor it on GitHub](https://github.com/sponsors/usingcolor) —
-one-off or monthly, any amount. There is also [Buy Me a Coffee](https://buymeacoffee.com/usingcolor)
-if you prefer that. If you would rather not, that is genuinely fine: filing a good bug
-report is worth more than a dollar. See [Contributing](#contributing).
+If it saves you typing, you can [sponsor it on GitHub](https://github.com/sponsors/usingcolor) — one-off or monthly, any amount. There is also [Buy Me a Coffee](https://buymeacoffee.com/usingcolor) if you prefer that. If you would rather not, that is genuinely fine: filing a good bug report is worth more than a dollar.
 
 ## Related projects
 

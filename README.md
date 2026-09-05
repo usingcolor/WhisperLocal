@@ -86,7 +86,7 @@ The defaults assume macOS 26. Older versions still work, with more setup:
 
 Everything else is optional and switchable in Settings: other speech models (WhisperKit `tiny.en` / `base.en` / Large v3 Turbo, NVIDIA Parakeet TDT 0.6B v2), cloud cleanup, custom instructions, per-app rules, a personal dictionary, and a local dictation log with JSON / CSV export.
 
-**Picking a cloud model.** Cloud cleanup is off unless you turn it on, and API keys live in the Keychain. If you do turn it on, `gpt-5.6-luna` is the one to start with — fast enough not to sit in the way, and cheap enough not to watch. In everyday use here, 154 dictations came to 7 cents. On-device polish is still faster, free, and keeps the text on your Mac.
+**Picking a cloud model.** Cloud cleanup is off unless you turn it on, and API keys live in the Keychain. If you do turn it on, `gpt-5.6-luna` is the one to start with — fast enough not to sit in the way, and cheap enough not to watch. In everyday use here, 189 requests came to 7 cents — a dollar would cover a couple of thousand. Most of that is output tokens, and over 60% of the input is served from the prompt cache, because the parts of the request that do not change from take to take are sent first. On-device polish is still faster, free, and keeps the text on your Mac.
 
 ## How it works
 

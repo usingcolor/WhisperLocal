@@ -178,6 +178,31 @@ final class RecordingHUDController: ObservableObject {
     }
 }
 
+/// Liquid Glass where the OS has it, the older material treatment below.
+///
+/// The manual version needs a dark scrim: a material alone lightens toward whatever
+/// is behind it, so over a white document the HUD drifted to mid-grey and took the
+/// white text with it. Real glass handles that itself, and brings its own edge
+/// highlight, so the hand-drawn border goes with the scrim on macOS 26.
+private struct HUDSurface: ViewModifier {
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+    }
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background {
+                    shape.fill(.ultraThinMaterial)
+                        .overlay(shape.fill(Color.black.opacity(0.42)))
+                }
+                .overlay(shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+        }
+    }
+}
+
 /// The HUD never becomes key, and a non-key window normally swallows the first click
 /// just to focus itself. Without this the cancel button would need two clicks: one
 /// discarded to focus a window that will never take focus, and one that lands.
@@ -249,19 +274,7 @@ struct RecordingHUDView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(width: 300, height: 72)
-        // Material alone still lightens toward whatever is behind it, so over a white
-        // document the HUD drifted to mid-grey and the white text with it. A dark
-        // scrim under the material sets a floor: the blur and vibrancy survive, the
-        // contrast stops depending on what happens to be on screen.
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-            shape.fill(.ultraThinMaterial)
-                .overlay(shape.fill(Color.black.opacity(0.42)))
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-        )
+        .modifier(HUDSurface())
         .overlay(alignment: .topTrailing) {
             if controller.isContextCapture {
                 Text("CONTEXT")

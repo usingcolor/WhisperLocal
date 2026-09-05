@@ -21,6 +21,13 @@
   <a href="#contributing">Contributing</a>
 </p>
 
+<!-- A GIF, not the .mp4 beside it: GitHub serves a repo-hosted video as
+     text/plain and its blob viewer will not play one either, so nothing but an
+     image plays on this page. assets/demo.mp4 is the source to regenerate from. -->
+<p align="center">
+  <img src="assets/demo.gif" alt="WhisperLocal in use: hold Globe/Fn, speak, and cleaned text lands at the cursor" width="720">
+</p>
+
 **Dictation for Apple Silicon Macs that cleans up how you actually talk — without sending your voice anywhere.**
 
 Hold a key, speak, let go. The filler words, false starts, and "period" / "comma" you said out loud get turned into real text, and it lands at your cursor in whatever app you were already in.
@@ -37,13 +44,6 @@ You get:   I need to rewrite the parser.
 ```
 
 Your audio never leaves the Mac. Transcription and cleanup both run on-device by default.
-
-<!-- A GIF, not the .mp4 beside it: GitHub serves a repo-hosted video as
-     text/plain and its blob viewer will not play one either, so nothing but an
-     image plays on this page. assets/demo.mp4 is the source to regenerate from. -->
-<p align="center">
-  <img src="assets/demo.gif" alt="WhisperLocal in use: hold Globe/Fn, speak, and cleaned text lands at the cursor" width="720">
-</p>
 
 > Early preview (`0.2.0`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
 

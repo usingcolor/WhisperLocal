@@ -219,14 +219,24 @@ jobs:
           ADHOC_EOF
           fi
 
-          python3 - "$signing" > "$notes" <<'PY_EOF'
-          import pathlib, sys
+          python3 - "$signing" "$version" > "$notes" <<'PY_EOF'
+          import pathlib, re, sys
           body = pathlib.Path(".github/release-notes.md").read_text()
           section = pathlib.Path(sys.argv[1]).read_text().strip()
+          version = sys.argv[2]
           token = "{{SIGNING_SECTION}}"
           if token not in body:
               sys.exit("error: release-notes.md is missing the " + token + " placeholder")
-          sys.stdout.write(body.replace(token, section))
+          body = body.replace(token, section)
+          # Maintainer-only notes have no business on a public release page.
+          body = re.sub(r"<!--.*?-->\n?", "", body, flags=re.S)
+          # Ship this version's section, not the whole changelog. The file keeps
+          # every version; a release page should describe the release you are on.
+          parts = re.split(r"^## ", body, flags=re.M)
+          matches = [p for p in parts[1:] if p.startswith(version)]
+          if not matches:
+              sys.exit("error: release-notes.md has no '## " + version + "' section")
+          sys.stdout.write(parts[0].rstrip() + "\n\n## " + matches[0].rstrip() + "\n")
           PY_EOF
 
           gh release create "$tag" dist/*.dmg dist/SHA256SUMS \

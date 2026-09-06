@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 # Install a Dev-channel app next to the public copy.
 # Writes /Applications/WhisperLocal Dev.app — never /Applications/WhisperLocal.app.
+#
+# CODESIGN_IDENTITY signs the build with that identity instead of the project's
+# automatic signing, which needs a "Mac Development" certificate this machine
+# does not have. It matters beyond getting a build out: macOS keys Accessibility,
+# Input Monitoring, and Microphone to the signature, so installing over the Dev
+# app with a different one silently revokes all three. Pass the same identity the
+# installed copy already carries:
+#
+#   codesign -dv "/Applications/WhisperLocal Dev.app"   # read Authority=
+#   CODESIGN_IDENTITY="Developer ID Application: … (TEAMID)" scripts/install-dev.sh
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,6 +27,20 @@ fi
 echo "==> Generating Xcode project"
 xcodegen generate
 
+sign_args=()
+if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+  if ! security find-identity -v -p codesigning | grep -qF "$CODESIGN_IDENTITY"; then
+    echo "error: no codesigning identity matching '$CODESIGN_IDENTITY' in the keychain" >&2
+    exit 1
+  fi
+  echo "==> Signing as $CODESIGN_IDENTITY"
+  sign_args=(
+    CODE_SIGN_STYLE=Manual
+    CODE_SIGN_IDENTITY="$CODESIGN_IDENTITY"
+    PROVISIONING_PROFILE_SPECIFIER=
+  )
+fi
+
 derived="${root}/build/DerivedDataDev"
 echo "==> Building WhisperLocal Dev (optimized, bundle com.usingcolor.WhisperLocal.dev)"
 xcodebuild \
@@ -31,6 +55,7 @@ xcodebuild \
   EXCLUDED_ARCHS=x86_64 \
   ONLY_ACTIVE_ARCH=YES \
   ${DEVELOPMENT_TEAM:+DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM"} \
+  ${sign_args[@]+"${sign_args[@]}"} \
   build
 
 app="${derived}/Build/Products/Dev/WhisperLocal Dev.app"
@@ -60,3 +85,4 @@ open "$dest"
 echo "==> Done: $dest"
 defaults read "$dest/Contents/Info" CFBundleShortVersionString
 defaults read "$dest/Contents/Info" CFBundleIdentifier
+codesign -dv "$dest" 2>&1 | grep -E "^Authority=|^TeamIdentifier=" | head -2 || true

@@ -150,7 +150,7 @@ final class TextInserter {
 
     /// Electron / Chromium apps where AXSet selected-text often returns success and types nothing
     /// (Cursor, Slack, Chrome, VS Code, …).
-    private let clipboardFirstBundleIDs: Set<String> = [
+    private static let clipboardFirstBundleIDs: Set<String> = [
         "com.anysphere.sand",              // Cursor (Anysphere)
         "com.anysphere.cursor",
         "com.todesktop.230313mzl4w4u92",   // Cursor (older id)
@@ -163,9 +163,19 @@ final class TextInserter {
         "com.microsoft.edgemac",
         "com.tinyspeck.slackmacgap",
         "com.hnc.Discord",
-        "com.openai.chat",
+        "com.openai.chat",                 // ChatGPT Classic
+        "com.openai.codex",                // ChatGPT (renamed bundle, 2026)
         "com.anthropic.claudefordesktop",
         "com.apple.Safari.WebApp"          // PWAs / web-app wrappers
+    ]
+
+    /// Name substrings for the same class of app. Bundle IDs are the precise
+    /// signal but they are not stable — /Applications/ChatGPT.app silently became
+    /// com.openai.codex, which dropped it off the list above and broke insertion.
+    /// A vendor can rename the bundle; they rarely rename the app.
+    private static let clipboardFirstNameHints = [
+        "chatgpt", "claude", "slack", "discord", "cursor",
+        "visual studio code", "vs code", "obsidian", "notion"
     ]
 
     /// Name substrings for terminals without a known bundle ID.
@@ -205,7 +215,16 @@ final class TextInserter {
         case .inserted:
             return InsertionResult(success: true, method: .accessibility, appName: appName)
         case .unverified:
-            return InsertionResult(success: true, method: .accessibilityUnverified, appName: appName)
+            // Was reported as a plain success, which is how a dictation into the
+            // renamed ChatGPT bundle vanished: green tick, empty field, text gone.
+            // Park it so ⌘V still recovers it and let the HUD say so.
+            parkOnClipboard(sanitized)
+            return InsertionResult(
+                success: true,
+                method: .accessibilityUnverified,
+                appName: appName,
+                textOnClipboard: true
+            )
         case .skipped, .failed:
             break
         }
@@ -265,6 +284,15 @@ final class TextInserter {
     }
 
     private func prefersClipboardPaste(app: NSRunningApplication?, bundleID: String?) -> Bool {
+        if Self.prefersClipboardPaste(bundleID: bundleID, appName: app?.localizedName) {
+            return true
+        }
+        return isElectronApp(app)
+    }
+
+    /// The identity half of the decision, split out so it can be tested. The
+    /// bundle-on-disk half (`isElectronApp`) needs a running application.
+    nonisolated static func prefersClipboardPaste(bundleID: String?, appName: String?) -> Bool {
         if let bundleID, clipboardFirstBundleIDs.contains(bundleID) {
             return true
         }
@@ -274,7 +302,11 @@ final class TextInserter {
                 return true
             }
         }
-        return isElectronApp(app)
+        if let name = appName?.lowercased(),
+           clipboardFirstNameHints.contains(where: { name.contains($0) }) {
+            return true
+        }
+        return false
     }
 
     /// Cursor, VS Code, Slack, etc. ship `Electron Framework.framework`.
@@ -305,7 +337,10 @@ final class TextInserter {
 
     private enum AccessibilityInsert {
         case inserted
-        /// AXSet returned success but we could not confirm. Treat as done so we do not paste twice.
+        /// AXSet succeeded and then the element stopped answering, so neither
+        /// "it landed" nor "it did not" can be shown. The text goes to the
+        /// clipboard rather than being pasted again on top of a write that may
+        /// have worked.
         case unverified
         case skipped
         case failed
@@ -333,6 +368,13 @@ final class TextInserter {
             }
         }
 
+        // Read the field first. An element that will not say what it holds can
+        // never confirm the write either, and those are exactly the web-view
+        // composers where AXSet reports success and types nothing. Refusing to
+        // trust the write here is what sends them down the clipboard path.
+        let before = axValue(element)
+        guard before != nil else { return .failed }
+
         let setStatus = AXUIElementSetAttributeValue(
             element,
             kAXSelectedTextAttribute as CFString,
@@ -340,11 +382,20 @@ final class TextInserter {
         )
         guard setStatus == .success else { return .failed }
 
-        // Chromium often returns success without changing the field. Confirm it landed.
         if accessibilityInsertVisible(on: element, text: text) {
             return .inserted
         }
-        return .unverified
+        // The field answered before the write. If it still answers and reads the
+        // same, nothing was typed, whatever the status code said.
+        guard let after = axValue(element) else { return .unverified }
+        return after == before ? .failed : .inserted
+    }
+
+    private func axValue(_ element: AXUIElement) -> String? {
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success
+        else { return nil }
+        return valueRef as? String
     }
 
     private func accessibilityInsertVisible(on element: AXUIElement, text: String) -> Bool {

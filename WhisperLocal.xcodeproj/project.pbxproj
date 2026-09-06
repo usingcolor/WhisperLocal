@@ -45,6 +45,7 @@
 		62C033A5E33A9B81628F3FDB /* AppleSpeechASR.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98A3D822AC9524A9D7D1910 /* AppleSpeechASR.swift */; };
 		64481EF421E2A8C3DE691C1D /* DictionaryCSV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135B2C9F9BB17CBFFB34A72A /* DictionaryCSV.swift */; };
 		68484A6EFE8E4A48F43AE7BE /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83D3461601CD53D69C8AE0F /* AudioRecorder.swift */; };
+		69965B531FF8A66E7BF31033 /* TextInsertionRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E91C5E01659242C2927B28C /* TextInsertionRoutingTests.swift */; };
 		6D0706181BF3DB82CFFF3920 /* LongTakeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 435324015BC35AEEC0DC93D2 /* LongTakeTests.swift */; };
 		6EA5DB88FB4467EF92F57E28 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = FFC84E10821749934C2E6D9B /* Tokenizers */; };
 		6F266AE8D7475ADF5A0D2623 /* SessionContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AB6090B6FF0C21E7AF192D6 /* SessionContext.swift */; };
@@ -110,6 +111,7 @@
 		748E974DF04BD7DC99D7796A /* WhisperLocalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperLocalApp.swift; sourceTree = "<group>"; };
 		7C627BF10D2B7C3284F755F0 /* DictationLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationLogStore.swift; sourceTree = "<group>"; };
 		7E19E3CCC2AD2335AECE85AB /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		7E91C5E01659242C2927B28C /* TextInsertionRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionRoutingTests.swift; sourceTree = "<group>"; };
 		8FFA29539CB2FD9B242651AC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9063065B5D3C8667013BA702 /* WhisperLocalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhisperLocalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		952854698DE0B29BA5C9B04D /* LocalLLMPolisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMPolisher.swift; sourceTree = "<group>"; };
@@ -227,6 +229,7 @@
 				435324015BC35AEEC0DC93D2 /* LongTakeTests.swift */,
 				14A5CF427A1C63EF7644AD6F /* PolishPipelineTests.swift */,
 				CA97989F10BB9CC020C7F483 /* SessionContextTests.swift */,
+				7E91C5E01659242C2927B28C /* TextInsertionRoutingTests.swift */,
 				15B8009061A0563CD766CADA /* TranscriptPartTests.swift */,
 			);
 			path = WhisperLocalTests;
@@ -421,6 +424,7 @@
 				6F266AE8D7475ADF5A0D2623 /* SessionContext.swift in Sources */,
 				8CB4AE65290CB518D6619D7F /* SessionContextTests.swift in Sources */,
 				B916FB2C7469C02FC54B3A0F /* TextInserter.swift in Sources */,
+				69965B531FF8A66E7BF31033 /* TextInsertionRoutingTests.swift in Sources */,
 				76EDAF7D6575021EF872530A /* TextPolisher.swift in Sources */,
 				1F82ADC6E8D3385D99E48D2B /* TranscriptPartTests.swift in Sources */,
 				88285ED6492EAAD162363053 /* UpdateInstallLog.swift in Sources */,

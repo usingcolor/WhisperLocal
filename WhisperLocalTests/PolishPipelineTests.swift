@@ -196,6 +196,39 @@ final class PolishPipelineTests: XCTestCase {
         XCTAssertEqual(PolisherError.truncated.pasteNote, "Cleanup was cut short. Pasted without AI cleanup.")
     }
 
+    /// The pipeline defaults to English, so a build with the feature off cannot
+    /// send a language instruction at all.
+    func testPipelineIsEnglishUnlessToldOtherwise() async {
+        let local = ProbePolisher(name: "Apple Intelligence")
+        let pipeline = PolishPipeline(
+            localLLM: local,
+            cloud: nil,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            dictionary: []
+        )
+        _ = await pipeline.run("hello")
+        XCTAssertEqual(local.lastLanguage, .english)
+    }
+
+    /// And when it is told, every piece of a split take is told the same thing —
+    /// a take must not change language halfway through.
+    func testEveryPieceOfASplitTakeGetsTheSameLanguage() async {
+        let local = ProbePolisher(name: "Apple Intelligence")
+        let pipeline = PolishPipeline(
+            localLLM: local,
+            cloud: nil,
+            useLocalLLM: true,
+            enableTextCleanup: true,
+            language: SpokenLanguage(code: "ko"),
+            dictionary: []
+        )
+        let long = String(repeating: "문장이 하나 있습니다. ", count: 400)
+        _ = await pipeline.runChunked(long)
+        XCTAssertGreaterThan(local.callCount, 1, "expected the take to split")
+        XCTAssertEqual(local.lastLanguage?.code, "ko")
+    }
+
     func testPipelineContextTaskUsesContextEngineAndDropsPasteFields() async {
         let local = ProbePolisher(name: "Apple Intelligence")
         let pipeline = PolishPipeline(
@@ -232,7 +265,8 @@ private final class JudgmentPolisher: TextPolisher {
         recentDictations _: String,
         sessionIntent _: String,
         task _: PolishTask,
-        part _: CleanupPrompt.TranscriptPart?
+        part _: CleanupPrompt.TranscriptPart?,
+        language _: SpokenLanguage?
     ) async throws -> PolishedText {
         PolishedText(text: text, contextRelevant: relevant)
     }
@@ -249,7 +283,8 @@ private final class TruncatingPolisher: TextPolisher {
         recentDictations _: String,
         sessionIntent _: String,
         task _: PolishTask,
-        part _: CleanupPrompt.TranscriptPart?
+        part _: CleanupPrompt.TranscriptPart?,
+        language _: SpokenLanguage?
     ) async throws -> PolishedText {
         throw PolisherError.truncated
     }
@@ -266,7 +301,8 @@ private final class FillerReinjectingPolisher: TextPolisher {
         recentDictations _: String,
         sessionIntent _: String,
         task _: PolishTask,
-        part _: CleanupPrompt.TranscriptPart?
+        part _: CleanupPrompt.TranscriptPart?,
+        language _: SpokenLanguage?
     ) async throws -> PolishedText {
         PolishedText(text: "um \(text) uh")
     }
@@ -284,6 +320,7 @@ private final class ProbePolisher: TextPolisher, @unchecked Sendable {
     private(set) var lastTargetApp: String?
     private(set) var lastSessionIntent: String?
     private(set) var lastTask: PolishTask?
+    private(set) var lastLanguage: SpokenLanguage?
 
     func polish(
         _ text: String,
@@ -293,13 +330,15 @@ private final class ProbePolisher: TextPolisher, @unchecked Sendable {
         recentDictations _: String,
         sessionIntent: String,
         task: PolishTask,
-        part: CleanupPrompt.TranscriptPart?
+        part: CleanupPrompt.TranscriptPart?,
+        language: SpokenLanguage?
     ) async throws -> PolishedText {
         lock.lock()
         callCount += 1
         lastTargetApp = targetApp
         lastSessionIntent = sessionIntent
         lastTask = task
+        lastLanguage = language
         lock.unlock()
         return PolishedText(text: text)
     }

@@ -16,6 +16,7 @@ final class StreamingTranscriber {
     private let recorder: AudioRecorder
     private let transcription: TranscriptionService
     private let dictionary: [String]
+    private let language: SpokenLanguage
     private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "speech")
 
     private var parts: [String] = []
@@ -28,10 +29,16 @@ final class StreamingTranscriber {
     /// minute, so this is idle almost all of the time.
     private let pollNanoseconds: UInt64 = 250_000_000
 
-    init(recorder: AudioRecorder, transcription: TranscriptionService, dictionary: [String]) {
+    init(
+        recorder: AudioRecorder,
+        transcription: TranscriptionService,
+        dictionary: [String],
+        language: SpokenLanguage = .english
+    ) {
         self.recorder = recorder
         self.transcription = transcription
         self.dictionary = dictionary
+        self.language = language
     }
 
     func start() {
@@ -88,11 +95,11 @@ final class StreamingTranscriber {
 
     private func transcribeWithRetry(_ samples: [Float]) async -> String {
         do {
-            return try await transcription.transcribe(samples: samples, extraDictionary: dictionary)
+            return try await transcription.transcribe(samples: samples, extraDictionary: dictionary, language: language)
         } catch {
             logger.error("Streamed chunk failed, retrying: \(error.localizedDescription, privacy: .public)")
             do {
-                return try await transcription.transcribe(samples: samples, extraDictionary: dictionary)
+                return try await transcription.transcribe(samples: samples, extraDictionary: dictionary, language: language)
             } catch {
                 logger.error("Streamed chunk failed twice: \(error.localizedDescription, privacy: .public)")
                 // A gap, not a blank take. The rest of the recording still lands.

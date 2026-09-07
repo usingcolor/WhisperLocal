@@ -49,6 +49,7 @@ struct SettingsView: View {
     @ObservedObject private var permissions = PermissionManager.shared
     @ObservedObject private var hotKey = HotKeyManager.shared
     @ObservedObject private var launchAtLogin = LaunchAtLogin.shared
+    @ObservedObject private var language = LanguageCoordinator.shared
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var models = CloudModelCatalog.shared
     @ObservedObject private var gemma = GemmaMLXPolisher.shared
@@ -190,6 +191,12 @@ struct SettingsView: View {
                     "Keeps music and video playing at full quality while you dictate.",
                     more: "AirPods and most Bluetooth headsets cannot play high-quality audio and record at the same time — opening their mic drops playback to narrowband mono until the take ends. Their mic is also a worse input for speech recognition than the built-in array. Turn this off if you dictate away from your Mac and need the headset mic."
                 )
+            }
+
+            if AppIdentity.isDevBuild {
+                Section("Language") {
+                    languageControls
+                }
             }
 
             Section("Startup") {
@@ -838,6 +845,30 @@ struct SettingsView: View {
             }
         }
         .padding(16)
+    }
+
+    /// Dev-only while it is being tried out. The guarantee it has to keep is that
+    /// with the switch off, nothing downstream can emit a character outside
+    /// English — so this is the only thing that turns any of it on.
+    @ViewBuilder
+    private var languageControls: some View {
+        Toggle("Follow the keyboard language", isOn: $settings.followKeyboardLanguage)
+        helpText(
+            "Dictate in whatever language your keyboard is set to. Off means every take is English, exactly as before.",
+            more: "The input source has to name exactly one language to count. A Korean or Japanese IME names one; the ABC layout names 93, which says the script and not the language, so it is read as no answer and the take stays English. The speech model and the polish model must both be able to serve the language before it is used — otherwise the take runs in English rather than guessing."
+        )
+        if settings.followKeyboardLanguage {
+            LabeledContent("Next take") {
+                Text(language.resolved.isEnglish ? "English" : "\(language.resolved.nativeName) — \(language.resolved.englishName)")
+                    .foregroundStyle(.secondary)
+            }
+            if let unavailable = language.unavailable {
+                Text(unavailable)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     /// The toggle reads `SMAppService`, not a stored preference, so it still tells

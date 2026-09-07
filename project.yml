@@ -140,6 +140,7 @@ targets:
       - path: WhisperLocal/State/SessionContext.swift
       - path: WhisperLocal/Services/LongTake.swift
       - path: WhisperLocal/Services/LaunchAtLogin.swift
+      - path: WhisperLocal/Services/SpokenLanguage.swift
       - path: WhisperLocal/Services/Polishers/PolishChunker.swift
       - path: WhisperLocal/App/AppIdentity.swift
     settings:

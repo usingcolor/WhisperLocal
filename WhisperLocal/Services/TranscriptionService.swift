@@ -76,6 +76,7 @@ final class TranscriptionService: ObservableObject {
     func transcribe(
         samples: [Float],
         extraDictionary: [String] = [],
+        language: SpokenLanguage = .english,
         onProgress: ((Int, Int) -> Void)? = nil
     ) async throws -> String {
         guard isReady, loadedModel == requestedModel, let model = loadedModel else {
@@ -91,27 +92,88 @@ final class TranscriptionService: ObservableObject {
 
         let seconds = Double(samples.count) / Self.sampleRate
         guard TakeLimits.shouldChunk(seconds: seconds) else {
-            return try await transcribeOnce(samples, model: model, dictionary: dictionary)
+            return try await transcribeOnce(
+                samples, model: model, dictionary: dictionary, language: language
+            )
         }
         return try await transcribeChunked(
-            samples, model: model, dictionary: dictionary, onProgress: onProgress
+            samples,
+            model: model,
+            dictionary: dictionary,
+            language: language,
+            onProgress: onProgress
         )
+    }
+
+    /// Can a take run in this language right now, with no download and no stall?
+    /// Asked before recording starts, never after — a model fetched with the
+    /// speaker already waiting is the one outcome worth avoiding.
+    func isReadyForLanguage(_ language: SpokenLanguage) -> Bool {
+        guard let model = loadedModel, isReady else { return false }
+        guard LanguageSupport.speechModelCanServe(language, model: model) else { return false }
+        if model.engine == .appleSpeech {
+            return AppleSpeechASR.shared.isPrepared(for: language)
+        }
+        return true
+    }
+
+    /// Warm a language so a later take can use it. Apple Speech ships one asset per
+    /// locale and only English is installed by default, so this may download.
+    func prepareLanguage(_ language: SpokenLanguage) async {
+        guard let model = loadedModel ?? requestedModel else { return }
+        guard model.engine == .appleSpeech else { return }
+        guard !AppleSpeechASR.shared.isPrepared(for: language) else { return }
+        guard await LanguageSupport.appleSpeechLocale(for: language) != nil else {
+            logger.info("no Apple Speech locale for \(language.code, privacy: .public)")
+            return
+        }
+        loadGeneration += 1
+        let generation = loadGeneration
+        isLoadingModel = true
+        do {
+            try await AppleSpeechASR.shared.prepare(language: language) { [weak self] message in
+                guard let self, generation == self.loadGeneration else { return }
+                self.statusMessage = message
+            }
+            guard generation == loadGeneration else { return }
+            applyReady(model)
+            logger.info("Apple Speech ready for \(language.code, privacy: .public)")
+        } catch {
+            guard generation == loadGeneration else { return }
+            logger.error("Apple Speech \(language.code, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            // A half-finished switch leaves the transcriber unprepared, and this
+            // service would still report itself ready — the next take would then
+            // fail outright. Put English back rather than leaving it broken.
+            try? await AppleSpeechASR.shared.prepare(language: .english) { [weak self] message in
+                guard let self, generation == self.loadGeneration else { return }
+                self.statusMessage = message
+            }
+            guard generation == loadGeneration else { return }
+            if AppleSpeechASR.shared.isPrepared(for: .english) {
+                applyReady(model)
+            } else {
+                isLoadingModel = false
+                isReady = false
+            }
+        }
     }
 
     private func transcribeOnce(
         _ samples: [Float],
         model: ASRModelOption,
-        dictionary: [String]
+        dictionary: [String],
+        language: SpokenLanguage
     ) async throws -> String {
         switch model.engine {
         case .whisper:
-            return try await transcribeWhisper(samples)
+            return try await transcribeWhisper(samples, language: language)
         case .parakeet:
             return try await transcribeParakeet(samples)
         case .appleSpeech:
             return try await AppleSpeechASR.shared.transcribe(
                 samples: samples,
-                dictionary: dictionary
+                dictionary: dictionary,
+                language: language
             )
         }
     }
@@ -124,12 +186,13 @@ final class TranscriptionService: ObservableObject {
         _ samples: [Float],
         model: ASRModelOption,
         dictionary: [String],
+        language: SpokenLanguage,
         onProgress: ((Int, Int) -> Void)?
     ) async throws -> String {
         let planned = AudioChunker.plan(sampleCount: samples.count, sampleRate: Self.sampleRate)
         let ranges = AudioChunker.refine(planned, in: samples, sampleRate: Self.sampleRate)
         guard ranges.count > 1 else {
-            return try await transcribeOnce(samples, model: model, dictionary: dictionary)
+            return try await transcribeOnce(samples, model: model, dictionary: dictionary, language: language)
         }
 
         logger.info("Chunked transcribe: \(ranges.count, privacy: .public) pieces")
@@ -140,13 +203,13 @@ final class TranscriptionService: ObservableObject {
             onProgress?(index + 1, ranges.count)
             let chunk = Array(samples[range])
             do {
-                parts.append(try await transcribeOnce(chunk, model: model, dictionary: dictionary))
+                parts.append(try await transcribeOnce(chunk, model: model, dictionary: dictionary, language: language))
             } catch {
                 logger.error("Chunk \(index + 1, privacy: .public) failed, retrying: \(error.localizedDescription, privacy: .public)")
                 do {
                     // One retry. Most failures at this layer are transient — a model
                     // hiccup or a temp-file write — not a property of the audio.
-                    parts.append(try await transcribeOnce(chunk, model: model, dictionary: dictionary))
+                    parts.append(try await transcribeOnce(chunk, model: model, dictionary: dictionary, language: language))
                 } catch {
                     logger.error("Chunk \(index + 1, privacy: .public) failed twice: \(error.localizedDescription, privacy: .public)")
                     failed += 1
@@ -231,11 +294,17 @@ final class TranscriptionService: ObservableObject {
         parakeet = nil
     }
 
-    private func transcribeWhisper(_ samples: [Float]) async throws -> String {
+    private func transcribeWhisper(
+        _ samples: [Float],
+        language: SpokenLanguage
+    ) async throws -> String {
         guard let whisperKit else { throw TranscriptionError.modelNotLoaded }
+        // Always stated, never nil. Letting Whisper auto-detect would decide per
+        // chunk, so one take could come back Korean at the start and English in
+        // the middle.
         let options = DecodingOptions(
             task: .transcribe,
-            language: "en",
+            language: language.base,
             temperature: 0,
             temperatureFallbackCount: 2,
             sampleLength: 224,

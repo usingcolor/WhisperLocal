@@ -7,6 +7,10 @@ final class RecordingHUDController: ObservableObject {
     @Published var audioLevel: Float = 0
     /// Shift+hotkey capture — HUD copy and color differ from dictation.
     @Published var isContextCapture = false
+    /// Endonym of the take's language, shown only when it is not English. The
+    /// speaker learns which language they are about to be transcribed in before
+    /// they have said anything, which is the whole reason it is on the HUD.
+    @Published var languageBadge: String?
     /// Secondary status appended to the headline: the auto-stop countdown while
     /// recording, chunk progress while transcribing. A long take used to show a
     /// bare spinner for minutes with nothing to say how far along it was.
@@ -56,12 +60,18 @@ final class RecordingHUDController: ObservableObject {
         }
     }
 
-    func show(phase: DictationPhase, levelPublisher: AudioRecorder, contextCapture: Bool = false) {
+    func show(
+        phase: DictationPhase,
+        levelPublisher: AudioRecorder,
+        contextCapture: Bool = false,
+        language: SpokenLanguage = .english
+    ) {
         hideTask?.cancel()
         levelTimer?.invalidate()
         setDetail(nil)
         self.phase = phase
         self.isContextCapture = contextCapture
+        self.languageBadge = language.isEnglish ? nil : language.nativeName
         ensurePanel()
         positionOnActiveScreen()
         panel?.ignoresMouseEvents = !isCancellable
@@ -303,6 +313,17 @@ struct RecordingHUDView: View {
         .padding(.vertical, 12)
         .frame(width: 300, height: 72)
         .modifier(HUDSurface())
+        .overlay(alignment: .topLeading) {
+            if let badge = controller.languageBadge {
+                Text(badge)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.accentColor.opacity(0.95), in: Capsule())
+                    .padding(8)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if controller.isContextCapture {
                 Text("CONTEXT")

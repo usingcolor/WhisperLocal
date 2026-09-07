@@ -206,7 +206,8 @@ enum CleanupPrompt {
         recentDictations: String = "",
         sessionIntent: String = "",
         onDevice: Bool = false,
-        part: TranscriptPart? = nil
+        part: TranscriptPart? = nil,
+        language: SpokenLanguage? = nil
     ) -> String {
         switch task {
         case .sessionContext:
@@ -219,7 +220,8 @@ enum CleanupPrompt {
                     personalContext: personalContext,
                     recentDictations: recentDictations,
                     sessionIntent: sessionIntent,
-                    part: part
+                    part: part,
+                    language: language
                 )
             }
             return wrapTranscript(
@@ -472,7 +474,8 @@ enum CleanupPrompt {
         targetApp: String? = nil,
         recentDictations: String = "",
         sessionIntent: String = "",
-        part: TranscriptPart? = nil
+        part: TranscriptPart? = nil,
+        language: SpokenLanguage? = nil
     ) -> String {
         wrapTranscript(
             text,
@@ -481,7 +484,8 @@ enum CleanupPrompt {
             appDictionary: [],
             recentDictations: recentDictations,
             sessionIntent: sessionIntent,
-            part: part
+            part: part,
+            language: language
         )
     }
 
@@ -492,7 +496,8 @@ enum CleanupPrompt {
         personalContext: String,
         recentDictations: String = "",
         sessionIntent: String = "",
-        part: TranscriptPart? = nil
+        part: TranscriptPart? = nil,
+        language: SpokenLanguage? = nil
     ) -> String {
         wrapTranscript(
             text,
@@ -501,8 +506,23 @@ enum CleanupPrompt {
             appDictionary: matchingPromptDictionaryTerms(personalContext: personalContext, targetApp: targetApp),
             recentDictations: recentDictations,
             sessionIntent: sessionIntent,
-            part: part
+            part: part,
+            language: language
         )
+    }
+
+    /// Names the language when it is not English.
+    ///
+    /// The instruction that matters is "do not translate". A cleanup model handed
+    /// text it is unsure how to repair will often produce a fluent English version
+    /// instead, which reads like success and is the one failure the speaker cannot
+    /// see without re-reading their own sentence.
+    static func languageNotice(_ language: SpokenLanguage) -> String {
+        """
+        <language code="\(xmlEscape(language.code))">
+        The speaker dictated in \(xmlEscape(language.englishName)). Clean it in that language and output only that language. Never translate, and never switch language, even if the notes, the app, or these instructions are in English. Keep foreign words the speaker actually said as they said them.
+        </language>
+        """
     }
 
     /// Position of this piece when one dictation is split for length.
@@ -539,7 +559,8 @@ enum CleanupPrompt {
         appDictionary: [String],
         recentDictations: String = "",
         sessionIntent: String = "",
-        part: TranscriptPart? = nil
+        part: TranscriptPart? = nil,
+        language: SpokenLanguage? = nil
     ) -> String {
         var parts: [String] = []
         if let targetApp {
@@ -577,6 +598,9 @@ enum CleanupPrompt {
         // per piece, so putting it earlier would invalidate the cache for all of it.
         // The block is self-describing, which is why the shared system prompt does
         // not need to declare it and stays byte-identical.
+        if let language, !language.isEnglish {
+            parts.append(languageNotice(language))
+        }
         if let part, part.total > 1 {
             parts.append(partNotice(part))
         }

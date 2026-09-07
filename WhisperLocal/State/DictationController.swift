@@ -61,6 +61,10 @@ final class DictationController: ObservableObject {
     @Published private(set) var sessionContext: SessionContext?
     /// Frontmost app when dictation started. Passed to polish LLMs as formatting context.
     private var dictationTargetApp: TargetAppContext?
+    /// Language for the take in flight, fixed when it started. Re-reading the
+    /// keyboard at the end would let a switch mid-sentence change how the words
+    /// already spoken are transcribed.
+    private(set) var takeLanguage: SpokenLanguage = .english
     private var recordingBeganAt: Date?
     /// Watches a running take for conditions that must end it early.
     private var takeWatchTask: Task<Void, Never>?
@@ -158,6 +162,7 @@ final class DictationController: ObservableObject {
         }
 
         NetworkReachability.shared.start()
+        LanguageCoordinator.shared.start()
 
         guard !didBootstrapSpeech else { return }
         didBootstrapSpeech = true
@@ -250,6 +255,7 @@ final class DictationController: ObservableObject {
         do {
             sessionGeneration += 1
             dictationTargetApp = TargetAppContext.captureFrontmost()
+            takeLanguage = LanguageCoordinator.shared.languageForTake(transcription: transcription)
             try recorder.start()
             recordingBeganAt = Date()
             hotKey.markSessionActive(true)
@@ -257,10 +263,10 @@ final class DictationController: ObservableObject {
             startStreaming()
             if recorder.isInputReady {
                 phase = .recording
-                hud.show(phase: .recording, levelPublisher: recorder, contextCapture: isIntentTake)
+                hud.show(phase: .recording, levelPublisher: recorder, contextCapture: isIntentTake, language: takeLanguage)
             } else {
                 phase = .waitingForMic
-                hud.show(phase: .waitingForMic, levelPublisher: recorder, contextCapture: isIntentTake)
+                hud.show(phase: .waitingForMic, levelPublisher: recorder, contextCapture: isIntentTake, language: takeLanguage)
             }
         } catch {
             isIntentTake = false
@@ -282,7 +288,8 @@ final class DictationController: ObservableObject {
         let streamer = StreamingTranscriber(
             recorder: recorder,
             transcription: transcription,
-            dictionary: extraTerms
+            dictionary: extraTerms,
+            language: takeLanguage
         )
         self.streamer = streamer
         // No progress reporting by design. How a take is cut up is our problem, not
@@ -479,7 +486,8 @@ final class DictationController: ObservableObject {
                 self.streamer = nil
                 raw = try await transcription.transcribe(
                     samples: samples,
-                    extraDictionary: extraTerms
+                    extraDictionary: extraTerms,
+                    language: takeLanguage
                 )
             }
             hud.setDetail(nil)
@@ -641,6 +649,7 @@ final class DictationController: ObservableObject {
             localIsReady: localFallbackReady(),
             isOnline: { NetworkReachability.shared.isOnline },
             enableTextCleanup: settings.enableTextCleanup,
+            language: takeLanguage,
             dictionary: CleanupPrompt.mergedDictionary(settings.dictionaryWords),
             personalContext: settings.cleanupPersonalContext,
             recentDictations: recentDictationsForPolish(),

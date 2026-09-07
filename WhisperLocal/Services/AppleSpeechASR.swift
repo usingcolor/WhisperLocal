@@ -7,7 +7,11 @@ private let appleSpeechLogger = Logger(subsystem: "com.usingcolor.WhisperLocal",
 private let appleSpeechTempPrefix = "whisperlocal-apple-speech-"
 
 /// On-device Apple Speech (`SpeechAnalyzer` + `SpeechTranscriber`, macOS 26+).
-/// Audio stays on this Mac. Locale is English; there is no fallback to the system locale.
+/// Audio stays on this Mac.
+///
+/// The locale is always stated, never inherited. Falling back to the system locale
+/// would hand a Korean Mac a Korean transcriber for a user who dictates English,
+/// so an unknown or unserviceable language resolves to English instead.
 @MainActor
 final class AppleSpeechASR {
     static let shared = AppleSpeechASR()
@@ -15,6 +19,9 @@ final class AppleSpeechASR {
     private(set) var isReady = false
     private var reservedLocale: Locale?
     private var createdReservation = false
+    /// Language the reserved locale belongs to. A take in another language has to
+    /// re-reserve, because the transcriber is built per locale.
+    private(set) var preparedLanguage: SpokenLanguage = .english
     /// Holds the prewarm analyzer so `processLifetime` models stay resident.
     private var retainedWarmup: Any?
 
@@ -35,18 +42,33 @@ final class AppleSpeechASR {
         return "Apple Speech requires macOS 26 or later."
     }
 
-    func prepare(onStatus: @escaping (String) -> Void) async throws {
+    func prepare(
+        language: SpokenLanguage = .english,
+        onStatus: @escaping (String) -> Void
+    ) async throws {
         guard #available(macOS 26.0, *) else {
             throw TranscriptionError.appleSpeechUnavailable
         }
-        try await prepareOnSupportedOS(onStatus: onStatus)
+        try await prepareOnSupportedOS(language: language, onStatus: onStatus)
     }
 
-    func transcribe(samples: [Float], dictionary: [String]) async throws -> String {
+    /// True when this language's assets are installed and reserved, so a take can
+    /// use it without stalling on a download after the speaker has already talked.
+    func isPrepared(for language: SpokenLanguage) -> Bool {
+        isReady && preparedLanguage == language
+    }
+
+    func transcribe(
+        samples: [Float],
+        dictionary: [String],
+        language: SpokenLanguage = .english
+    ) async throws -> String {
         guard #available(macOS 26.0, *) else {
             throw TranscriptionError.appleSpeechUnavailable
         }
-        return try await transcribeOnSupportedOS(samples: samples, dictionary: dictionary)
+        return try await transcribeOnSupportedOS(
+            samples: samples, dictionary: dictionary, language: language
+        )
     }
 
     func unload() async {
@@ -61,30 +83,41 @@ final class AppleSpeechASR {
     }
 
     @available(macOS 26.0, *)
-    private func prepareOnSupportedOS(onStatus: @escaping (String) -> Void) async throws {
+    private func prepareOnSupportedOS(
+        language: SpokenLanguage,
+        onStatus: @escaping (String) -> Void
+    ) async throws {
         Self.sweepStaleTempAudio()
         isReady = false
         guard SpeechTranscriber.isAvailable else {
             throw TranscriptionError.appleSpeechUnavailable
         }
 
-        onStatus("Apple Speech: finding English model…")
-        guard let locale = await Self.englishLocale() else {
+        let label = language.isEnglish ? "English" : language.englishName
+        onStatus("Apple Speech: finding \(label) model…")
+        guard let locale = await Self.locale(for: language) else {
             throw TranscriptionError.appleSpeechLocaleUnsupported
         }
 
+        // One reservation at a time. Switching language releases the previous
+        // locale first; the system caps how many may be held at once.
+        if createdReservation, let previous = reservedLocale, previous != locale {
+            _ = await AssetInventory.release(reservedLocale: previous)
+            createdReservation = false
+        }
         let created = try await AssetInventory.reserve(locale: locale)
         reservedLocale = locale
         createdReservation = created
+        preparedLanguage = language
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            onStatus("Apple Speech: downloading English model…")
+            onStatus("Apple Speech: downloading \(label) model…")
             let progress = request.progress
             let ticker = Task { @MainActor in
                 while !Task.isCancelled {
                     let pct = Int((progress.fractionCompleted * 100).rounded())
-                    onStatus("Apple Speech: downloading English model (\(pct)%)…")
+                    onStatus("Apple Speech: downloading \(label) model (\(pct)%)…")
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
             }
@@ -114,16 +147,25 @@ final class AppleSpeechASR {
     }
 
     @available(macOS 26.0, *)
-    private func transcribeOnSupportedOS(samples: [Float], dictionary: [String]) async throws -> String {
+    private func transcribeOnSupportedOS(
+        samples: [Float],
+        dictionary: [String],
+        language: SpokenLanguage
+    ) async throws -> String {
         guard isReady else { throw TranscriptionError.modelNotLoaded }
         retainedWarmup = nil
         guard SpeechTranscriber.isAvailable else {
             throw TranscriptionError.appleSpeechUnavailable
         }
+        // The caller resolves the language before recording; if it asks for one
+        // that was never prepared, use what is reserved rather than reserving
+        // mid-take, which would download a model with the speaker already waiting.
         let locale: Locale
-        if let reservedLocale {
+        if preparedLanguage == language, let reservedLocale {
             locale = reservedLocale
-        } else if let resolved = await Self.englishLocale() {
+        } else if let reservedLocale {
+            locale = reservedLocale
+        } else if let resolved = await Self.locale(for: language) {
             locale = resolved
         } else {
             throw TranscriptionError.appleSpeechLocaleUnsupported
@@ -165,7 +207,22 @@ final class AppleSpeechASR {
         return try await collected
     }
 
-    /// English only. Do not fall back to the system locale (a Korean Mac must not get a Korean transcriber).
+    /// Resolve a stated language to a locale the transcriber supports. Never reads
+    /// the system locale: the language always comes from the caller, so a Korean
+    /// Mac cannot silently hand a Korean transcriber to an English dictation.
+    @available(macOS 26.0, *)
+    static func locale(for language: SpokenLanguage) async -> Locale? {
+        if language.isEnglish { return await englishLocale() }
+        if let exact = await SpeechTranscriber.supportedLocale(
+            equivalentTo: Locale(identifier: language.code)
+        ) {
+            return exact
+        }
+        return await SpeechTranscriber.supportedLocale(
+            equivalentTo: Locale(identifier: language.base)
+        )
+    }
+
     @available(macOS 26.0, *)
     private static func englishLocale() async -> Locale? {
         if let enUS = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US")) {

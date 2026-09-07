@@ -25,7 +25,10 @@ protocol TextPolisher: Sendable {
         task: PolishTask,
         /// Set when one dictation is split for length, so a piece is not polished as
         /// if it were a whole document.
-        part: CleanupPrompt.TranscriptPart?
+        part: CleanupPrompt.TranscriptPart?,
+        /// Set when the take was not dictated in English, so the model is told to
+        /// clean in that language rather than quietly translating it.
+        language: SpokenLanguage?
     ) async throws -> PolishedText
 }
 
@@ -39,7 +42,8 @@ extension TextPolisher {
             recentDictations: "",
             sessionIntent: "",
             task: .dictation,
-            part: nil
+            part: nil,
+            language: nil
         )
     }
 
@@ -52,7 +56,8 @@ extension TextPolisher {
             recentDictations: "",
             sessionIntent: "",
             task: .dictation,
-            part: nil
+            part: nil,
+            language: nil
         )
     }
 }
@@ -248,6 +253,9 @@ struct PolishPipeline: Sendable {
     /// dependency on the Network framework and stays in the test target.
     var isOnline: @Sendable () -> Bool = { true }
     let enableTextCleanup: Bool
+    /// Language of this take. English unless the keyboard asked for another one
+    /// and every stage could serve it.
+    var language: SpokenLanguage = .english
     let dictionary: [String]
     var personalContext: String = ""
     /// Request-time style examples from the dictation log. Empty unless the user opted in.
@@ -383,7 +391,8 @@ struct PolishPipeline: Sendable {
                         recentDictations: polishRecent,
                         sessionIntent: polishIntent,
                         task: task,
-                        part: part
+                        part: part,
+                        language: language
                     )
                     text = result.text
                     // Cloud does not judge session context (plain-text output).
@@ -424,7 +433,8 @@ struct PolishPipeline: Sendable {
                     recentDictations: polishRecent,
                     sessionIntent: polishIntent,
                     task: task,
-                    part: part
+                    part: part,
+                    language: language
                 )
                 text = result.text
                 contextRelevant = task == .sessionContext ? nil : result.contextRelevant

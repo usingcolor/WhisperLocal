@@ -135,6 +135,10 @@ final class SettingsStore: ObservableObject {
     /// Dev-only experiment: macOS voice processing (echo cancellation). Off until
     /// its effect on transcript quality has actually been measured.
     @Published var enableEchoCancellation: Bool { didSet { persist(enableEchoCancellation, key: "enableEchoCancellation") } }
+    /// Take the dictation language from the macOS input source instead of always
+    /// English. Off by default: with it off nothing in the pipeline can emit a
+    /// character outside English, which is the guarantee English-only users have now.
+    @Published var followKeyboardLanguage: Bool { didSet { persist(followKeyboardLanguage, key: "followKeyboardLanguage") } }
     @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
     /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
     @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
@@ -328,6 +332,7 @@ final class SettingsStore: ObservableObject {
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
         preferBuiltInMicOverBluetooth = defaults.object(forKey: "preferBuiltInMicOverBluetooth") as? Bool ?? true
         enableEchoCancellation = defaults.object(forKey: "enableEchoCancellation") as? Bool ?? false
+        followKeyboardLanguage = defaults.object(forKey: "followKeyboardLanguage") as? Bool ?? false
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int

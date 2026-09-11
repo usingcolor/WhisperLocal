@@ -12,7 +12,7 @@ struct WhisperLocalApp: App {
         // Space, so it vanishes with the bar the moment the mouse leaves the top.
         // Not inserted, SwiftUI parks the item off-screen, and as the first scene it
         // still stops the Window scenes below from opening at launch.
-        MenuBarExtra(isInserted: .constant(!AppIdentity.usesNativeStatusMenu)) {
+        MenuBarExtra(isInserted: menuBarItemInserted) {
             MenuBarView(controller: controller)
         } label: {
             if AppIdentity.isDevBuild {
@@ -66,6 +66,23 @@ struct WhisperLocalApp: App {
         .defaultPosition(.center)
     }
 
+    /// Release shows SwiftUI's item; Dev hides it for `StatusMenuController`.
+    ///
+    /// Passing `isInserted` at all changes the item: a plain `MenuBarExtra` quits
+    /// the app when it is ⌘-dragged out of the menu bar, and one given a binding
+    /// only hides (status item behavior 6 → 2, measured). A constant binding then
+    /// left a Release app running with the hotkey live and no menu to reach
+    /// Settings or Quit. SwiftUI writes `false` here on removal — measured too — so
+    /// the setter puts quit-on-removal back.
+    private var menuBarItemInserted: Binding<Bool> {
+        Binding(
+            get: { !AppIdentity.usesNativeStatusMenu },
+            set: { inserted in
+                guard !inserted, !AppIdentity.usesNativeStatusMenu else { return }
+                MenuBarRemoval.quit()
+            }
+        )
+    }
 }
 
 /// The menu bar symbol for the current state. Shared by the SwiftUI item and the
@@ -92,3 +109,20 @@ enum MenuBarIcon {
         }
     }
 }
+
+/// Quits when the menu bar item is dragged away. SwiftUI reports the removal
+/// twice, and quitting with work in flight opens a confirmation — without this
+/// guard the second report would stack a second alert under the first.
+@MainActor
+enum MenuBarRemoval {
+    private static var quitting = false
+
+    static func quit() {
+        guard !quitting else { return }
+        quitting = true
+        NSApplication.shared.terminate(nil)
+        // Only reached when the user cancelled the quit to keep a take.
+        quitting = false
+    }
+}
+

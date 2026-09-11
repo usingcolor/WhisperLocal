@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
     case dictation
+    case language
     case polish
     case prompt
     case openai
@@ -16,6 +17,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .dictation: return "Dictation"
+        case .language: return "Language"
         case .polish: return "Polish"
         case .prompt: return "System prompt"
         case .openai: return "OpenAI"
@@ -28,6 +30,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .dictation: return "mic"
+        case .language: return "globe"
         case .polish: return "wand.and.stars"
         case .prompt: return "text.alignleft"
         case .openai: return "cloud"
@@ -35,6 +38,11 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .dictionary: return "character.book.closed"
         case .permissions: return "lock.shield"
         }
+    }
+
+    /// Language support is a Dev experiment, so its page only exists there.
+    static var visibleCases: [SettingsPage] {
+        allCases.filter { $0 != .language || AppIdentity.isDevBuild }
     }
 }
 
@@ -68,7 +76,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $page) {
-                ForEach(SettingsPage.allCases) { item in
+                ForEach(SettingsPage.visibleCases) { item in
                     Label {
                         HStack {
                             Text(item.title)
@@ -92,6 +100,7 @@ struct SettingsView: View {
             Group {
                 switch page {
                 case .dictation: dictationPane
+                case .language: languagePane
                 case .polish: polishPane
                 case .prompt: promptPane
                 case .openai: openAIPane
@@ -193,9 +202,6 @@ struct SettingsView: View {
                 )
             }
 
-            if AppIdentity.isDevBuild {
-                languageSections
-            }
 
             Section("Startup") {
                 startupControls
@@ -843,6 +849,14 @@ struct SettingsView: View {
             }
         }
         .padding(16)
+    }
+
+    /// Its own page: the Dictation page had grown long, and the language settings
+    /// are one topic that stands on its own.
+    private var languagePane: some View {
+        settingsForm {
+            languageSections
+        }
     }
 
     /// Dev-only while it is being tried out, and enforced in `LanguageCoordinator`

@@ -211,7 +211,7 @@ final class TextInserter {
         let useClipboardFirst = isTerminal || prefersClipboardPaste(app: frontApp, bundleID: bundleID)
 
         // Electron/Chromium (Cursor, Slack, Chrome, …): AX insert lies about success.
-        switch insertViaAccessibility(sanitized, skip: useClipboardFirst) {
+        switch await insertViaAccessibility(sanitized, skip: useClipboardFirst) {
         case .inserted:
             return InsertionResult(success: true, method: .accessibility, appName: appName)
         case .unverified:
@@ -346,7 +346,7 @@ final class TextInserter {
         case failed
     }
 
-    private func insertViaAccessibility(_ text: String, skip: Bool) -> AccessibilityInsert {
+    private func insertViaAccessibility(_ text: String, skip: Bool) async -> AccessibilityInsert {
         if skip { return .skipped }
 
         let systemWide = AXUIElementCreateSystemWide()
@@ -382,14 +382,40 @@ final class TextInserter {
         )
         guard setStatus == .success else { return .failed }
 
-        if accessibilityInsertVisible(on: element, text: text) {
-            return .inserted
-        }
-        // The field answered before the write. If it still answers and reads the
-        // same, nothing was typed, whatever the status code said.
-        guard let after = axValue(element) else { return .unverified }
-        return after == before ? .failed : .inserted
+        return await confirmAccessibilityWrite(on: element, text: text, before: before)
     }
+
+    /// Decides whether the write landed, allowing for targets that apply it late.
+    ///
+    /// WebKit serves accessibility from a tree it updates after the edit, so in a
+    /// Safari text field or a Mail compose window a value read straight after the
+    /// set can still be the old one. Reading once and calling that a failure sent
+    /// the text down the clipboard path too, and it arrived twice. So keep reading
+    /// for a moment: any change means it landed; only a field still unchanged at
+    /// the end is treated as having typed nothing. A native field confirms on the
+    /// first read and pays nothing for this.
+    private func confirmAccessibilityWrite(
+        on element: AXUIElement,
+        text: String,
+        before: String?
+    ) async -> AccessibilityInsert {
+        let deadline = Date().addingTimeInterval(Self.accessibilityConfirmWindow)
+        while true {
+            if accessibilityInsertVisible(on: element, text: text) { return .inserted }
+            // Answered before the write and not now: cannot tell either way, so
+            // park it rather than paste on top of a write that may have worked.
+            guard let after = axValue(element) else { return .unverified }
+            if after != before { return .inserted }
+            if Date() >= deadline { return .failed }
+            try? await Task.sleep(nanoseconds: Self.accessibilityConfirmStep)
+        }
+    }
+
+    /// Long enough for WebKit's accessibility tree to catch up with an edit, short
+    /// enough that a composer which never takes the write (the case this path
+    /// exists to catch) still falls back to the clipboard promptly.
+    private static let accessibilityConfirmWindow: TimeInterval = 0.35
+    private static let accessibilityConfirmStep: UInt64 = 40_000_000
 
     private func axValue(_ element: AXUIElement) -> String? {
         var valueRef: CFTypeRef?

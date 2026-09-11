@@ -888,7 +888,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var nextTakeRows: some View {
-        LabeledContent("Next take") {
+        LabeledContent("Current") {
             Text(languageLabel(language.resolved))
                 .foregroundStyle(.secondary)
         }

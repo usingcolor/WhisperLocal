@@ -117,3 +117,42 @@ final class SpeechLocaleChoiceTests: XCTestCase {
         XCTAssertEqual(picked, en)
     }
 }
+
+/// The language block has to survive `userMessage`, which is what every polisher
+/// calls. The earlier tests went one layer down to `wrapTranscript` and passed
+/// while the cloud branch of `userMessage` dropped the language — so OpenAI got
+/// a Korean transcript with no instruction and translated it.
+final class UserMessageLanguageTests: XCTestCase {
+    private let korean = SpokenLanguage(code: "ko")
+    private let transcript = "한국어로 한번 말해 볼게요. 잘 들리세요."
+
+    private func message(onDevice: Bool, language: SpokenLanguage?) -> String {
+        CleanupPrompt.userMessage(
+            for: .dictation,
+            text: transcript,
+            targetApp: "Claude — chat app",
+            onDevice: onDevice,
+            language: language
+        )
+    }
+
+    /// The branch OpenAI and Anthropic use. This is the one that was broken.
+    func testCloudRequestCarriesTheLanguage() {
+        let out = message(onDevice: false, language: korean)
+        XCTAssertTrue(out.contains("<language code=\"ko\">"), "cloud request lost the language block")
+        XCTAssertTrue(out.contains("Never translate"))
+    }
+
+    func testOnDeviceRequestCarriesTheLanguage() {
+        let out = message(onDevice: true, language: korean)
+        XCTAssertTrue(out.contains("<language code=\"ko\">"))
+    }
+
+    /// And English still sends nothing new, on either path.
+    func testEnglishSendsNoLanguageBlockOnEitherPath() {
+        for onDevice in [false, true] {
+            XCTAssertFalse(message(onDevice: onDevice, language: .english).contains("<language"))
+            XCTAssertFalse(message(onDevice: onDevice, language: nil).contains("<language"))
+        }
+    }
+}

@@ -229,7 +229,8 @@ enum CleanupPrompt {
                 targetApp: targetApp,
                 recentDictations: recentDictations,
                 sessionIntent: sessionIntent,
-                part: part
+                part: part,
+                language: language
             )
         }
     }

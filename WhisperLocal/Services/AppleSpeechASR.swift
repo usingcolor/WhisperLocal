@@ -26,6 +26,9 @@ final class AppleSpeechASR {
     /// the Korean model, and English takes failed while Korean downloaded.
     private(set) var installedLanguages: [SpokenLanguage: Locale] = [:]
     private var extraReservations: Set<Locale> = []
+    /// Launch, the English model finishing, and a keyboard change can all ask for
+    /// the same language within a second of each other. One download is enough.
+    private var installing: Set<SpokenLanguage> = []
     /// Holds the prewarm analyzer so `processLifetime` models stay resident.
     private var retainedWarmup: Any?
 
@@ -68,9 +71,12 @@ final class AppleSpeechASR {
         onStatus: @escaping (String) -> Void
     ) async throws {
         guard !language.isEnglish, installedLanguages[language] == nil else { return }
+        guard !installing.contains(language) else { return }
         guard #available(macOS 26.0, *) else {
             throw TranscriptionError.appleSpeechUnavailable
         }
+        installing.insert(language)
+        defer { installing.remove(language) }
         try await installOnSupportedOS(language, onStatus: onStatus)
     }
 

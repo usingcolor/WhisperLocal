@@ -45,13 +45,20 @@ final class LanguageCoordinator: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.warmIfNeeded() }
             .store(in: &subscriptions)
-        // Keep the Settings readout honest while a download runs and when the
-        // speech model changes under it.
+        // Keep the Settings readout honest while a download runs.
         let transcription = DictationController.shared.transcription
         transcription.$languageDownloadStatus
-            .combineLatest(transcription.$loadedModel)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _, _ in self?.refresh() }
+            .sink { [weak self] _ in self?.refresh() }
+            .store(in: &subscriptions)
+        // Warm — not just refresh — when a speech model finishes loading. This
+        // runs before the launch-time English load completes, so the warm below
+        // finds no model yet and returns; without this nothing ever retried, and
+        // launching on the Korean keyboard stayed English for good.
+        transcription.$loadedModel
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.warmIfNeeded() }
             .store(in: &subscriptions)
         warmIfNeeded()
     }

@@ -332,7 +332,11 @@ final class SettingsStore: ObservableObject {
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
         preferBuiltInMicOverBluetooth = defaults.object(forKey: "preferBuiltInMicOverBluetooth") as? Bool ?? true
         enableEchoCancellation = defaults.object(forKey: "enableEchoCancellation") as? Bool ?? false
-        followKeyboardLanguage = defaults.object(forKey: "followKeyboardLanguage") as? Bool ?? false
+        // On by default in Dev, which exists to try this; off in Release, where the
+        // guarantee is that nothing can emit a character outside English unless
+        // the user chose it. In testing the Dev switch was never found, twice.
+        followKeyboardLanguage = defaults.object(forKey: "followKeyboardLanguage") as? Bool
+            ?? AppIdentity.isDevBuild
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int

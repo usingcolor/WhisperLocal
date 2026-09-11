@@ -161,7 +161,8 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
             return try await polishSessionContext(
                 text,
                 dictionary: dictionary,
-                personalContext: personalContext
+                personalContext: personalContext,
+                language: language
             )
         }
 
@@ -222,7 +223,8 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
     private func polishSessionContext(
         _ text: String,
         dictionary: [String],
-        personalContext: String
+        personalContext: String,
+        language: SpokenLanguage?
     ) async throws -> PolishedText {
         let session = LanguageModelSession(
             model: SystemLanguageModel(
@@ -234,7 +236,7 @@ private final class AppleIntelligenceBackend: @unchecked Sendable {
                 personalContext: personalContext
             )
         )
-        let prompt = CleanupPrompt.wrapContextTranscript(text)
+        let prompt = CleanupPrompt.wrapContextTranscript(text, language: language)
         let options = GenerationOptions(
             sampling: .greedy,
             maximumResponseTokens: min(PolishOutput.maxOutputTokens(for: text), 128)

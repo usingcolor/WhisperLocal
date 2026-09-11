@@ -211,7 +211,7 @@ enum CleanupPrompt {
     ) -> String {
         switch task {
         case .sessionContext:
-            return wrapContextTranscript(text)
+            return wrapContextTranscript(text, language: language)
         case .dictation:
             if onDevice {
                 return wrapOnDeviceTranscript(
@@ -611,9 +611,14 @@ enum CleanupPrompt {
     }
 
     /// User message for a spoken session-context take. Hidden engine lives in `contextSystem`.
-    static func wrapContextTranscript(_ text: String) -> String {
+    ///
+    /// Carries the language like a dictation does. Without it a Korean context
+    /// take reached the English-only context engine with no instruction and came
+    /// back as an English phrase — which then rode along with later Korean takes.
+    static func wrapContextTranscript(_ text: String, language: SpokenLanguage? = nil) -> String {
         let body = neutralizeContextDelimiters(neutralizeTranscriptDelimiters(text))
-        return """
+        let notice = language.flatMap { $0.isEnglish ? nil : languageNotice($0) + "\n" } ?? ""
+        return notice + """
         <spoken-context>
         \(body)
         </spoken-context>

@@ -156,3 +156,31 @@ final class UserMessageLanguageTests: XCTestCase {
         }
     }
 }
+
+/// Shift context takes, both ways they are built: through userMessage (cloud,
+/// Gemma) and directly (Apple Intelligence). Both dropped the language, so a
+/// Korean context phrase came back in English.
+final class ContextTakeLanguageTests: XCTestCase {
+    private let korean = SpokenLanguage(code: "ko")
+    private let spoken = "음 지금 결제 화면 리디자인 검토하고 있어요"
+
+    func testContextTakeThroughUserMessageCarriesTheLanguage() {
+        let out = CleanupPrompt.userMessage(for: .sessionContext, text: spoken, language: korean)
+        XCTAssertTrue(out.contains("<language code=\"ko\">"))
+        XCTAssertTrue(out.contains("<spoken-context>"))
+    }
+
+    /// The Apple Intelligence path calls this directly — the call site the first
+    /// fix missed.
+    func testContextTakeBuiltDirectlyCarriesTheLanguage() {
+        XCTAssertTrue(CleanupPrompt.wrapContextTranscript(spoken, language: korean).contains("<language code=\"ko\">"))
+    }
+
+    /// English context takes are unchanged, on both paths.
+    func testEnglishContextTakeIsUnchanged() {
+        let plain = CleanupPrompt.wrapContextTranscript("reviewing the checkout redesign")
+        XCTAssertEqual(CleanupPrompt.wrapContextTranscript("reviewing the checkout redesign", language: .english), plain)
+        XCTAssertEqual(CleanupPrompt.userMessage(for: .sessionContext, text: "reviewing the checkout redesign", language: .english), plain)
+        XCTAssertFalse(plain.contains("<language"))
+    }
+}

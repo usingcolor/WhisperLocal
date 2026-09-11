@@ -23,7 +23,7 @@ final class LanguageCoordinator: ObservableObject {
     /// Why the next take is not in the language that was asked for, when it isn't.
     @Published private(set) var unavailable: String?
     /// Enabled keyboards that name one language — the only ones that can be followed.
-    @Published private(set) var keyboards: [(language: SpokenLanguage, name: String)] = []
+    @Published private(set) var keyboards: [SpokenLanguage] = []
     /// Languages the dictation-language picker offers.
     @Published private(set) var availableLanguages: [SpokenLanguage] = LanguageCoordinator.fallbackLanguages
 

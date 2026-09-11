@@ -73,10 +73,12 @@ enum KeyboardLanguage {
         return Unmanaged<CFArray>.fromOpaque(raw).takeUnretainedValue() as? [String] ?? []
     }
 
-    /// The enabled keyboards that name exactly one language — the only ones that
-    /// can ever decide a take's language. Deduplicated by language: the Korean IME
-    /// shows up as both "Korean" and "2-Set Korean", and that is one choice.
-    static func enabledSingleLanguageKeyboards() -> [(language: SpokenLanguage, name: String)] {
+    /// Languages of the enabled keyboards that name exactly one language — the only
+    /// ones that can ever decide a take's language. One entry per language: the
+    /// Korean IME shows up as both "Korean" and "2-Set Korean", and that is one
+    /// choice. Offered by language, not keyboard name, so Settings uses the same
+    /// word in the default-language picker and in the list of keyboards to follow.
+    static func enabledSingleLanguageKeyboards() -> [SpokenLanguage] {
         let filter = [
             kTISPropertyInputSourceCategory as String: kTISCategoryKeyboardInputSource as String,
             kTISPropertyInputSourceIsEnabled as String: true
@@ -84,18 +86,13 @@ enum KeyboardLanguage {
         guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue()
                 as? [TISInputSource] else { return [] }
         var seen = Set<String>()
-        var result: [(language: SpokenLanguage, name: String)] = []
+        var result: [SpokenLanguage] = []
         for source in list {
             guard let language = language(fromDeclared: declaredLanguages(of: source)),
                   seen.insert(language.base).inserted else { continue }
-            result.append((language, localizedName(of: source) ?? language.nativeName))
+            result.append(language)
         }
         return result
-    }
-
-    private static func localizedName(of source: TISInputSource) -> String? {
-        guard let raw = TISGetInputSourceProperty(source, kTISPropertyLocalizedName) else { return nil }
-        return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
     }
 
     /// Posted by the system when the user switches input source. Used to warm a
@@ -124,10 +121,10 @@ enum SpeechLocaleChoice {
 
 /// How a take's language is chosen. Pure, so every case can be a test.
 ///
-/// Two settings feed it: the dictation language, used by default, and the set of
+/// Two settings feed it: the default language, and the set of
 /// keyboard languages the user chose to follow. The keyboard only decides a take
 /// when it names one language *and* that language is followed; an unfollowed
-/// keyboard, ABC, or no answer all mean the dictation language. With the dictation
+/// keyboard, ABC, or no answer all mean the default language. With the default
 /// language set to English and nothing followed, every take is English — the path
 /// the app had before any of this existed.
 enum LanguageResolution {
@@ -140,7 +137,7 @@ enum LanguageResolution {
         return preferred
     }
 
-    /// One step down at a time: the wanted language, then the dictation language,
+    /// One step down at a time: the wanted language, then the default language,
     /// then English, which is always servable. Never a language nobody chose.
     static func resolve(
         wanted: SpokenLanguage,

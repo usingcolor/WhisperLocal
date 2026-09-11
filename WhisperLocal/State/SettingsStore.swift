@@ -350,7 +350,7 @@ final class SettingsStore: ObservableObject {
             // gate it went unfound twice. Release follows none: nothing but English
             // unless someone asked for it.
             followedKeyboardLanguages = AppIdentity.isDevBuild
-                ? KeyboardLanguage.enabledSingleLanguageKeyboards().map(\.language.base)
+                ? KeyboardLanguage.enabledSingleLanguageKeyboards().map(\.base)
                 : []
         }
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true

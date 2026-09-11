@@ -194,9 +194,7 @@ struct SettingsView: View {
             }
 
             if AppIdentity.isDevBuild {
-                Section("Language") {
-                    languageControls
-                }
+                languageSections
             }
 
             Section("Startup") {
@@ -850,32 +848,46 @@ struct SettingsView: View {
     /// Dev-only while it is being tried out, and enforced in `LanguageCoordinator`
     /// as well as hidden here. English with nothing followed is the app as it was
     /// before language support: the same prompts, byte for byte.
+    ///
+    /// Both halves name languages the same way — "한국어 — Korean" in the picker and
+    /// in the list — rather than the list using keyboard names like "2-Set Korean",
+    /// which read as a different thing.
     @ViewBuilder
-    private var languageControls: some View {
-        Picker("Dictation language", selection: $settings.preferredLanguageCode) {
-            ForEach(language.availableLanguages, id: \.code) { option in
-                Text(languageLabel(option)).tag(option.code)
-            }
-        }
-        helpText(
-            "What you dictate in unless a keyboard below says otherwise. English sends exactly the prompts the app always has."
-        )
+    private var languageSections: some View {
+        let followable = language.keyboards.filter { $0.base != settings.preferredLanguage.base }
 
-        let followable = language.keyboards.filter {
-            $0.language.base != settings.preferredLanguage.base
-        }
-        if !followable.isEmpty {
-            ForEach(followable, id: \.language.code) { keyboard in
-                Toggle(isOn: followBinding(keyboard.language.base)) {
-                    Text("Follow \(keyboard.name)")
+        Section("Language") {
+            Picker("Default language", selection: $settings.preferredLanguageCode) {
+                ForEach(language.availableLanguages, id: \.code) { option in
+                    Text(languageLabel(option)).tag(option.code)
                 }
             }
             helpText(
-                "When a followed keyboard is active, the take is in its language. Any other keyboard — or ABC, which names no single language — uses the dictation language.",
-                more: "Keyboards you have installed but never dictate in can stay unfollowed. A keyboard counts only if it names exactly one language: 2-Set Korean names Korean, while ABC names 93, so it is never followed. If a language cannot be served right now — its speech model still downloading, or a polish model that does not read it — the take falls back to the dictation language, then to English, and says so below."
+                followable.isEmpty
+                    ? "Every take uses this. English sends exactly the prompts the app always has."
+                    : "Every take uses this unless a keyboard you follow below says otherwise. English sends exactly the prompts the app always has."
             )
+            if followable.isEmpty {
+                nextTakeRows
+            }
         }
 
+        if !followable.isEmpty {
+            Section("Follow the keyboard") {
+                ForEach(followable, id: \.code) { keyboard in
+                    Toggle(languageLabel(keyboard), isOn: followBinding(keyboard.base))
+                }
+                helpText(
+                    "While a followed keyboard is active, the take is in its language. Any other keyboard — or ABC, which is not tied to one language — uses the default language.",
+                    more: "Keyboards you have installed but never dictate in can stay off. A keyboard is listed only if it names exactly one language: 2-Set Korean names Korean, while ABC names 93, so it never appears here. If a language cannot be used right now — its speech model still downloading, or a polish model that does not read it — the take falls back to the default language, then to English, and the reason shows below."
+                )
+                nextTakeRows
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var nextTakeRows: some View {
         LabeledContent("Next take") {
             Text(languageLabel(language.resolved))
                 .foregroundStyle(.secondary)

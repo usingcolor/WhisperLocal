@@ -263,10 +263,10 @@ final class DictationController: ObservableObject {
             startStreaming()
             if recorder.isInputReady {
                 phase = .recording
-                hud.show(phase: .recording, levelPublisher: recorder, contextCapture: isIntentTake, language: takeLanguage)
+                hud.show(phase: .recording, levelPublisher: recorder, contextCapture: isIntentTake, language: LanguageCoordinator.isEnabled ? takeLanguage : nil)
             } else {
                 phase = .waitingForMic
-                hud.show(phase: .waitingForMic, levelPublisher: recorder, contextCapture: isIntentTake, language: takeLanguage)
+                hud.show(phase: .waitingForMic, levelPublisher: recorder, contextCapture: isIntentTake, language: LanguageCoordinator.isEnabled ? takeLanguage : nil)
             }
         } catch {
             isIntentTake = false

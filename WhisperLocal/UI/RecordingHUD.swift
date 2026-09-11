@@ -7,9 +7,11 @@ final class RecordingHUDController: ObservableObject {
     @Published var audioLevel: Float = 0
     /// Shift+hotkey capture — HUD copy and color differ from dictation.
     @Published var isContextCapture = false
-    /// Endonym of the take's language, shown only when it is not English. The
-    /// speaker learns which language they are about to be transcribed in before
-    /// they have said anything, which is the whole reason it is on the HUD.
+    /// Endonym of the take's language — English included, so the badge always
+    /// says what the take is in rather than only speaking up when it differs.
+    /// Nil when language support is off, which leaves the HUD as it was. The
+    /// speaker learns the language before they have said anything, which is the
+    /// whole reason it is on the HUD.
     @Published var languageBadge: String?
     /// Secondary status appended to the headline: the auto-stop countdown while
     /// recording, chunk progress while transcribing. A long take used to show a
@@ -64,14 +66,14 @@ final class RecordingHUDController: ObservableObject {
         phase: DictationPhase,
         levelPublisher: AudioRecorder,
         contextCapture: Bool = false,
-        language: SpokenLanguage = .english
+        language: SpokenLanguage? = nil
     ) {
         hideTask?.cancel()
         levelTimer?.invalidate()
         setDetail(nil)
         self.phase = phase
         self.isContextCapture = contextCapture
-        self.languageBadge = language.isEnglish ? nil : language.nativeName
+        self.languageBadge = language?.nativeName
         ensurePanel()
         positionOnActiveScreen()
         panel?.ignoresMouseEvents = !isCancellable
@@ -133,6 +135,7 @@ final class RecordingHUDController: ObservableObject {
         phase = .idle
         audioLevel = 0
         isContextCapture = false
+        languageBadge = nil
     }
 
     private func scheduleHide(after seconds: Double) {
@@ -310,7 +313,12 @@ struct RecordingHUDView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        // A badge in either top corner takes the first ~23pt, and a two-line
+        // message used to run underneath it — the DEV and CONTEXT badges already
+        // did, and the language badge sits on the other side. With a badge, the
+        // content starts below the badge row. With none, the layout is unchanged.
+        .padding(.top, hasTopBadge ? 22 : 12)
+        .padding(.bottom, hasTopBadge ? 6 : 12)
         .frame(width: 300, height: 72)
         .modifier(HUDSurface())
         .overlay(alignment: .topLeading) {
@@ -343,6 +351,10 @@ struct RecordingHUDView: View {
                     .padding(8)
             }
         }
+    }
+
+    private var hasTopBadge: Bool {
+        controller.languageBadge != nil || controller.isContextCapture || AppIdentity.isDevBuild
     }
 
     private var headline: String {

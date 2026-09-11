@@ -87,3 +87,33 @@ final class LanguageNoticeTests: XCTestCase {
         XCTAssertLessThan(lang.lowerBound, transcript.lowerBound)
     }
 }
+
+/// The rule whose violation put Korean into English dictation.
+final class SpeechLocaleChoiceTests: XCTestCase {
+    private let en = Locale(identifier: "en-US")
+    private let ko = Locale(identifier: "ko-KR")
+    private let korean = SpokenLanguage(code: "ko")
+
+    /// The exact bug: Korean installed, English take. Must be English.
+    func testAnEnglishTakeUsesEnglishEvenWithKoreanInstalled() {
+        let picked = SpeechLocaleChoice.pick(for: .english, english: en, installed: [korean: ko])
+        XCTAssertEqual(picked, en)
+    }
+
+    func testAKoreanTakeUsesTheKoreanLocale() {
+        XCTAssertEqual(SpeechLocaleChoice.pick(for: korean, english: en, installed: [korean: ko]), ko)
+    }
+
+    /// Asking for a language that was never installed must fail rather than run
+    /// on whatever is loaded — that fallback was the bug.
+    func testAnUninstalledLanguageGetsNothingNotTheLoadedOne() {
+        XCTAssertNil(SpeechLocaleChoice.pick(for: korean, english: en, installed: [:]))
+        let japanese = SpokenLanguage(code: "ja")
+        XCTAssertNil(SpeechLocaleChoice.pick(for: japanese, english: en, installed: [korean: ko]))
+    }
+
+    func testRegionalEnglishIsStillEnglish() {
+        let picked = SpeechLocaleChoice.pick(for: SpokenLanguage(code: "en-GB"), english: en, installed: [korean: ko])
+        XCTAssertEqual(picked, en)
+    }
+}

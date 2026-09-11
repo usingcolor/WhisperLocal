@@ -79,3 +79,20 @@ enum KeyboardLanguage {
         kTISNotifySelectedKeyboardInputSourceChanged as String
     )
 }
+
+/// Which speech locale a take runs on. Pulled out of `AppleSpeechASR` so the rule
+/// can be tested, because breaking it is the one failure that puts another
+/// language into an English dictation.
+enum SpeechLocaleChoice {
+    /// English takes use the English locale. Any other language uses the locale
+    /// installed for *that* language, or nothing. There is deliberately no
+    /// "whatever is loaded" fallback: the first version had one, and after a
+    /// Korean warm-up it transcribed English speech with the Korean model.
+    static func pick(
+        for language: SpokenLanguage,
+        english: Locale?,
+        installed: [SpokenLanguage: Locale]
+    ) -> Locale? {
+        language.isEnglish ? english : installed[language]
+    }
+}

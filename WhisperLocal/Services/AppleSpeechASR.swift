@@ -19,9 +19,13 @@ final class AppleSpeechASR {
     private(set) var isReady = false
     private var reservedLocale: Locale?
     private var createdReservation = false
-    /// Language the reserved locale belongs to. A take in another language has to
-    /// re-reserve, because the transcriber is built per locale.
-    private(set) var preparedLanguage: SpokenLanguage = .english
+    /// Languages other than English whose assets are installed and reserved. Held
+    /// *alongside* English, never instead of it: the system allows several
+    /// reservations at once (5 on this hardware), and the first version released
+    /// English to make room — after which an English take was transcribed with
+    /// the Korean model, and English takes failed while Korean downloaded.
+    private(set) var installedLanguages: [SpokenLanguage: Locale] = [:]
+    private var extraReservations: Set<Locale> = []
     /// Holds the prewarm analyzer so `processLifetime` models stay resident.
     private var retainedWarmup: Any?
 
@@ -42,20 +46,32 @@ final class AppleSpeechASR {
         return "Apple Speech requires macOS 26 or later."
     }
 
-    func prepare(
-        language: SpokenLanguage = .english,
-        onStatus: @escaping (String) -> Void
-    ) async throws {
+    func prepare(onStatus: @escaping (String) -> Void) async throws {
         guard #available(macOS 26.0, *) else {
             throw TranscriptionError.appleSpeechUnavailable
         }
-        try await prepareOnSupportedOS(language: language, onStatus: onStatus)
+        try await prepareOnSupportedOS(onStatus: onStatus)
     }
 
     /// True when this language's assets are installed and reserved, so a take can
     /// use it without stalling on a download after the speaker has already talked.
     func isPrepared(for language: SpokenLanguage) -> Bool {
-        isReady && preparedLanguage == language
+        guard isReady else { return false }
+        return language.isEnglish || installedLanguages[language] != nil
+    }
+
+    /// Install and reserve a second language next to English. Touches nothing an
+    /// English take depends on — `isReady`, the English reservation, and the warm
+    /// analyzer all stay as they are while this downloads.
+    func installLanguage(
+        _ language: SpokenLanguage,
+        onStatus: @escaping (String) -> Void
+    ) async throws {
+        guard !language.isEnglish, installedLanguages[language] == nil else { return }
+        guard #available(macOS 26.0, *) else {
+            throw TranscriptionError.appleSpeechUnavailable
+        }
+        try await installOnSupportedOS(language, onStatus: onStatus)
     }
 
     func transcribe(
@@ -78,37 +94,32 @@ final class AppleSpeechASR {
         if createdReservation, let reservedLocale {
             _ = await AssetInventory.release(reservedLocale: reservedLocale)
         }
+        for locale in extraReservations {
+            _ = await AssetInventory.release(reservedLocale: locale)
+        }
         reservedLocale = nil
         createdReservation = false
+        extraReservations = []
+        installedLanguages = [:]
     }
 
     @available(macOS 26.0, *)
-    private func prepareOnSupportedOS(
-        language: SpokenLanguage,
-        onStatus: @escaping (String) -> Void
-    ) async throws {
+    private func prepareOnSupportedOS(onStatus: @escaping (String) -> Void) async throws {
         Self.sweepStaleTempAudio()
         isReady = false
         guard SpeechTranscriber.isAvailable else {
             throw TranscriptionError.appleSpeechUnavailable
         }
 
-        let label = language.isEnglish ? "English" : language.englishName
-        onStatus("Apple Speech: finding \(label) model…")
-        guard let locale = await Self.locale(for: language) else {
+        let label = "English"
+        onStatus("Apple Speech: finding English model…")
+        guard let locale = await Self.locale(for: .english) else {
             throw TranscriptionError.appleSpeechLocaleUnsupported
         }
 
-        // One reservation at a time. Switching language releases the previous
-        // locale first; the system caps how many may be held at once.
-        if createdReservation, let previous = reservedLocale, previous != locale {
-            _ = await AssetInventory.release(reservedLocale: previous)
-            createdReservation = false
-        }
         let created = try await AssetInventory.reserve(locale: locale)
         reservedLocale = locale
         createdReservation = created
-        preparedLanguage = language
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
@@ -147,6 +158,42 @@ final class AppleSpeechASR {
     }
 
     @available(macOS 26.0, *)
+    private func installOnSupportedOS(
+        _ language: SpokenLanguage,
+        onStatus: @escaping (String) -> Void
+    ) async throws {
+        let label = language.englishName
+        guard let locale = await Self.locale(for: language) else {
+            throw TranscriptionError.appleSpeechLocaleUnsupported
+        }
+        if !(await AssetInventory.reservedLocales.contains(locale)) {
+            guard await AssetInventory.reservedLocales.count < AssetInventory.maximumReservedLocales else {
+                appleSpeechLogger.error("no reservation slot left for \(locale.identifier, privacy: .public)")
+                throw TranscriptionError.appleSpeechLocaleUnsupported
+            }
+            if try await AssetInventory.reserve(locale: locale) {
+                extraReservations.insert(locale)
+            }
+        }
+        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            onStatus("Downloading \(label) speech model…")
+            let progress = request.progress
+            let ticker = Task { @MainActor in
+                while !Task.isCancelled {
+                    let pct = Int((progress.fractionCompleted * 100).rounded())
+                    onStatus("Downloading \(label) speech model (\(pct)%)…")
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+            }
+            defer { ticker.cancel() }
+            try await Task.detached { try await request.downloadAndInstall() }.value
+        }
+        installedLanguages[language] = locale
+        appleSpeechLogger.info("installed \(locale.identifier, privacy: .public) alongside English")
+    }
+
+    @available(macOS 26.0, *)
     private func transcribeOnSupportedOS(
         samples: [Float],
         dictionary: [String],
@@ -157,17 +204,17 @@ final class AppleSpeechASR {
         guard SpeechTranscriber.isAvailable else {
             throw TranscriptionError.appleSpeechUnavailable
         }
-        // The caller resolves the language before recording; if it asks for one
-        // that was never prepared, use what is reserved rather than reserving
-        // mid-take, which would download a model with the speaker already waiting.
-        let locale: Locale
-        if preparedLanguage == language, let reservedLocale {
-            locale = reservedLocale
-        } else if let reservedLocale {
-            locale = reservedLocale
-        } else if let resolved = await Self.locale(for: language) {
-            locale = resolved
-        } else {
+        // Exactly the language asked for, or nothing. This used to fall back to
+        // "whatever is reserved", which after a Korean warm-up meant an English
+        // take ran through the Korean model. The caller checks `isPrepared` before
+        // recording, so a miss here is a bug to surface, not a case to paper over.
+        var english = reservedLocale
+        if english == nil, language.isEnglish {
+            english = await Self.locale(for: .english)
+        }
+        guard let locale = SpeechLocaleChoice.pick(
+            for: language, english: english, installed: installedLanguages
+        ) else {
             throw TranscriptionError.appleSpeechLocaleUnsupported
         }
 

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import os
 
@@ -21,6 +22,7 @@ final class LanguageCoordinator: ObservableObject {
     private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "language")
     private var observer: NSObjectProtocol?
     private var warmTask: Task<Void, Never>?
+    private var subscriptions: Set<AnyCancellable> = []
 
     private init() {}
 
@@ -32,9 +34,26 @@ final class LanguageCoordinator: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.keyboardChanged() }
+            Task { @MainActor in self?.warmIfNeeded() }
         }
-        refresh()
+        // Warming used to happen only on a keyboard *change*. Turning the switch on
+        // while already on the Korean keyboard, or launching that way, never
+        // warmed anything — every take stayed English until you switched away and
+        // back. The switch and launch are both moments to warm.
+        settings.$followKeyboardLanguage
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.warmIfNeeded() }
+            .store(in: &subscriptions)
+        // Keep the Settings readout honest while a download runs and when the
+        // speech model changes under it.
+        let transcription = DictationController.shared.transcription
+        transcription.$languageDownloadStatus
+            .combineLatest(transcription.$loadedModel)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _, _ in self?.refresh() }
+            .store(in: &subscriptions)
+        warmIfNeeded()
     }
 
     func stop() {
@@ -71,7 +90,7 @@ final class LanguageCoordinator: ObservableObject {
         return keyboard.isEnglish ? nil : keyboard
     }
 
-    private func keyboardChanged() {
+    private func warmIfNeeded() {
         refresh()
         guard let wanted = requestedLanguage() else { return }
         // Warm here rather than at take time. Downloading a speech model with the
@@ -91,12 +110,22 @@ final class LanguageCoordinator: ObservableObject {
             return
         }
         let transcription = DictationController.shared.transcription
-        if polishCanServe(wanted), transcription.isReadyForLanguage(wanted) {
+        if !polishCanServe(wanted) {
+            resolved = .english
+            unavailable = "\(wanted.englishName) needs a polish model that reads it — takes stay in English"
+        } else if transcription.isReadyForLanguage(wanted) {
             resolved = wanted
             unavailable = nil
+        } else if let download = transcription.languageDownloadStatus {
+            resolved = .english
+            unavailable = "\(download) Takes stay in English until it finishes."
+        } else if let model = transcription.loadedModel,
+                  !LanguageSupport.speechModelCanServe(wanted, model: model) {
+            resolved = .english
+            unavailable = "\(model.shortName) is English-only — pick Apple Speech or Whisper Large v3 Turbo for \(wanted.englishName)"
         } else {
             resolved = .english
-            unavailable = "\(wanted.englishName) is not ready — takes stay in English"
+            unavailable = "\(wanted.englishName) speech model is not ready — takes stay in English"
         }
     }
 

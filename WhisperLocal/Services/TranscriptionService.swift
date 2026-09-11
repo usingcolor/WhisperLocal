@@ -117,44 +117,30 @@ final class TranscriptionService: ObservableObject {
         return true
     }
 
+    /// Progress of a second-language download, for Settings. Kept apart from
+    /// `statusMessage` and `isLoadingModel`, which describe the model English takes
+    /// run on — a Korean download must not make the app look, or be, unready.
+    @Published private(set) var languageDownloadStatus: String?
+
     /// Warm a language so a later take can use it. Apple Speech ships one asset per
     /// locale and only English is installed by default, so this may download.
+    ///
+    /// Deliberately does not touch `loadGeneration`, `isReady`, or
+    /// `isLoadingModel`. The first version bumped the load generation, so switching
+    /// keyboards during the launch-time English load cancelled that load.
     func prepareLanguage(_ language: SpokenLanguage) async {
-        guard let model = loadedModel ?? requestedModel else { return }
-        guard model.engine == .appleSpeech else { return }
+        guard !language.isEnglish else { return }
+        guard let model = loadedModel, model.engine == .appleSpeech else { return }
         guard !AppleSpeechASR.shared.isPrepared(for: language) else { return }
-        guard await LanguageSupport.appleSpeechLocale(for: language) != nil else {
-            logger.info("no Apple Speech locale for \(language.code, privacy: .public)")
-            return
-        }
-        loadGeneration += 1
-        let generation = loadGeneration
-        isLoadingModel = true
         do {
-            try await AppleSpeechASR.shared.prepare(language: language) { [weak self] message in
-                guard let self, generation == self.loadGeneration else { return }
-                self.statusMessage = message
+            try await AppleSpeechASR.shared.installLanguage(language) { [weak self] message in
+                self?.languageDownloadStatus = message
             }
-            guard generation == loadGeneration else { return }
-            applyReady(model)
+            languageDownloadStatus = nil
             logger.info("Apple Speech ready for \(language.code, privacy: .public)")
         } catch {
-            guard generation == loadGeneration else { return }
+            languageDownloadStatus = nil
             logger.error("Apple Speech \(language.code, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
-            // A half-finished switch leaves the transcriber unprepared, and this
-            // service would still report itself ready — the next take would then
-            // fail outright. Put English back rather than leaving it broken.
-            try? await AppleSpeechASR.shared.prepare(language: .english) { [weak self] message in
-                guard let self, generation == self.loadGeneration else { return }
-                self.statusMessage = message
-            }
-            guard generation == loadGeneration else { return }
-            if AppleSpeechASR.shared.isPrepared(for: .english) {
-                applyReady(model)
-            } else {
-                isLoadingModel = false
-                isReady = false
-            }
         }
     }
 

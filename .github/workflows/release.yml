@@ -272,7 +272,10 @@ jobs:
           # Ship this version's section, not the whole changelog. The file keeps
           # every version; a release page should describe the release you are on.
           parts = re.split(r"^## ", body, flags=re.M)
-          matches = [p for p in parts[1:] if p.startswith(version)]
+          # The version must end at whitespace or end of line: a prefix match
+          # took "## 0.2.10" for 0.2.1, the same way the tag check's \b refuses to.
+          heading = re.compile(re.escape(version) + r"(?=\s|$)")
+          matches = [p for p in parts[1:] if heading.match(p)]
           if not matches:
               sys.exit("error: release-notes.md has no '## " + version + "' section")
           sys.stdout.write(parts[0].rstrip() + "\n\n## " + matches[0].rstrip() + "\n")

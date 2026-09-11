@@ -255,10 +255,11 @@ final class WindowOpener {
             guard let self else { return }
             self.capture(action)
             self.logger.info("openWindow captured at launch")
-            // Done with the host; the action outlives it.
+            // Done with the host; the action outlives it, including a close().
+            // Ordering it out alone left it in the window server's list.
             DispatchQueue.main.async {
-                self.captureWindow?.orderOut(nil)
                 self.captureWindow?.contentView = nil
+                self.captureWindow?.close()
                 self.captureWindow = nil
             }
         })

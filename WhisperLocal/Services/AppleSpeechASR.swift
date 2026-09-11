@@ -27,8 +27,10 @@ final class AppleSpeechASR {
     private(set) var installedLanguages: [SpokenLanguage: Locale] = [:]
     private var extraReservations: Set<Locale> = []
     /// Launch, the English model finishing, and a keyboard change can all ask for
-    /// the same language within a second of each other. One download is enough.
-    private var installing: Set<SpokenLanguage> = []
+    /// the same language within a second of each other. One download is enough —
+    /// and a second caller waits for it rather than returning at once, which made
+    /// it report the language ready while the first was still downloading.
+    private var installs: [SpokenLanguage: Task<Void, Error>] = [:]
     /// Holds the prewarm analyzer so `processLifetime` models stay resident.
     private var retainedWarmup: Any?
 
@@ -71,13 +73,38 @@ final class AppleSpeechASR {
         onStatus: @escaping (String) -> Void
     ) async throws {
         guard !language.isEnglish, installedLanguages[language] == nil else { return }
-        guard !installing.contains(language) else { return }
+        if let running = installs[language] {
+            try await running.value
+            return
+        }
         guard #available(macOS 26.0, *) else {
             throw TranscriptionError.appleSpeechUnavailable
         }
-        installing.insert(language)
-        defer { installing.remove(language) }
-        try await installOnSupportedOS(language, onStatus: onStatus)
+        let task = Task { @MainActor in
+            try await self.installOnSupportedOS(language, onStatus: onStatus)
+        }
+        installs[language] = task
+        defer { installs[language] = nil }
+        try await task.value
+    }
+
+    /// Release every non-English reservation the app no longer needs.
+    ///
+    /// Reservations outlive the app — they are how the system knows not to purge a
+    /// model — and nothing used to give one back. A language stopped being
+    /// followed kept its slot, and the system allows only a handful (5 here), so
+    /// the next new language would eventually fail. Covers reservations made on
+    /// earlier launches too, which this session never recorded.
+    func releaseLanguages(except keep: Set<String>) async {
+        guard #available(macOS 26.0, *) else { return }
+        for locale in await AssetInventory.reservedLocales {
+            guard let base = locale.language.languageCode?.identifier.lowercased(),
+                  base != "en", !keep.contains(base) else { continue }
+            _ = await AssetInventory.release(reservedLocale: locale)
+            extraReservations.remove(locale)
+            installedLanguages = installedLanguages.filter { $0.value != locale }
+            appleSpeechLogger.info("released \(locale.identifier, privacy: .public)")
+        }
     }
 
     func transcribe(
@@ -175,7 +202,7 @@ final class AppleSpeechASR {
         if !(await AssetInventory.reservedLocales.contains(locale)) {
             guard await AssetInventory.reservedLocales.count < AssetInventory.maximumReservedLocales else {
                 appleSpeechLogger.error("no reservation slot left for \(locale.identifier, privacy: .public)")
-                throw TranscriptionError.appleSpeechLocaleUnsupported
+                throw TranscriptionError.appleSpeechReservationsFull
             }
             if try await AssetInventory.reserve(locale: locale) {
                 extraReservations.insert(locale)

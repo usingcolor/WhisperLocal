@@ -130,6 +130,9 @@ final class LanguageCoordinator: ObservableObject {
         if let download = transcription.languageDownloadStatus {
             return download
         }
+        if let failure = transcription.languageFailures[language.base] {
+            return failure
+        }
         if let model = transcription.loadedModel,
            !LanguageSupport.speechModelCanServe(language, model: model) {
             return "\(model.shortName) is English-only — pick Apple Speech or Whisper Large v3 Turbo for \(name)"
@@ -160,14 +163,18 @@ final class LanguageCoordinator: ObservableObject {
     private func warm() {
         refresh()
         let languages = languagesToWarm()
-        guard !languages.isEmpty else { return }
         warmTask?.cancel()
         warmTask = Task { [weak self] in
+            let transcription = DictationController.shared.transcription
+            // Give back what is no longer wanted first, so a newly followed
+            // language is not refused for want of a slot an old one is sitting on.
+            await transcription.releaseLanguages(except: languages)
             for language in languages {
                 guard !Task.isCancelled else { return }
-                await DictationController.shared.transcription.prepareLanguage(language)
+                await transcription.prepareLanguage(language)
                 self?.refresh()
             }
+            self?.refresh()
         }
     }
 

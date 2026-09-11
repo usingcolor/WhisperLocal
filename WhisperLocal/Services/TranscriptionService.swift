@@ -121,6 +121,9 @@ final class TranscriptionService: ObservableObject {
     /// `statusMessage` and `isLoadingModel`, which describe the model English takes
     /// run on — a Korean download must not make the app look, or be, unready.
     @Published private(set) var languageDownloadStatus: String?
+    /// Why a language could not be prepared, by base code, so Settings can say
+    /// so instead of a generic "not ready yet".
+    @Published private(set) var languageFailures: [String: String] = [:]
 
     /// Warm a language so a later take can use it. Apple Speech ships one asset per
     /// locale and only English is installed by default, so this may download.
@@ -137,11 +140,20 @@ final class TranscriptionService: ObservableObject {
                 self?.languageDownloadStatus = message
             }
             languageDownloadStatus = nil
+            languageFailures[language.base] = nil
             logger.info("Apple Speech ready for \(language.code, privacy: .public)")
         } catch {
             languageDownloadStatus = nil
+            languageFailures[language.base] = error.localizedDescription
             logger.error("Apple Speech \(language.code, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Give back every non-English speech model the user no longer dictates in.
+    func releaseLanguages(except keep: [SpokenLanguage]) async {
+        let bases = Set(keep.map(\.base))
+        await AppleSpeechASR.shared.releaseLanguages(except: bases)
+        languageFailures = languageFailures.filter { bases.contains($0.key) }
     }
 
     private func transcribeOnce(
@@ -361,6 +373,7 @@ enum TranscriptionError: LocalizedError {
     case audioScratchFailed
     case appleSpeechUnavailable
     case appleSpeechLocaleUnsupported
+    case appleSpeechReservationsFull
 
     var errorDescription: String? {
         switch self {
@@ -376,6 +389,8 @@ enum TranscriptionError: LocalizedError {
             return "Apple Speech needs macOS 26 and a supported Apple Silicon Mac."
         case .appleSpeechLocaleUnsupported:
             return "Apple Speech has no English model on this Mac."
+        case .appleSpeechReservationsFull:
+            return "Apple Speech can keep only a few languages ready at once. Stop following one you don't dictate in."
         }
     }
 }

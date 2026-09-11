@@ -206,3 +206,66 @@ final class StreamingCutTests: XCTestCase {
         XCTAssertEqual(emitted + remaining.count, original, "no samples lost or duplicated")
     }
 }
+
+/// Japanese and Chinese: full-width enders, no spaces between words or sentences.
+final class PolishChunkerCJKTests: XCTestCase {
+    private let sentence = "今日は会議の資料を最後まで確認しました。"   // 20 characters, ends in 。
+
+    /// The bug: no ASCII enders and no spaces, so the whole take was one
+    /// "sentence" hard-cut at the budget, mid-sentence.
+    func testALongJapaneseTakeSplitsAtSentenceEnds() {
+        let take = String(repeating: sentence, count: 300)          // 6,000 characters
+        let pieces = PolishChunker.split(take, budget: 3_000)
+        XCTAssertGreaterThan(pieces.count, 1)
+        for piece in pieces {
+            XCTAssertLessThanOrEqual(piece.count, 3_000)
+            XCTAssertEqual(piece.last, "。", "a piece was cut mid-sentence")
+        }
+    }
+
+    /// Splitting and rejoining must not add spaces the text never had.
+    func testJapaneseRoundTripsWithoutGainingSpaces() {
+        let take = String(repeating: sentence, count: 300)
+        let pieces = PolishChunker.split(take, budget: 3_000)
+        XCTAssertFalse(pieces.contains { $0.contains(" ") })
+        XCTAssertEqual(PolishChunker.join(pieces), take)
+    }
+
+    /// One enormous run-on sentence: cut after a clause comma, never mid-word.
+    func testARunOnJapaneseSentenceBreaksAtAComma() {
+        let clause = "資料を確認して、"                                   // 8 characters, ends in 、
+        let take = String(repeating: clause, count: 500)             // 4,000 characters, no 。
+        let pieces = PolishChunker.split(take, budget: 3_000)
+        XCTAssertGreaterThan(pieces.count, 1)
+        XCTAssertEqual(pieces.first?.last, "、")
+        XCTAssertEqual(PolishChunker.join(pieces), take)
+    }
+
+    func testChineseEndersCountToo() {
+        let zh = "我们今天把会议资料全部检查完了！"
+        let pieces = PolishChunker.split(String(repeating: zh, count: 300), budget: 3_000)
+        XCTAssertTrue(pieces.allSatisfy { $0.last == "！" })
+    }
+
+    /// No punctuation at all: a hard cut between two ideographs, rejoined with
+    /// nothing between them.
+    func testAJapaneseHardCutRoundTrips() {
+        let take = String(repeating: "資料確認", count: 1_000)          // 4,000 characters
+        let pieces = PolishChunker.split(take, budget: 3_000)
+        XCTAssertEqual(pieces.count, 2)
+        XCTAssertEqual(PolishChunker.join(pieces), take)
+    }
+
+    /// Korean puts spaces between words, so it must keep getting one.
+    func testKoreanStillJoinsWithASpace() {
+        XCTAssertEqual(PolishChunker.join(["회의를 다시 잡아야 합니다", "내일 오후에 뵙겠습니다."]),
+                       "회의를 다시 잡아야 합니다 내일 오후에 뵙겠습니다.")
+    }
+
+    /// English is untouched: sentences still rejoin with one space.
+    func testEnglishStillJoinsWithASpace() {
+        XCTAssertEqual(PolishChunker.join(["First piece.", "Second piece."]), "First piece. Second piece.")
+        XCTAssertEqual(PolishChunker.separator(after: "Done."), " ")
+        XCTAssertEqual(PolishChunker.separator(after: "完了。"), "")
+    }
+}

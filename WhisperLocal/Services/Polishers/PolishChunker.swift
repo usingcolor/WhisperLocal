@@ -11,6 +11,42 @@ enum PolishChunker {
     /// comfortably finishes inside the existing polish timeout.
     static let budget = 3_000
 
+    /// Sentence enders. The full-width forms are what Japanese and Chinese use;
+    /// with only ASCII here a long ja/zh take had no boundary at all and was
+    /// hard-cut at the budget, mid-sentence.
+    static let terminators: Set<Character> = [".", "!", "?", "。", "！", "？"]
+
+    /// Japanese and Chinese put no space between words or sentences, so a piece
+    /// must not gain one when sentences — or polished pieces — are put back
+    /// together. Korean does use spaces, so Hangul is deliberately not in this
+    /// set; English still joins with a space, exactly as before.
+    static func separator(after text: String) -> String {
+        guard let last = text.last else { return "" }
+        if "。！？、，".contains(last) { return "" }
+        return last.unicodeScalars.allSatisfy(isUnspacedScript) ? "" : " "
+    }
+
+    private static func isUnspacedScript(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3040...0x30FF,   // Hiragana, Katakana
+             0x3400...0x4DBF,   // CJK Extension A
+             0x4E00...0x9FFF,   // CJK Unified Ideographs
+             0xF900...0xFAFF:   // CJK Compatibility Ideographs
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Rejoins polished pieces with the same rule the split used.
+    static func join(_ pieces: [String]) -> String {
+        pieces.reduce(into: "") { joined, piece in
+            let piece = piece.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !piece.isEmpty else { return }
+            joined += joined.isEmpty ? piece : separator(after: joined) + piece
+        }
+    }
+
     /// Pieces are cut at sentence boundaries, falling back to whitespace so a word
     /// is never split. A piece may exceed `budget` only when a single "sentence"
     /// does — dictation with no punctuation at all.
@@ -25,8 +61,8 @@ enum PolishChunker {
         for sentence in sentences(of: trimmed) {
             if current.isEmpty {
                 current = sentence
-            } else if current.count + 1 + sentence.count <= budget {
-                current += " " + sentence
+            } else if current.count + separator(after: current).count + sentence.count <= budget {
+                current += separator(after: current) + sentence
             } else {
                 pieces.append(current)
                 current = sentence
@@ -49,7 +85,7 @@ enum PolishChunker {
         var current = ""
         for character in text {
             current.append(character)
-            if ".!?".contains(character) {
+            if terminators.contains(character) {
                 let piece = current.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !piece.isEmpty { out.append(piece) }
                 current = ""
@@ -65,6 +101,12 @@ enum PolishChunker {
         let head = text[text.startIndex..<limit]
         if let space = head.lastIndex(where: { $0 == " " || $0 == "\n" || $0 == "\t" }) {
             let cut = String(text[text.startIndex..<space]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cut.isEmpty { return cut }
+        }
+        // Japanese and Chinese have no spaces to fall back on. A clause comma is
+        // the next-best place, and keeps the cut off the middle of a word.
+        if let comma = head.lastIndex(where: { $0 == "、" || $0 == "，" }) {
+            let cut = String(text[text.startIndex...comma])
             if !cut.isEmpty { return cut }
         }
         // No whitespace inside the budget at all — a single enormous token.

@@ -310,7 +310,7 @@ struct PolishPipeline: Sendable {
             }
         }
 
-        let joined = texts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let joined = PolishChunker.join(texts)
         let note: String?
         if failures == pieces.count {
             note = cloudDown ? "Cloud unavailable — pasted without cleanup" : "Pasted without AI cleanup"

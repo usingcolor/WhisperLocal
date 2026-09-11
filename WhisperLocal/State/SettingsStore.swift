@@ -135,10 +135,14 @@ final class SettingsStore: ObservableObject {
     /// Dev-only experiment: macOS voice processing (echo cancellation). Off until
     /// its effect on transcript quality has actually been measured.
     @Published var enableEchoCancellation: Bool { didSet { persist(enableEchoCancellation, key: "enableEchoCancellation") } }
-    /// Take the dictation language from the macOS input source instead of always
-    /// English. Off by default: with it off nothing in the pipeline can emit a
-    /// character outside English, which is the guarantee English-only users have now.
-    @Published var followKeyboardLanguage: Bool { didSet { persist(followKeyboardLanguage, key: "followKeyboardLanguage") } }
+    /// The language takes are dictated in unless a followed keyboard says
+    /// otherwise. English — the default — sends exactly the prompts the app sent
+    /// before language support existed; that is checked byte for byte in tests.
+    @Published var preferredLanguageCode: String { didSet { persist(preferredLanguageCode, key: "preferredLanguage") } }
+    /// Keyboard languages (base codes, "ko") that switch a take to their language.
+    /// Any keyboard not listed here — or ABC, which names no one language — means
+    /// the preferred language. People install keyboards they never dictate in.
+    @Published var followedKeyboardLanguages: [String] { didSet { persist(followedKeyboardLanguages, key: "followedKeyboardLanguages") } }
     @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
     /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
     @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
@@ -151,7 +155,12 @@ final class SettingsStore: ObservableObject {
     @Published private(set) var hasAnthropicKey = false
     @Published private(set) var anthropicKeySuffix: String?
 
-    var asrModel: ASRModelOption {
+    var preferredLanguage: SpokenLanguage {
+        get { SpokenLanguage(code: preferredLanguageCode) }
+        set { preferredLanguageCode = newValue.code }
+    }
+
+        var asrModel: ASRModelOption {
         get { ASRModelOption(rawValue: asrModelRaw) ?? .defaultModel }
         set { asrModelRaw = newValue.rawValue }
     }
@@ -332,11 +341,18 @@ final class SettingsStore: ObservableObject {
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
         preferBuiltInMicOverBluetooth = defaults.object(forKey: "preferBuiltInMicOverBluetooth") as? Bool ?? true
         enableEchoCancellation = defaults.object(forKey: "enableEchoCancellation") as? Bool ?? false
-        // On by default in Dev, which exists to try this; off in Release, where the
-        // guarantee is that nothing can emit a character outside English unless
-        // the user chose it. In testing the Dev switch was never found, twice.
-        followKeyboardLanguage = defaults.object(forKey: "followKeyboardLanguage") as? Bool
-            ?? AppIdentity.isDevBuild
+        preferredLanguageCode = defaults.string(forKey: "preferredLanguage") ?? "en"
+        if let stored = defaults.array(forKey: "followedKeyboardLanguages") as? [String] {
+            followedKeyboardLanguages = stored
+        } else {
+            // Until the user chooses, Dev follows every single-language keyboard
+            // they have — that is what testing needs, and the switch that used to
+            // gate it went unfound twice. Release follows none: nothing but English
+            // unless someone asked for it.
+            followedKeyboardLanguages = AppIdentity.isDevBuild
+                ? KeyboardLanguage.enabledSingleLanguageKeyboards().map(\.language.base)
+                : []
+        }
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int

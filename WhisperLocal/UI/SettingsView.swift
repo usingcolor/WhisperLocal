@@ -847,28 +847,62 @@ struct SettingsView: View {
         .padding(16)
     }
 
-    /// Dev-only while it is being tried out. The guarantee it has to keep is that
-    /// with the switch off, nothing downstream can emit a character outside
-    /// English — so this is the only thing that turns any of it on.
+    /// Dev-only while it is being tried out, and enforced in `LanguageCoordinator`
+    /// as well as hidden here. English with nothing followed is the app as it was
+    /// before language support: the same prompts, byte for byte.
     @ViewBuilder
     private var languageControls: some View {
-        Toggle("Follow the keyboard language", isOn: $settings.followKeyboardLanguage)
-        helpText(
-            "Dictate in whatever language your keyboard is set to. Off means every take is English, exactly as before.",
-            more: "The input source has to name exactly one language to count. A Korean or Japanese IME names one; the ABC layout names 93, which says the script and not the language, so it is read as no answer and the take stays English. The speech model and the polish model must both be able to serve the language before it is used — otherwise the take runs in English rather than guessing."
-        )
-        if settings.followKeyboardLanguage {
-            LabeledContent("Next take") {
-                Text(language.resolved.isEnglish ? "English" : "\(language.resolved.nativeName) — \(language.resolved.englishName)")
-                    .foregroundStyle(.secondary)
-            }
-            if let unavailable = language.unavailable {
-                Text(unavailable)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+        Picker("Dictation language", selection: $settings.preferredLanguageCode) {
+            ForEach(language.availableLanguages, id: \.code) { option in
+                Text(languageLabel(option)).tag(option.code)
             }
         }
+        helpText(
+            "What you dictate in unless a keyboard below says otherwise. English sends exactly the prompts the app always has."
+        )
+
+        let followable = language.keyboards.filter {
+            $0.language.base != settings.preferredLanguage.base
+        }
+        if !followable.isEmpty {
+            ForEach(followable, id: \.language.code) { keyboard in
+                Toggle(isOn: followBinding(keyboard.language.base)) {
+                    Text("Follow \(keyboard.name)")
+                }
+            }
+            helpText(
+                "When a followed keyboard is active, the take is in its language. Any other keyboard — or ABC, which names no single language — uses the dictation language.",
+                more: "Keyboards you have installed but never dictate in can stay unfollowed. A keyboard counts only if it names exactly one language: 2-Set Korean names Korean, while ABC names 93, so it is never followed. If a language cannot be served right now — its speech model still downloading, or a polish model that does not read it — the take falls back to the dictation language, then to English, and says so below."
+            )
+        }
+
+        LabeledContent("Next take") {
+            Text(languageLabel(language.resolved))
+                .foregroundStyle(.secondary)
+        }
+        if let unavailable = language.unavailable {
+            Text(unavailable)
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func languageLabel(_ language: SpokenLanguage) -> String {
+        language.isEnglish || language.nativeName == language.englishName
+            ? language.englishName
+            : "\(language.nativeName) — \(language.englishName)"
+    }
+
+    private func followBinding(_ base: String) -> Binding<Bool> {
+        Binding(
+            get: { settings.followedKeyboardLanguages.contains(base) },
+            set: { follow in
+                var set = settings.followedKeyboardLanguages.filter { $0 != base }
+                if follow { set.append(base) }
+                settings.followedKeyboardLanguages = set
+            }
+        )
     }
 
     /// The toggle reads `SMAppService`, not a stored preference, so it still tells

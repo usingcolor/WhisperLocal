@@ -41,6 +41,7 @@
 		59C0B52FB06EF6786BA03CE5 /* DictationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 094325BD00C73626F5A7D8BF /* DictationController.swift */; };
 		5C1D1E7AC805E51D84AD54C5 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = CAFAF41E8683133E12EEB1FE /* HuggingFace */; };
 		5D34AABAF34BCADDAC06AEF3 /* NetworkReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15D0999BC498FE3DD45A01A5 /* NetworkReachability.swift */; };
+		5EB65784700992D9E3EB1CE5 /* LanguageResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C217A35266E152B427E49C0 /* LanguageResolutionTests.swift */; };
 		60B13AE43169CE7EBAD95865 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B53D098CD2A4802900B6D9D9 /* Speech.framework */; };
 		60BCEDF705CF32282A4457AD /* PolishPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A5CF427A1C63EF7644AD6F /* PolishPipelineTests.swift */; };
 		62B37D9DFC002EF40881E882 /* AppIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FD7BCA370B0A64EFE693B5A /* AppIdentity.swift */; };
@@ -102,6 +103,7 @@
 		22AEB3874E72F1200F202546 /* RecordingHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingHUD.swift; sourceTree = "<group>"; };
 		24DCD4166F056923578A903D /* LaunchAtLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginTests.swift; sourceTree = "<group>"; };
 		285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudModelCatalog.swift; sourceTree = "<group>"; };
+		2C217A35266E152B427E49C0 /* LanguageResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageResolutionTests.swift; sourceTree = "<group>"; };
 		345A6B541F6F5BFE772A4FF3 /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
 		3711BFF5E9F6F19E30941906 /* WhisperLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WhisperLocal.entitlements; sourceTree = "<group>"; };
 		38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputRoute.swift; sourceTree = "<group>"; };
@@ -237,6 +239,7 @@
 				D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */,
 				D02094467E1587FC75CCC8A7 /* CloudFallbackTests.swift */,
 				38ADAC703311FF92E61C5EF2 /* DictationLogExportTests.swift */,
+				2C217A35266E152B427E49C0 /* LanguageResolutionTests.swift */,
 				24DCD4166F056923578A903D /* LaunchAtLoginTests.swift */,
 				435324015BC35AEEC0DC93D2 /* LongTakeTests.swift */,
 				14A5CF427A1C63EF7644AD6F /* PolishPipelineTests.swift */,
@@ -431,6 +434,7 @@
 				AC7398423F83CA65BB82A17A /* DictationLogExportTests.swift in Sources */,
 				B1D64CFE2C0FABC6720B622F /* DictationLogStore.swift in Sources */,
 				9AB3E4B1BE721A705E68FF52 /* DictionaryCSV.swift in Sources */,
+				5EB65784700992D9E3EB1CE5 /* LanguageResolutionTests.swift in Sources */,
 				4471D72C40C5894FF84F84CA /* LaunchAtLogin.swift in Sources */,
 				E1FF16BB19B278E5559110F6 /* LaunchAtLoginTests.swift in Sources */,
 				DC4C53ADA10C148A6467AF8E /* LongTake.swift in Sources */,

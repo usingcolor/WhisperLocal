@@ -73,6 +73,31 @@ enum KeyboardLanguage {
         return Unmanaged<CFArray>.fromOpaque(raw).takeUnretainedValue() as? [String] ?? []
     }
 
+    /// The enabled keyboards that name exactly one language — the only ones that
+    /// can ever decide a take's language. Deduplicated by language: the Korean IME
+    /// shows up as both "Korean" and "2-Set Korean", and that is one choice.
+    static func enabledSingleLanguageKeyboards() -> [(language: SpokenLanguage, name: String)] {
+        let filter = [
+            kTISPropertyInputSourceCategory as String: kTISCategoryKeyboardInputSource as String,
+            kTISPropertyInputSourceIsEnabled as String: true
+        ] as CFDictionary
+        guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue()
+                as? [TISInputSource] else { return [] }
+        var seen = Set<String>()
+        var result: [(language: SpokenLanguage, name: String)] = []
+        for source in list {
+            guard let language = language(fromDeclared: declaredLanguages(of: source)),
+                  seen.insert(language.base).inserted else { continue }
+            result.append((language, localizedName(of: source) ?? language.nativeName))
+        }
+        return result
+    }
+
+    private static func localizedName(of source: TISInputSource) -> String? {
+        guard let raw = TISGetInputSourceProperty(source, kTISPropertyLocalizedName) else { return nil }
+        return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
+    }
+
     /// Posted by the system when the user switches input source. Used to warm a
     /// speech model before the hotkey is pressed rather than stalling a take.
     static let changedNotification = Notification.Name(
@@ -96,3 +121,35 @@ enum SpeechLocaleChoice {
         language.isEnglish ? english : installed[language]
     }
 }
+
+/// How a take's language is chosen. Pure, so every case can be a test.
+///
+/// Two settings feed it: the dictation language, used by default, and the set of
+/// keyboard languages the user chose to follow. The keyboard only decides a take
+/// when it names one language *and* that language is followed; an unfollowed
+/// keyboard, ABC, or no answer all mean the dictation language. With the dictation
+/// language set to English and nothing followed, every take is English — the path
+/// the app had before any of this existed.
+enum LanguageResolution {
+    static func wanted(
+        preferred: SpokenLanguage,
+        keyboard: SpokenLanguage?,
+        followed: Set<String>
+    ) -> SpokenLanguage {
+        if let keyboard, followed.contains(keyboard.base) { return keyboard }
+        return preferred
+    }
+
+    /// One step down at a time: the wanted language, then the dictation language,
+    /// then English, which is always servable. Never a language nobody chose.
+    static func resolve(
+        wanted: SpokenLanguage,
+        preferred: SpokenLanguage,
+        canServe: (SpokenLanguage) -> Bool
+    ) -> SpokenLanguage {
+        if wanted.isEnglish || canServe(wanted) { return wanted }
+        if preferred != wanted, preferred.isEnglish || canServe(preferred) { return preferred }
+        return .english
+    }
+}
+

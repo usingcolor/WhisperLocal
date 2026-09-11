@@ -57,6 +57,10 @@ enum AppIdentity {
         supportFolderName
     }
 
+    /// Dev uses a real NSMenu for the menu bar item; Release keeps the SwiftUI panel
+    /// until the two have been compared in full-screen Spaces.
+    static var usesNativeStatusMenu: Bool { isDevBuild }
+
     /// Same Keychain service as the public app so API keys do not need to be re-entered.
     static var keychainService: String { publicBundleID }
 }

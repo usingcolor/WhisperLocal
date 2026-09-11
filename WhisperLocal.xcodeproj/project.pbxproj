@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		023208BE1EAB46B72E703DA0 /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 627E64201056A37A6D2516C4 /* LaunchAtLogin.swift */; };
+		033C250AAC703DBCA4DEF28C /* StatusMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112B9177AAE9237FC243C8A1 /* StatusMenuController.swift */; };
 		0419BE025A39877373BDBDFB /* UpdateInstallLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098B35DAE350505F007B6800 /* UpdateInstallLog.swift */; };
 		068E57E8FFBE78C365BBAA8C /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 345A6B541F6F5BFE772A4FF3 /* ServiceManagement.framework */; };
 		088AE0DEC7CC891C4C5F0F9D /* LongTake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9769980C86707AB396B34360 /* LongTake.swift */; };
@@ -93,6 +94,7 @@
 		098B35DAE350505F007B6800 /* UpdateInstallLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstallLog.swift; sourceTree = "<group>"; };
 		0EF650494DE428D39468170A /* SpokenLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenLanguageTests.swift; sourceTree = "<group>"; };
 		0F293F5BB80064BB9F9A755B /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
+		112B9177AAE9237FC243C8A1 /* StatusMenuController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMenuController.swift; sourceTree = "<group>"; };
 		135B2C9F9BB17CBFFB34A72A /* DictionaryCSV.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryCSV.swift; sourceTree = "<group>"; };
 		14A5CF427A1C63EF7644AD6F /* PolishPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishPipelineTests.swift; sourceTree = "<group>"; };
 		15B8009061A0563CD766CADA /* TranscriptPartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptPartTests.swift; sourceTree = "<group>"; };
@@ -291,6 +293,7 @@
 				22AEB3874E72F1200F202546 /* RecordingHUD.swift */,
 				4EEFF6A4C488C19CF87AF301 /* SessionContextEditor.swift */,
 				7E19E3CCC2AD2335AECE85AB /* SettingsView.swift */,
+				112B9177AAE9237FC243C8A1 /* StatusMenuController.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -484,6 +487,7 @@
 				3734CB93A0CCF86BB2613CEC /* SettingsStore.swift in Sources */,
 				82932228A06406AFBCB3ABDE /* SettingsView.swift in Sources */,
 				89B2E20B7DBB94048ABCD375 /* SpokenLanguage.swift in Sources */,
+				033C250AAC703DBCA4DEF28C /* StatusMenuController.swift in Sources */,
 				CE56330AA71E956A5A5EF601 /* StreamingTranscriber.swift in Sources */,
 				3FDBFD6B24BF76442776DEE2 /* TextInserter.swift in Sources */,
 				C0D2F80461008C6015974BDA /* TextPolisher.swift in Sources */,

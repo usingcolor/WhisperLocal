@@ -7,6 +7,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppleSpeechASR.sweepStaleTempAudio()
         LaunchAtLogin.shared.reconcileAfterLaunch()
         DictationController.shared.start()
+        if AppIdentity.usesNativeStatusMenu {
+            WindowOpener.shared.captureAtLaunch()
+            StatusMenuController.shared.install()
+        }
         if !AppIdentity.isDevBuild {
             AppUpdater.shared.presentPendingInstallFailureIfNeeded()
         }

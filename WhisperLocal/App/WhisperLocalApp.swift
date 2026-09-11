@@ -7,12 +7,17 @@ struct WhisperLocalApp: App {
     @StateObject private var controller = DictationController.shared
 
     var body: some Scene {
-        MenuBarExtra {
+        // Release keeps this panel. Dev replaces it with a real NSMenu while the two
+        // are compared: a panel does not hold the menu bar down in a full-screen
+        // Space, so it vanishes with the bar the moment the mouse leaves the top.
+        // Not inserted, SwiftUI parks the item off-screen, and as the first scene it
+        // still stops the Window scenes below from opening at launch.
+        MenuBarExtra(isInserted: .constant(!AppIdentity.usesNativeStatusMenu)) {
             MenuBarView(controller: controller)
         } label: {
             if AppIdentity.isDevBuild {
                 HStack(spacing: 4) {
-                    Image(systemName: menuBarIcon(for: controller.phase))
+                    Image(systemName: MenuBarIcon.symbol(for: controller))
                     Text(AppIdentity.versionSummary)
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 }
@@ -20,7 +25,7 @@ struct WhisperLocalApp: App {
                 Label {
                     Text(AppIdentity.productName)
                 } icon: {
-                    Image(systemName: menuBarIcon(for: controller.phase))
+                    Image(systemName: MenuBarIcon.symbol(for: controller))
                 }
             }
         }
@@ -61,7 +66,13 @@ struct WhisperLocalApp: App {
         .defaultPosition(.center)
     }
 
-    private func menuBarIcon(for phase: DictationPhase) -> String {
+}
+
+/// The menu bar symbol for the current state. Shared by the SwiftUI item and the
+/// NSMenu one so the two cannot drift while they are being compared.
+@MainActor
+enum MenuBarIcon {
+    static func symbol(for controller: DictationController) -> String {
         if !controller.permissions.allGranted {
             return "exclamationmark.triangle"
         }
@@ -71,7 +82,7 @@ struct WhisperLocalApp: App {
         if !controller.transcription.isReady {
             return "exclamationmark.triangle"
         }
-        switch phase {
+        switch controller.phase {
         case .waitingForMic: return "ellipsis.circle"
         case .recording: return "mic.fill"
         case .processing, .settingContext, .polishing, .inserting: return "ellipsis.circle"
@@ -81,4 +92,3 @@ struct WhisperLocalApp: App {
         }
     }
 }
-

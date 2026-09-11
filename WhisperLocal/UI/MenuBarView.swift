@@ -18,7 +18,7 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
+            MenuBarHeader(controller: controller)
             MenuSeparator()
 
             if let contextLine = controller.sessionContextLine {
@@ -80,8 +80,29 @@ struct MenuBarView: View {
         }
     }
 
+    /// A `.window` style panel does not dismiss itself the way an NSMenu does, so
+    /// every row that leads somewhere has to close it explicitly.
+    private func present(_ title: String, _ id: String) {
+        dismiss()
+        openOnly(title, id)
+    }
+
+    private func openOnly(_ title: String, _ id: String) {
+        AppWindowFocus.present(title: title) { openWindow(id: id) }
+    }
+
+}
+
+/// Name, version, and what the app is doing. Its own view so the SwiftUI panel and
+/// the NSMenu share one copy — the status line carries the secure-input and missing
+/// permission warnings, and those must read the same in both.
+struct MenuBarHeader: View {
+    @ObservedObject var controller: DictationController
+    @ObservedObject private var permissions = PermissionManager.shared
+    @ObservedObject private var hotKey = HotKeyManager.shared
+
     /// Title and version share a line, the way "Battery" and "80%" do.
-    private var header: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
                 Text(AppIdentity.productName)
@@ -103,17 +124,6 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 4)
-    }
-
-    /// A `.window` style panel does not dismiss itself the way an NSMenu does, so
-    /// every row that leads somewhere has to close it explicitly.
-    private func present(_ title: String, _ id: String) {
-        dismiss()
-        openOnly(title, id)
-    }
-
-    private func openOnly(_ title: String, _ id: String) {
-        AppWindowFocus.present(title: title) { openWindow(id: id) }
     }
 
     /// Missing permissions are the one status worth colouring — everything else is

@@ -27,6 +27,10 @@ final class LanguageCoordinator: ObservableObject {
     /// Languages the dictation-language picker offers.
     @Published private(set) var availableLanguages: [SpokenLanguage] = LanguageCoordinator.fallbackLanguages
 
+    /// Called on the main actor after every input-source switch, once `resolved`
+    /// is up to date. The controller uses it to re-decide a take in progress.
+    var onKeyboardChange: (() -> Void)?
+
     private let settings = SettingsStore.shared
     private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "language")
     private var observer: NSObjectProtocol?
@@ -47,6 +51,7 @@ final class LanguageCoordinator: ObservableObject {
             Task { @MainActor in
                 self?.keyboards = KeyboardLanguage.enabledSingleLanguageKeyboards()
                 self?.refresh()
+                self?.onKeyboardChange?()
             }
         }
         // Either setting changing can add a language to warm. @Published emits

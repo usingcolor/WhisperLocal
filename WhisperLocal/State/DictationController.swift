@@ -61,9 +61,10 @@ final class DictationController: ObservableObject {
     @Published private(set) var sessionContext: SessionContext?
     /// Frontmost app when dictation started. Passed to polish LLMs as formatting context.
     private var dictationTargetApp: TargetAppContext?
-    /// Language for the take in flight, fixed when it started. Re-reading the
-    /// keyboard at the end would let a switch mid-sentence change how the words
-    /// already spoken are transcribed.
+    /// Language for the take in flight. Decided when the key goes down and
+    /// re-decided by a keyboard switch while it is held — Caps Lock mid-take is
+    /// a correction, the same way Shift flips context mid-take. Fixed once the
+    /// recording stops, or once a long take has started turning audio into text.
     private(set) var takeLanguage: SpokenLanguage = .english
     private var recordingBeganAt: Date?
     /// Watches a running take for conditions that must end it early.
@@ -162,6 +163,9 @@ final class DictationController: ObservableObject {
         }
 
         NetworkReachability.shared.start()
+        LanguageCoordinator.shared.onKeyboardChange = { [weak self] in
+            self?.keyboardChangedDuringTake()
+        }
         LanguageCoordinator.shared.start()
 
         guard !didBootstrapSpeech else { return }
@@ -173,6 +177,24 @@ final class DictationController: ObservableObject {
                 recorder.prewarm()
             }
         }
+    }
+
+    /// A keyboard switch while the key is held re-decides the take's language, and
+    /// the badge follows. Only while recording: once the key is up the audio is
+    /// final, and once a long take has streamed a chunk that text is already in
+    /// one language — the switch is refused and the badge keeps telling the truth.
+    private func keyboardChangedDuringTake() {
+        guard LanguageCoordinator.isEnabled else { return }
+        guard phase == .recording || phase == .waitingForMic else { return }
+        let next = LanguageCoordinator.shared.languageForTake(transcription: transcription)
+        guard next != takeLanguage else { return }
+        if let streamer, !streamer.setLanguage(next) {
+            logger.info("keyboard switched to \(next.code, privacy: .public) mid-take, but a chunk is already transcribed; keeping \(self.takeLanguage.code, privacy: .public)")
+            return
+        }
+        logger.info("keyboard switched mid-take: \(self.takeLanguage.code, privacy: .public) -> \(next.code, privacy: .public)")
+        takeLanguage = next
+        hud.setLanguage(next)
     }
 
     /// What would be lost by quitting right now, phrased to finish "WhisperLocal is

@@ -127,6 +127,11 @@ final class RecordingHUDController: ObservableObject {
         scheduleHide(after: 2.0)
     }
 
+    /// A keyboard switch while the key is held changed the take's language.
+    func setLanguage(_ language: SpokenLanguage?) {
+        languageBadge = language?.nativeName
+    }
+
     func hide() {
         hideTask?.cancel()
         levelTimer?.invalidate()

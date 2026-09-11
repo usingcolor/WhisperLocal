@@ -16,7 +16,11 @@ final class StreamingTranscriber {
     private let recorder: AudioRecorder
     private let transcription: TranscriptionService
     private let dictionary: [String]
-    private let language: SpokenLanguage
+    /// The take's language. Follows the keyboard until the first chunk is handed
+    /// to the speech model; after that it is fixed, because words already turned
+    /// into text in one language cannot follow a later switch.
+    private(set) var language: SpokenLanguage
+    private(set) var languageLocked = false
     private let logger = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "speech")
 
     private var parts: [String] = []
@@ -50,6 +54,7 @@ final class StreamingTranscriber {
                     try? await Task.sleep(nanoseconds: self.pollNanoseconds)
                     continue
                 }
+                self.languageLocked = true
                 let seconds = Double(chunk.count) / 16_000
                 let started = Date()
                 let text = await self.transcribeWithRetry(chunk)
@@ -87,6 +92,15 @@ final class StreamingTranscriber {
         parts = []
         streamedSamples = 0
         completedChunks = 0
+        languageLocked = false
+    }
+
+    /// Change the language for everything not yet transcribed. Refused once a
+    /// chunk has been handed over, so one take cannot mix languages by accident.
+    func setLanguage(_ new: SpokenLanguage) -> Bool {
+        guard !languageLocked else { return false }
+        language = new
+        return true
     }
 
     /// True once anything has been transcribed ahead of time. When false the take is

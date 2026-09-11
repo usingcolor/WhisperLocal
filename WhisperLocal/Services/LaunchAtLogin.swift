@@ -77,22 +77,37 @@ final class LaunchAtLogin: ObservableObject {
     /// the next restart. Registering would appear to work and then silently fail,
     /// which is worse than refusing.
     ///
-    /// Takes the path rather than reading the bundle so the rule can be tested.
-    nonisolated static func unavailableReason(forBundleAt path: String, productName: String) -> String? {
+    /// Takes the path and volume facts rather than reading the bundle, so the rule
+    /// can be tested.
+    nonisolated static func unavailableReason(
+        forBundleAt path: String,
+        onReadOnlyVolume: Bool,
+        productName: String
+    ) -> String? {
         // Gatekeeper runs a quarantined app from a randomised read-only image whose
         // path is gone the moment the app quits. Everything under it looks like a
         // normal /private/var path, so the marker directory is the only tell.
         if path.contains("/AppTranslocation/") {
             return "macOS is running this copy from a temporary location. Move \(productName) to your Applications folder, then reopen it."
         }
-        if path.hasPrefix("/Volumes/") {
+        // A mounted disk image is read-only; an external drive is not. Testing the
+        // /Volumes/ prefix instead refused the login item for anyone who keeps
+        // apps on an external drive — a durable path — and told them it was a
+        // disk image.
+        if onReadOnlyVolume {
             return "This copy is running from a disk image. Drag \(productName) to your Applications folder, then open it from there."
         }
         return nil
     }
 
     private static var unavailableReason: String? {
-        unavailableReason(forBundleAt: Bundle.main.bundlePath, productName: AppIdentity.productName)
+        let url = Bundle.main.bundleURL
+        let readOnly = (try? url.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly ?? false
+        return unavailableReason(
+            forBundleAt: url.path,
+            onReadOnlyVolume: readOnly,
+            productName: AppIdentity.productName
+        )
     }
 
     func refresh() {

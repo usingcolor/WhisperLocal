@@ -2,8 +2,8 @@ import ServiceManagement
 import XCTest
 
 final class LaunchAtLoginLocationTests: XCTestCase {
-    private func reason(_ path: String) -> String? {
-        LaunchAtLogin.unavailableReason(forBundleAt: path, productName: "WhisperLocal")
+    private func reason(_ path: String, readOnly: Bool = false) -> String? {
+        LaunchAtLogin.unavailableReason(forBundleAt: path, onReadOnlyVolume: readOnly, productName: "WhisperLocal")
     }
 
     func testAnInstalledCopyCanRegister() {
@@ -25,7 +25,7 @@ final class LaunchAtLoginLocationTests: XCTestCase {
 
     func testACopyRunningFromAMountedImageIsRefused() {
         XCTAssertEqual(
-            reason("/Volumes/WhisperLocal 0.2.0/WhisperLocal.app"),
+            reason("/Volumes/WhisperLocal 0.2.0/WhisperLocal.app", readOnly: true),
             "This copy is running from a disk image. Drag WhisperLocal to your Applications folder, then open it from there."
         )
     }
@@ -35,14 +35,17 @@ final class LaunchAtLoginLocationTests: XCTestCase {
     func testTheMessageNamesTheRunningApp() {
         let path = "/Volumes/Install/WhisperLocal Dev.app"
         XCTAssertEqual(
-            LaunchAtLogin.unavailableReason(forBundleAt: path, productName: "WhisperLocal Dev"),
+            LaunchAtLogin.unavailableReason(forBundleAt: path, onReadOnlyVolume: true, productName: "WhisperLocal Dev"),
             "This copy is running from a disk image. Drag WhisperLocal Dev to your Applications folder, then open it from there."
         )
     }
 
-    /// A path that merely mentions a volume elsewhere is not a mounted copy.
-    func testOnlyTheVolumesPrefixCounts() {
-        XCTAssertNil(reason("/Applications/Volumes Tool/WhisperLocal.app"))
+    /// Apps kept on an external drive live under /Volumes too, and that path is as
+    /// durable as /Applications. Only a read-only volume — a mounted image — is
+    /// refused. The prefix test this replaced refused both.
+    func testAnExternalDriveIsNotADiskImage() {
+        XCTAssertNil(reason("/Volumes/External/Applications/WhisperLocal.app", readOnly: false))
+        XCTAssertNotNil(reason("/Volumes/WhisperLocal 0.2.0/WhisperLocal.app", readOnly: true))
     }
 }
 

@@ -11,6 +11,58 @@ enum PolishTask: Equatable, Sendable {
 struct PolishedText: Sendable {
     var text: String
     var contextRelevant: Bool? = nil
+    /// What a cloud request cost, as the provider reported it. Nothing in the app
+    /// reads it; the polish benchmark uses it to price each model.
+    var usage: PolishUsage? = nil
+}
+
+/// Tokens one cloud request used, normalised across providers.
+///
+/// The two report differently: OpenAI's prompt count includes cached tokens and
+/// its completion count includes reasoning, while Anthropic reports cache reads
+/// and writes separately from the rest of the input. Here `inputTokens` is always
+/// the whole input and `outputTokens` everything generated, hidden reasoning too.
+struct PolishUsage: Sendable, Equatable, Codable {
+    var inputTokens: Int
+    var outputTokens: Int
+    /// Part of `inputTokens` read from the provider's prompt cache.
+    var cachedInputTokens: Int = 0
+    /// Part of `inputTokens` written to the cache (Anthropic bills these higher).
+    var cacheWriteTokens: Int = 0
+    /// Part of `outputTokens` spent reasoning, never shown.
+    var reasoningTokens: Int = 0
+
+    /// `usage` from a Chat Completions response.
+    static func openAI(_ usage: [String: Any]?) -> PolishUsage? {
+        guard let usage else { return nil }
+        let prompt = usage["prompt_tokens_details"] as? [String: Any]
+        let completion = usage["completion_tokens_details"] as? [String: Any]
+        return PolishUsage(
+            inputTokens: intValue(usage["prompt_tokens"]),
+            outputTokens: intValue(usage["completion_tokens"]),
+            cachedInputTokens: intValue(prompt?["cached_tokens"]),
+            reasoningTokens: intValue(completion?["reasoning_tokens"])
+        )
+    }
+
+    /// `usage` from a Messages response.
+    static func anthropic(_ usage: [String: Any]?) -> PolishUsage? {
+        guard let usage else { return nil }
+        let read = intValue(usage["cache_read_input_tokens"])
+        let written = intValue(usage["cache_creation_input_tokens"])
+        return PolishUsage(
+            inputTokens: intValue(usage["input_tokens"]) + read + written,
+            outputTokens: intValue(usage["output_tokens"]),
+            cachedInputTokens: read,
+            cacheWriteTokens: written
+        )
+    }
+
+    static func intValue(_ value: Any?) -> Int {
+        if let number = value as? Int { return number }
+        if let number = value as? NSNumber { return number.intValue }
+        return 0
+    }
 }
 
 protocol TextPolisher: Sendable {
@@ -147,8 +199,32 @@ enum PolishOutput {
     }
 
     /// Scale cloud / on-device output caps with the input. Dictation should not hit a 1k floor.
+    ///
+    /// English runs about four characters to the token, so half the character
+    /// count leaves plenty of room. Korean, Japanese and Chinese run closer to one
+    /// token per character, where half the characters is *less* than the cleaned
+    /// text needs: a 400-character Korean take came back cut short from every
+    /// Claude model, and was pasted with no cleanup at all.
     static func maxOutputTokens(for text: String) -> Int {
-        min(max(text.count / 2, 256), 4096)
+        let dense = text.unicodeScalars.reduce(0) { $0 + (isDenseScript($1) ? 1 : 0) }
+        let budget = dense * 2 + (text.unicodeScalars.count - dense) / 2
+        return min(max(budget, 256), 4096)
+    }
+
+    /// Scripts that cost about a token per character: Hangul, kana and Han.
+    private static func isDenseScript(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x1100...0x11FF,   // Hangul Jamo
+             0x3040...0x30FF,   // Hiragana, Katakana
+             0x3130...0x318F,   // Hangul Compatibility Jamo
+             0x3400...0x4DBF,   // CJK Extension A
+             0x4E00...0x9FFF,   // CJK Unified Ideographs
+             0xAC00...0xD7AF,   // Hangul syllables
+             0xF900...0xFAFF:   // CJK Compatibility Ideographs
+            return true
+        default:
+            return false
+        }
     }
 
     static func openaiHitLengthCap(_ finishReason: String?) -> Bool {

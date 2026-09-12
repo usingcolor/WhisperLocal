@@ -131,6 +131,7 @@ targets:
       - path: WhisperLocal/Services/Polishers/CleanupPrompt.swift
       - path: WhisperLocal/Services/Polishers/DictionaryCSV.swift
       - path: WhisperLocal/Services/Polishers/CloudModelCatalog.swift
+      - path: WhisperLocal/Services/Polishers/AnthropicPolisher.swift
       - path: WhisperLocal/State/DictationLogStore.swift
       - path: WhisperLocal/State/DictationLogExport.swift
       - path: WhisperLocal/Services/TextInserter.swift

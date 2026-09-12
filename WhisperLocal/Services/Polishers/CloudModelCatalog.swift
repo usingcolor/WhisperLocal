@@ -37,12 +37,15 @@ final class CloudModelCatalog: ObservableObject {
         CloudModelOption(id: "gpt-4o", displayName: "GPT-4o", note: "quality")
     ]
 
+    /// Claude 3.5 Haiku used to be here as the legacy option. The API now answers
+    /// 404 for it, so picking it failed every take — a model that cannot run is
+    /// worse than no entry at all. **Update models** still offers whatever the
+    /// account actually has.
     static let anthropicRecommended: [CloudModelOption] = [
         CloudModelOption(id: "claude-haiku-4-5", displayName: "Claude Haiku 4.5", note: "fast / cheap"),
         CloudModelOption(id: "claude-sonnet-5", displayName: "Claude Sonnet 5", note: "balanced"),
         CloudModelOption(id: "claude-opus-5", displayName: "Claude Opus 5", note: "highest quality"),
-        CloudModelOption(id: "claude-sonnet-4-5", displayName: "Claude Sonnet 4.5"),
-        CloudModelOption(id: "claude-3-5-haiku-latest", displayName: "Claude 3.5 Haiku", note: "legacy")
+        CloudModelOption(id: "claude-sonnet-4-5", displayName: "Claude Sonnet 4.5")
     ]
 
     static let openAIDefault = "gpt-4o-mini"
@@ -173,6 +176,33 @@ final class CloudModelCatalog: ObservableObject {
         if model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4") { return false }
         if model.hasPrefix("gpt-5") { return false }
         return true
+    }
+
+    /// Claude 5 rejects `temperature` outright — "`temperature` is deprecated for
+    /// this model" — so sending it failed every single take for anyone who picked
+    /// Sonnet 5 or Opus 5. Newer families are assumed to be the same; anything
+    /// this rule gets wrong is caught by the retry in AnthropicPolisher.
+    nonisolated static func supportsMessagesTemperature(_ model: String) -> Bool {
+        (claudeMajorVersion(model) ?? 0) < 5
+    }
+
+    /// Claude 5 thinks before answering unless told not to. Cleaning a transcript
+    /// is not a reasoning task, and thinking tokens count against `max_tokens`,
+    /// so a long take could spend its whole budget thinking and come back cut
+    /// short — the cleanup lost, the raw text pasted instead.
+    nonisolated static func thinksByDefault(_ model: String) -> Bool {
+        (claudeMajorVersion(model) ?? 0) >= 5
+    }
+
+    /// 5 for claude-sonnet-5, 4 for claude-haiku-4-5, nil for anything that does
+    /// not name its family that way — including claude-3-5-haiku, where the
+    /// version comes first.
+    nonisolated static func claudeMajorVersion(_ model: String) -> Int? {
+        let model = model.lowercased()
+        guard let name = model.range(of: #"^claude-(?:opus|sonnet|haiku)-"#, options: .regularExpression) else {
+            return nil
+        }
+        return Int(model[name.upperBound...].prefix { $0.isNumber })
     }
 
     nonisolated static func prettyDisplayName(for id: String) -> String {

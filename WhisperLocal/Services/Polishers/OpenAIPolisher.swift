@@ -65,6 +65,6 @@ struct OpenAIPolisher: TextPolisher {
         let message = choices?.first?["message"] as? [String: Any]
         let content = (message?["content"] as? String).map(PolishOutput.sanitize)
         guard let content, !content.isEmpty else { throw PolisherError.emptyResponse }
-        return PolishedText(text: content)
+        return PolishedText(text: content, usage: PolishUsage.openAI(json?["usage"] as? [String: Any]))
     }
 }

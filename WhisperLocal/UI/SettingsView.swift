@@ -3,6 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
+    case general
     case dictation
     case language
     case polish
@@ -16,6 +17,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .general: return "General"
         case .dictation: return "Dictation"
         case .language: return "Language"
         case .polish: return "Polish"
@@ -29,6 +31,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .general: return "gearshape"
         case .dictation: return "mic"
         case .language: return "globe"
         case .polish: return "wand.and.stars"
@@ -62,6 +65,8 @@ struct SettingsView: View {
     @ObservedObject private var models = CloudModelCatalog.shared
     @ObservedObject private var gemma = GemmaMLXPolisher.shared
 
+    /// General sits first in the sidebar by convention, but Settings opens on the
+    /// page people came for.
     @State private var page: SettingsPage = .dictation
     @State private var openAIKeyDraft = ""
     @State private var anthropicKeyDraft = ""
@@ -72,6 +77,10 @@ struct SettingsView: View {
     @State private var customAppKind = TargetAppContext.Kind.other
     @State private var dictionaryFileNote: String?
     @State private var promptCopyNote: String?
+    /// Read when the Dictation page appears rather than in the body: asking Core
+    /// Audio for the device list on every redraw would run it while the speech
+    /// status spinner animates.
+    @State private var inputDevices: [AudioInputDevice] = []
 
     var body: some View {
         NavigationSplitView {
@@ -99,6 +108,7 @@ struct SettingsView: View {
         } detail: {
             Group {
                 switch page {
+                case .general: generalPane
                 case .dictation: dictationPane
                 case .language: languagePane
                 case .polish: polishPane
@@ -128,7 +138,10 @@ struct SettingsView: View {
         }
     }
 
-    private var dictationPane: some View {
+    /// What the app does, as opposed to what a take does. Opening at login and
+    /// keeping a log are true whether or not you ever press the key, so they sit
+    /// here rather than halfway down the Dictation page.
+    private var generalPane: some View {
         settingsForm {
             if AppIdentity.isDevBuild {
                 Section {
@@ -138,7 +151,29 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Section {
+
+            Section("Startup") {
+                startupControls
+            }
+
+            Section("History") {
+                Toggle("Keep a dictation log", isOn: $settings.enableDictationLog)
+                helpText(
+                    "Saves recent takes as local JSON, text only.",
+                    more: "Turning this off skips new entries; the existing log is not deleted. Polish can reuse these takes to match your style, but that stays off until you enable it on the Polish page."
+                )
+                Button("Open dictation log…") {
+                    AppWindowFocus.present(title: "Dictation Log") {
+                        openWindow(id: "log")
+                    }
+                }
+            }
+        }
+    }
+
+    private var dictationPane: some View {
+        settingsForm {
+            Section("Hotkey") {
                 Picker("Hotkey", selection: $hotKey.selectedKey) {
                     ForEach(HotKeyManager.KeyChoice.allCases) { key in
                         Text(key.displayName).tag(key)
@@ -153,7 +188,13 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 helpText("Hold Shift during a take to capture session context instead of pasting. Set it up under Polish.")
+            }
 
+            Section("Microphone") {
+                microphoneControls
+            }
+
+            Section("Speech model") {
                 Picker("Speech model", selection: Binding(
                     get: { settings.asrModel },
                     set: { newValue in
@@ -189,16 +230,10 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
-                Toggle("Insert trailing space", isOn: $settings.insertTrailingSpace)
-                Toggle("Ignore playback", isOn: $settings.enableEchoCancellation)
-                helpText(
-                    "Music and video playing on this Mac stay out of your transcript. Their volume dips while you talk.",
-                    more: "Echo cancellation and noise suppression, applied to the microphone. Off by default: it changes what the speech model hears whether or not anything is playing, and it does nothing on headphones, where the mic never hears playback at all. Weakest when two voices overlap, so someone talking in a video can still get through while you are talking."
-                )
             }
 
-            Section("Startup") {
-                startupControls
+            Section("Inserted text") {
+                Toggle("Insert trailing space", isOn: $settings.insertTrailingSpace)
             }
 
             Section("Last dictation") {
@@ -221,18 +256,40 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
-                Toggle("Keep a dictation log", isOn: $settings.enableDictationLog)
-                helpText(
-                    "Saves recent takes as local JSON, text only.",
-                    more: "Turning this off skips new entries; the existing log is not deleted. Polish can reuse these takes to match your style, but that stays off until you enable it on the Polish page."
-                )
-                Button("Open dictation log…") {
-                    AppWindowFocus.present(title: "Dictation Log") {
-                        openWindow(id: "log")
-                    }
-                }
             }
         }
+    }
+
+    /// Which microphone takes are recorded from. The same list the HUD chip and the
+    /// menu bar show, so choosing here is the same act as choosing there.
+    @ViewBuilder
+    private var microphoneControls: some View {
+        Picker("Microphone", selection: Binding(
+            get: { settings.preferredInputDeviceUID ?? "" },
+            set: { controller.recorder.useInput(uid: $0.isEmpty ? nil : $0) }
+        )) {
+            Text(InputMenu.followTitle).tag("")
+            ForEach(inputDevices) { device in
+                Text(device.isSystemDefault ? "\(device.name)  ·  system default" : device.name)
+                    .tag(device.uid)
+            }
+            // A device chosen while it was plugged in and gone since still needs a
+            // row, or the picker would show an empty selection and say nothing.
+            if let chosen = settings.preferredInputDeviceUID,
+               !inputDevices.contains(where: { $0.uid == chosen }) {
+                Text(InputMenu.missingTitle).tag(chosen)
+            }
+        }
+        .onAppear { inputDevices = AudioInputSelection.inputDevices() }
+        helpText(
+            "Takes follow System Settings unless you pick one here.",
+            more: "Picking a microphone here also switches the one in progress, so you can change it mid-take. One case is decided for you: when the default input is a Bluetooth headset that is also playing, takes use the built-in or a wired mic instead — opening the headset's mic would drop the music to narrowband and change its volume. Choosing that headset here overrides the rule."
+        )
+        Toggle("Ignore playback", isOn: $settings.enableEchoCancellation)
+        helpText(
+            "Music and video playing on this Mac stay out of your transcript. Their volume dips while you talk.",
+            more: "Echo cancellation and noise suppression, applied to the microphone. Off by default: it changes what the speech model hears whether or not anything is playing, and it does nothing on headphones, where the mic never hears playback at all. Weakest when two voices overlap, so someone talking in a video can still get through while you are talking."
+        )
     }
 
     private var polishPane: some View {

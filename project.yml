@@ -145,6 +145,7 @@ targets:
       - path: WhisperLocal/Services/SpokenLanguage.swift
       - path: WhisperLocal/Services/Polishers/PolishChunker.swift
       - path: WhisperLocal/App/AppIdentity.swift
+      - path: WhisperLocal/UI/HUDPlacement.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

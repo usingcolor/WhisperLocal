@@ -129,6 +129,12 @@ final class RecordingHUDController: ObservableObject {
     private var hideTask: Task<Void, Never>?
     private var levelTimer: Timer?
     private var screenObserver: NSObjectProtocol?
+    private var moveObserver: NSObjectProtocol?
+    /// Where we last put the panel ourselves. `NSWindow.didMoveNotification` fires
+    /// for our own `setFrameOrigin` exactly as it does for a drag, and carries
+    /// nothing to tell them apart — so a move that landed where we aimed is ours,
+    /// and anything else was the user's hand.
+    private var lastProgrammaticOrigin: NSPoint?
 
     init() {
         // Position is otherwise only computed when the HUD is shown or updated, so
@@ -149,6 +155,9 @@ final class RecordingHUDController: ObservableObject {
     deinit {
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
+        }
+        if let moveObserver {
+            NotificationCenter.default.removeObserver(moveObserver)
         }
     }
 
@@ -314,8 +323,62 @@ final class RecordingHUDController: ObservableObject {
         if #unavailable(macOS 26.0) {
             panel.appearance = NSAppearance(named: .darkAqua)
         }
+        // Dev only while the placement is being tried out. This is a gate for the
+        // trial, not a decision — it has to be flipped on for Release once the
+        // drag has been lived with, rather than left here shipping a difference
+        // between the two builds that nobody chose.
+        panel.isMovableByWindowBackground = Self.isRepositionable
+        if Self.isRepositionable {
+            moveObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didMoveNotification,
+                object: panel,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.rememberIfUserMoved() }
+            }
+        }
         self.panel = panel
         positionOnActiveScreen()
+    }
+
+    /// Dragging the HUD somewhere else, and remembering where.
+    static var isRepositionable: Bool { AppIdentity.isDevBuild }
+
+    private static let anchorXKey = "hudAnchorX"
+    private static let anchorYKey = "hudAnchorY"
+
+    /// Nil until the HUD has been dragged: absent keys and a stored 0 are not the
+    /// same thing, and `double(forKey:)` cannot tell them apart on its own.
+    private var customAnchor: CGPoint? {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: Self.anchorXKey) != nil,
+              defaults.object(forKey: Self.anchorYKey) != nil else { return nil }
+        return CGPoint(
+            x: defaults.double(forKey: Self.anchorXKey),
+            y: defaults.double(forKey: Self.anchorYKey)
+        )
+    }
+
+    /// Puts the HUD back where it ships, for anyone who has dragged it somewhere
+    /// they regret.
+    func resetPosition() {
+        UserDefaults.standard.removeObject(forKey: Self.anchorXKey)
+        UserDefaults.standard.removeObject(forKey: Self.anchorYKey)
+        positionOnActiveScreen()
+    }
+
+    private func rememberIfUserMoved() {
+        guard Self.isRepositionable, let panel else { return }
+        let origin = panel.frame.origin
+        if let aimed = lastProgrammaticOrigin,
+           abs(origin.x - aimed.x) < 0.5, abs(origin.y - aimed.y) < 0.5 { return }
+        // The screen the panel is on, not the one the pointer is on: a drag can
+        // finish with the pointer past the edge of the display it started from.
+        guard let screen = panel.screen ?? Self.activeScreen(),
+              let anchor = HUDPlacement.anchor(forOrigin: origin, in: screen.visibleFrame) else { return }
+        UserDefaults.standard.set(Double(anchor.x), forKey: Self.anchorXKey)
+        UserDefaults.standard.set(Double(anchor.y), forKey: Self.anchorYKey)
+        lastProgrammaticOrigin = origin
     }
 
     /// The widest the row has ever needed, which is what the HUD reserves space
@@ -352,14 +415,25 @@ final class RecordingHUDController: ObservableObject {
     private func positionOnActiveScreen() {
         guard let panel, let screen = Self.activeScreen() else { return }
         let frame = screen.visibleFrame
-        // Centre the reserved width, not this phase's width. Narrower phases sit a
-        // little left of centre; every phase and every take sits in one place,
-        // which is the point.
-        let reserved = max(reservedWidth, panel.frame.width)
-        let centred = frame.midX - reserved / 2
-        // A row wider than the screen has nowhere to go; staying on it wins.
-        let x = max(frame.minX + 8, min(centred, frame.maxX - panel.frame.width - 8))
-        panel.setFrameOrigin(NSPoint(x: x, y: frame.minY + 48))
+        let size = panel.frame.size
+        let origin: CGPoint
+        if Self.isRepositionable, let anchor = customAnchor {
+            // The user put the left edge where they wanted it, so it is pinned
+            // outright and the reserved width does not come into it.
+            origin = HUDPlacement.origin(forAnchor: anchor, panelSize: size, in: frame)
+        } else {
+            // Centre the reserved width, not this phase's width. Narrower phases sit
+            // a little left of centre; every phase and every take sits in one place,
+            // which is the point.
+            let reserved = max(reservedWidth, size.width)
+            origin = HUDPlacement.clamp(
+                CGPoint(x: frame.midX - reserved / 2, y: frame.minY + HUDPlacement.defaultBottomInset),
+                panelSize: size,
+                in: frame
+            )
+        }
+        lastProgrammaticOrigin = origin
+        panel.setFrameOrigin(origin)
     }
 }
 
@@ -486,6 +560,20 @@ private final class HUDInputMenuTarget: NSObject {
 private final class HUDPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// Belt and braces for the drag. `isMovableByWindowBackground` only fires for a
+    /// mouse-down the content view left alone, and an `NSHostingView` does not
+    /// reliably leave one alone. Anything SwiftUI declines still travels up the
+    /// responder chain to here, and `performDrag` runs the same drag loop AppKit
+    /// would have. Whichever of the two gets the event, the HUD moves; the buttons
+    /// keep their own clicks either way, because a click they handle never arrives.
+    override func mouseDown(with event: NSEvent) {
+        guard isMovableByWindowBackground else {
+            super.mouseDown(with: event)
+            return
+        }
+        performDrag(with: event)
+    }
 }
 
 struct RecordingHUDView: View {
@@ -498,6 +586,18 @@ struct RecordingHUDView: View {
     private let margin: CGFloat = 10
 
     var body: some View {
+        // Only where the HUD can actually be dragged: an empty context menu is a
+        // right-click that does nothing, which is worse than no menu at all.
+        if RecordingHUDController.isRepositionable {
+            row.contextMenu {
+                Button("Reset Position") { controller.resetPosition() }
+            }
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         HUDGlassGroup {
             // 16pt apart, not 8: closer than that and the container tries to
             // bridge two capsules into one shape, which renders as a dark wedge

@@ -20,6 +20,19 @@ final class RecordingHUDController: ObservableObject {
     @Published var detailIsWarning = false
     /// Called when the user clicks the HUD's cancel button.
     var onCancel: (() -> Void)?
+    /// Called when a microphone is chosen from the HUD. Nil means "follow System
+    /// Settings" — the same thing the app did before there was a choice.
+    var onSelectInput: ((String?) -> Void)?
+
+    /// Microphones offered by the chip's menu, and the name the chip shows.
+    @Published private(set) var inputDevices: [AudioInputDevice] = []
+    @Published private(set) var activeInputName: String?
+    /// The pointer is on the HUD, so it stays up: that is the only way to reach
+    /// the microphone menu after a take has finished.
+    @Published private(set) var isHovering = false
+    private var hidePending = false
+    /// Menu items hold their target weakly, so the target has to outlive the call.
+    private var menuTarget: HUDInputMenuTarget?
 
     /// Transcription and polish can be abandoned; an insert already in flight cannot
     /// be usefully stopped, so the button goes away for it.
@@ -28,6 +41,76 @@ final class RecordingHUDController: ObservableObject {
         case .processing, .settingContext, .polishing: return true
         default: return false
         }
+    }
+
+    /// Re-read the connected microphones. Cheap enough to do whenever the HUD
+    /// appears, and devices come and go while the app is running.
+    func refreshInputs() {
+        inputDevices = AudioInputSelection.inputDevices()
+        activeInputName = AudioInputSelection.activeName(
+            preferredUID: SettingsStore.shared.preferredInputDeviceUID,
+            in: inputDevices
+        )
+    }
+
+    /// The chip is worth showing while the mic is open or the take has just
+    /// finished. During transcription and polish the same corner carries Cancel,
+    /// and by then the microphone no longer matters to this take.
+    var showsInputChip: Bool {
+        switch phase {
+        case .waitingForMic, .recording, .success, .successNote: return activeInputName != nil
+        default: return false
+        }
+    }
+
+    func setHovering(_ hovering: Bool) {
+        isHovering = hovering
+        if hovering {
+            // Keep it up: the pointer arriving is the request.
+            hideTask?.cancel()
+        } else if hidePending {
+            hidePending = false
+            scheduleHide(after: 0.4)
+        }
+    }
+
+    func selectInput(uid: String?) {
+        onSelectInput?(uid)
+        refreshInputs()
+    }
+
+    /// The microphone list, as a real NSMenu.
+    ///
+    /// A SwiftUI `Menu` wants a key window to track in, and this panel is never
+    /// key — that is what keeps ⌘V landing in the app being dictated into. An
+    /// NSMenu tracks on its own, so it opens over a panel that never takes focus.
+    func showInputMenu() {
+        guard let panel, let view = panel.contentView else { return }
+        refreshInputs()
+        let chosen = SettingsStore.shared.preferredInputDeviceUID
+        let target = HUDInputMenuTarget { [weak self] uid in
+            Task { @MainActor in self?.selectInput(uid: uid) }
+        }
+        menuTarget = target
+
+        let menu = NSMenu()
+        menu.appearance = NSAppearance(named: .darkAqua)
+        for (index, entry) in InputMenu.items(devices: inputDevices, chosenUID: chosen).enumerated() {
+            if index == 1 { menu.addItem(.separator()) }
+            let item = NSMenuItem(
+                title: entry.title,
+                action: entry.isEnabled ? #selector(HUDInputMenuTarget.pick(_:)) : nil,
+                keyEquivalent: ""
+            )
+            item.target = entry.isEnabled ? target : nil
+            item.isEnabled = entry.isEnabled
+            item.representedObject = entry.uid
+            item.state = entry.isChecked ? .on : .off
+            menu.addItem(item)
+        }
+
+        let inWindow = panel.convertPoint(fromScreen: NSEvent.mouseLocation)
+        menu.popUp(positioning: nil, at: view.convert(inWindow, from: nil), in: view)
     }
 
     func setDetail(_ text: String?, warning: Bool = false) {
@@ -74,9 +157,16 @@ final class RecordingHUDController: ObservableObject {
         self.phase = phase
         self.isContextCapture = contextCapture
         self.languageBadge = language?.nativeName
+        hidePending = false
+        isHovering = false
+        refreshInputs()
         ensurePanel()
         positionOnActiveScreen()
-        panel?.ignoresMouseEvents = !isCancellable
+        // Mouse events are accepted the whole time the HUD is up, not just when
+        // Cancel is there: hovering is what keeps it open long enough to change
+        // the microphone. It only covers its own 330×76 at the bottom of the
+        // screen, and only while a take is running or just finished.
+        panel?.ignoresMouseEvents = false
         panel?.orderFrontRegardless()
 
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak levelPublisher] timer in
@@ -99,7 +189,7 @@ final class RecordingHUDController: ObservableObject {
         self.phase = phase
         ensurePanel()
         positionOnActiveScreen()
-        panel?.ignoresMouseEvents = !isCancellable
+        panel?.ignoresMouseEvents = false
         panel?.orderFrontRegardless()
     }
 
@@ -109,7 +199,7 @@ final class RecordingHUDController: ObservableObject {
 
     func flashSuccess(note: String? = nil) {
         setDetail(nil)
-        panel?.ignoresMouseEvents = true
+        refreshInputs()
         if let note, !note.isEmpty {
             phase = .successNote(note)
             scheduleHide(after: 1.6)
@@ -122,7 +212,6 @@ final class RecordingHUDController: ObservableObject {
     func flashError(_ message: String) {
         isContextCapture = false
         setDetail(nil)
-        panel?.ignoresMouseEvents = true
         phase = .error(message)
         scheduleHide(after: 2.0)
     }
@@ -141,6 +230,8 @@ final class RecordingHUDController: ObservableObject {
         audioLevel = 0
         isContextCapture = false
         languageBadge = nil
+        isHovering = false
+        hidePending = false
     }
 
     private func scheduleHide(after seconds: Double) {
@@ -148,8 +239,25 @@ final class RecordingHUDController: ObservableObject {
         hideTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
+            // Hovering means the pointer is on its way to the microphone menu.
+            // Hold the HUD open and hide once it leaves.
+            if isHovering {
+                hidePending = true
+                return
+            }
             hide()
         }
+    }
+
+    /// The row of capsules hugs its content, so the panel follows it rather than
+    /// the other way round. Called from the view whenever the layout changes.
+    func fitPanel(to size: CGSize) {
+        guard let panel, size.width > 1, size.height > 1 else { return }
+        let wanted = NSSize(width: ceil(size.width), height: ceil(size.height))
+        let current = panel.frame.size
+        guard abs(current.width - wanted.width) > 0.5 || abs(current.height - wanted.height) > 0.5 else { return }
+        panel.setContentSize(wanted)
+        positionOnActiveScreen()
     }
 
     private func ensurePanel() {
@@ -157,7 +265,10 @@ final class RecordingHUDController: ObservableObject {
 
         let hosting = HUDHostingView(rootView: RecordingHUDView(controller: self))
         hosting.sizingOptions = []
-        hosting.frame = NSRect(x: 0, y: 0, width: 300, height: 72)
+        // A starting size only: the view reports what it actually needs and the
+        // panel is resized to fit.
+        hosting.frame = NSRect(x: 0, y: 0, width: 620, height: 64)
+        hosting.autoresizingMask = [.width, .height]
 
         let panel = HUDPanel(
             contentRect: hosting.frame,
@@ -181,12 +292,15 @@ final class RecordingHUDController: ObservableObject {
         panel.ignoresMouseEvents = true
         panel.becomesKeyOnlyIfNeeded = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        // Every colour in this view — headline, level meter, border, the cancel
-        // button's disc — is chosen for a dark material. In Light Mode
-        // .ultraThinMaterial resolves light and all of it washes out, the headline
-        // worst of all. Pinning the appearance keeps the design coherent instead of
-        // half-adapting seven colours to a look this HUD was never drawn for.
-        panel.appearance = NSAppearance(named: .darkAqua)
+        // Pinned dark below macOS 26, where the panel is a hand-drawn dark material
+        // and every colour in it was chosen for that. On 26 the appearance follows
+        // the system so the glass sits at the brightness of whatever is behind it:
+        // pinning dark tinted the capsule interiors darker than the background,
+        // which is the one thing that stops glass reading as glass. The rim is
+        // quieter in Light Mode as a result, and that is the right trade.
+        if #unavailable(macOS 26.0) {
+            panel.appearance = NSAppearance(named: .darkAqua)
+        }
         self.panel = panel
         positionOnActiveScreen()
     }
@@ -214,9 +328,9 @@ private struct HUDSpinner: View {
     var body: some View {
         Circle()
             .trim(from: 0, to: 0.72)
-            .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .stroke(HUDInk.primary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
             .frame(width: 14, height: 14)
-            .shadow(color: .black.opacity(0.45), radius: 1.5)
+            .shadow(color: HUDInk.shadow, radius: 1.5)
             .rotationEffect(.degrees(spinning ? 360 : 0))
             .animation(.linear(duration: 0.85).repeatForever(autoreverses: false), value: spinning)
             .onAppear { spinning = true }
@@ -224,28 +338,72 @@ private struct HUDSpinner: View {
     }
 }
 
-/// Liquid Glass where the OS has it, the older material treatment below.
+/// One Liquid Glass capsule.
 ///
-/// The manual version needs a dark scrim: a material alone lightens toward whatever
-/// is behind it, so over a white document the HUD drifted to mid-grey and took the
-/// white text with it. Real glass handles that itself, and brings its own edge
-/// highlight, so the hand-drawn border goes with the scrim on macOS 26.
-private struct HUDSurface: ViewModifier {
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-    }
-
+/// The HUD used to be a single 330×76 plate, and that is why it read as a frosted
+/// slab: a large glass element is mostly interior, and interior is the one place
+/// glass can only blur. What people recognise as Liquid Glass happens at the
+/// edges — the lensing, the specular rim, and the content visible between
+/// elements — so the HUD is now a row of capsules that each hug their content.
+///
+/// `.regular` rather than `.clear`: the clear variant has no adaptive behaviour
+/// and, tested over a page of text, frosted *harder* than regular did in a
+/// transparent panel. Regular keeps the content behind legible through the glass
+/// and flips light or dark with the material.
+private struct HUDPill: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            content.glassEffect(.clear, in: shape)
+            content.glassEffect(.regular, in: Capsule())
         } else {
             content
                 .background {
-                    shape.fill(.ultraThinMaterial)
-                        .overlay(shape.fill(Color.black.opacity(0.42)))
+                    Capsule().fill(.ultraThinMaterial)
+                        .overlay(Capsule().fill(Color.black.opacity(0.42)))
                 }
-                .overlay(shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
         }
+    }
+}
+
+/// Capsules inside one container sample the same backdrop and can morph into one
+/// another. Apple's own samples group their glass this way, and the documentation
+/// is blunt about why: glass cannot sample other glass.
+private struct HUDGlassGroup<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 0) { content }
+        } else {
+            content
+        }
+    }
+}
+
+/// Labels on Liquid Glass get a vibrant treatment and flip with the material, so
+/// on macOS 26 they use the semantic colours and carry no shadow. Below that the
+/// panel is a dark material by hand, where white plus a shadow is what reads.
+enum HUDInk {
+    static var primary: Color {
+        if #available(macOS 26.0, *) { return .primary }
+        return .white
+    }
+
+    static var secondary: Color {
+        if #available(macOS 26.0, *) { return .secondary }
+        return Color.white.opacity(0.75)
+    }
+
+    static var warning: Color {
+        if #available(macOS 26.0, *) { return .orange }
+        return .yellow
+    }
+
+    /// Clear on 26: a drop shadow under glass-vibrant text is what made it look
+    /// smudged rather than crisp.
+    static var shadow: Color {
+        if #available(macOS 26.0, *) { return .clear }
+        return .black.opacity(0.55)
     }
 }
 
@@ -264,6 +422,20 @@ private final class HUDHostingView: NSHostingView<RecordingHUDView> {
     }
 }
 
+/// Carries a menu click back to the controller. NSMenuItem dispatches through
+/// the Objective-C runtime, so the target has to be an NSObject.
+private final class HUDInputMenuTarget: NSObject {
+    private let run: (String?) -> Void
+
+    init(run: @escaping (String?) -> Void) {
+        self.run = run
+    }
+
+    @objc func pick(_ sender: NSMenuItem) {
+        run(sender.representedObject as? String)
+    }
+}
+
 /// HUD must never become key — otherwise ⌘V lands in WhisperLocal instead of Cursor / Chrome.
 private final class HUDPanel: NSPanel {
     override var canBecomeKey: Bool { false }
@@ -273,93 +445,132 @@ private final class HUDPanel: NSPanel {
 struct RecordingHUDView: View {
     @ObservedObject var controller: RecordingHUDController
     @State private var cancelHovering = false
+    @State private var micHovering = false
+
+    /// Breathing room around the row, so a capsule's lensing and the merge between
+    /// two of them are never clipped by the panel edge.
+    private let margin: CGFloat = 10
 
     var body: some View {
-        HStack(spacing: 12) {
-            statusIcon
-            VStack(alignment: .leading, spacing: 4) {
+        HUDGlassGroup {
+            // 16pt apart, not 8: closer than that and the container tries to
+            // bridge two capsules into one shape, which renders as a dark wedge
+            // between them rather than the liquid merge it is going for.
+            HStack(spacing: 16) {
+                if let badge = controller.languageBadge {
+                    pill { Text(badge).font(.system(size: 10, weight: .bold)) }
+                }
+                statusPill
+                if controller.showsInputChip {
+                    micPill
+                }
+                if controller.isCancellable {
+                    cancelPill
+                }
+                if controller.isContextCapture {
+                    pill { Text("CONTEXT").font(.system(size: 10, weight: .bold)) }
+                } else if AppIdentity.isDevBuild {
+                    pill { Text("DEV \(AppIdentity.versionSummary)").font(.system(size: 10, weight: .bold)) }
+                }
+            }
+            .foregroundStyle(HUDInk.primary)
+        }
+        .padding(margin)
+        // Take the row's own ideal width rather than whatever the panel currently
+        // proposes. Without this the GeometryReader below reports the panel's size
+        // back to the panel — a no-op — and the row is squeezed into it, which
+        // clipped the leftmost capsule clean off: the language badge vanished.
+        .fixedSize()
+        // The row decides the size; the panel follows it.
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size, initial: true) { _, size in
+                        controller.fitPanel(to: size)
+                    }
+            }
+        }
+        // Hovering holds the HUD open past its own timeout, which is the only way
+        // to reach the microphone menu once a take has finished.
+        .onHover { controller.setHovering($0) }
+    }
+
+    // MARK: - Capsules
+
+    private var statusPill: some View {
+        pill {
+            HStack(spacing: 9) {
+                statusIcon
                 Text(headline)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(controller.detailIsWarning ? Color.yellow : .white)
-                    .shadow(color: .black.opacity(0.55), radius: 2, y: 0.5)
-                    .lineLimit(2)
+                    .foregroundStyle(controller.detailIsWarning ? HUDInk.warning : HUDInk.primary)
+                    .shadow(color: HUDInk.shadow, radius: 2, y: 0.5)
+                    .lineLimit(1)
+                    .fixedSize()
                 if controller.phase == .recording {
                     ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.15))
+                        Capsule().fill(.primary.opacity(0.15))
                         Capsule()
                             .fill(controller.isContextCapture ? Color.orange : Color.accentColor)
-                            .frame(width: max(4, 168 * CGFloat(min(1, controller.audioLevel))))
+                            .frame(width: max(4, 96 * CGFloat(min(1, controller.audioLevel))))
                     }
-                    .frame(width: 168, height: 4)
+                    .frame(width: 96, height: 4)
                 }
-            }
-            Spacer(minLength: 0)
-            if controller.isCancellable {
-                Button {
-                    controller.onCancel?()
-                } label: {
-                    // Two-tone: a solid disc carries the contrast and the glyph is
-                    // punched out of it, so it stays legible whatever the material
-                    // picks up from behind the panel. A single translucent white
-                    // glyph vanished against a light background.
-                    Image(systemName: "xmark.circle.fill")
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(
-                            Color.black.opacity(0.7),
-                            Color.white.opacity(cancelHovering ? 1 : 0.85)
-                        )
-                        .font(.system(size: 17))
-                }
-                .buttonStyle(.plain)
-                .onHover { cancelHovering = $0 }
-                .help("Cancel this dictation")
-                .accessibilityLabel("Cancel this dictation")
-            }
-        }
-        .padding(.horizontal, 16)
-        // A badge in either top corner takes the first ~23pt, and a two-line
-        // message used to run underneath it — the DEV and CONTEXT badges already
-        // did, and the language badge sits on the other side. With a badge, the
-        // content starts below the badge row. With none, the layout is unchanged.
-        .padding(.top, hasTopBadge ? 22 : 12)
-        .padding(.bottom, hasTopBadge ? 6 : 12)
-        .frame(width: 300, height: 72)
-        .modifier(HUDSurface())
-        .overlay(alignment: .topLeading) {
-            if let badge = controller.languageBadge {
-                Text(badge)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.95), in: Capsule())
-                    .padding(8)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if controller.isContextCapture {
-                Text("CONTEXT")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.95), in: Capsule())
-                    .padding(8)
-            } else if AppIdentity.isDevBuild {
-                Text("DEV \(AppIdentity.versionSummary)")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.95), in: Capsule())
-                    .padding(8)
             }
         }
     }
 
-    private var hasTopBadge: Bool {
-        controller.languageBadge != nil || controller.isContextCapture || AppIdentity.isDevBuild
+    /// Names the microphone this take is on, and opens the list of the others.
+    private var micPill: some View {
+        Button {
+            controller.showInputMenu()
+        } label: {
+            pill {
+                HStack(spacing: 5) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 9, weight: .bold))
+                    Text(controller.activeInputName ?? "Microphone")
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 150, alignment: .leading)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 7, weight: .black))
+                        .opacity(micHovering ? 0.9 : 0.6)
+                }
+                .foregroundStyle(HUDInk.primary)
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { micHovering = $0 }
+        .help("Choose the microphone")
+        .accessibilityLabel("Microphone: \(controller.activeInputName ?? "system default"). Opens the list of microphones.")
+    }
+
+    private var cancelPill: some View {
+        Button {
+            controller.onCancel?()
+        } label: {
+            pill(horizontal: 10) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(HUDInk.primary.opacity(cancelHovering ? 1 : 0.75))
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { cancelHovering = $0 }
+        .help("Cancel this dictation")
+        .accessibilityLabel("Cancel this dictation")
+    }
+
+    private func pill<Content: View>(
+        horizontal: CGFloat = 13,
+        @ViewBuilder _ content: () -> Content
+    ) -> some View {
+        content()
+            .padding(.horizontal, horizontal)
+            .padding(.vertical, 9)
+            .modifier(HUDPill())
     }
 
     private var headline: String {
@@ -393,7 +604,7 @@ struct RecordingHUDView: View {
         case .waitingForMic:
             ProgressView()
                 .controlSize(.small)
-                .tint(.white)
+                .tint(HUDInk.primary)
         case .recording:
             Circle()
                 .fill(controller.isContextCapture ? Color.orange : Color.red)
@@ -409,10 +620,10 @@ struct RecordingHUDView: View {
                 .foregroundStyle(.green)
         case .successNote:
             Image(systemName: "checkmark.circle")
-                .foregroundStyle(.yellow)
+                .foregroundStyle(HUDInk.warning)
         case .error:
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.yellow)
+                .foregroundStyle(HUDInk.warning)
         case .idle:
             Image(systemName: "mic.fill")
                 .foregroundStyle(.secondary)

@@ -131,6 +131,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         })
         menu.addItem(.separator())
 
+        menu.addItem(microphoneItem())
+        menu.addItem(.separator())
+
         menu.addItem(ActionItem("Reload Speech Model") { [weak self] in
             guard let self else { return }
             Task {
@@ -199,6 +202,34 @@ private struct HeaderHost: View {
             .frame(width: StatusMenuController.contentWidth + 28, alignment: .leading)
             .padding(.top, 2)
             .onAppear { WindowOpener.shared.capture(openWindow) }
+    }
+}
+
+extension StatusMenuController {
+    /// The same microphone list the HUD chip opens, reachable between takes.
+    @MainActor
+    fileprivate func microphoneItem() -> NSMenuItem {
+        let devices = AudioInputSelection.inputDevices()
+        let chosen = SettingsStore.shared.preferredInputDeviceUID
+        let parent = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        for (index, entry) in InputMenu.items(devices: devices, chosenUID: chosen).enumerated() {
+            if index == 1 { submenu.addItem(.separator()) }
+            guard entry.isEnabled else {
+                let item = NSMenuItem(title: entry.title, action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                submenu.addItem(item)
+                continue
+            }
+            let uid = entry.uid
+            let item = ActionItem(entry.title) { [weak self] in
+                self?.controller.recorder.useInput(uid: uid)
+            }
+            item.state = entry.isChecked ? .on : .off
+            submenu.addItem(item)
+        }
+        parent.submenu = submenu
+        return parent
     }
 }
 

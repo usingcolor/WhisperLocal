@@ -152,6 +152,12 @@ final class DictationController: ObservableObject {
         hud.onCancel = { [weak self] in
             self?.abandonProcessing()
         }
+        hud.onSelectInput = { [weak self] uid in
+            // Mid-take this rebuilds the input graph and keeps recording into the
+            // same buffer: a gap of a few hundred milliseconds, then the rest of
+            // the sentence on the new microphone, all in one transcript.
+            self?.recorder.useInput(uid: uid)
+        }
         hotKey.onIntentModifierChanged = { [weak self] intent in
             self?.setRecordingIntent(intent)
         }

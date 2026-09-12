@@ -15,6 +15,9 @@ struct MenuBarView: View {
     @ObservedObject private var updater = AppUpdater.shared
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
+    /// Read when the menu opens rather than in the body: asking Core Audio for the
+    /// device list on every redraw would run it while the level meter animates.
+    @State private var inputItems: [InputMenuItem] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -51,6 +54,15 @@ struct MenuBarView: View {
             }
             MenuSeparator()
 
+            MenuSectionLabel("Microphone")
+            ForEach(inputItems) { item in
+                MenuRow(item.title, shortcut: item.isChecked ? "✓" : nil, isEnabled: item.isEnabled) {
+                    controller.recorder.useInput(uid: item.uid)
+                    refreshInputs()
+                }
+            }
+            MenuSeparator()
+
             MenuRow("Reload Speech Model") {
                 dismiss()
                 Task {
@@ -71,6 +83,7 @@ struct MenuBarView: View {
         .padding(.vertical, 6)
         .frame(width: 292)
         .onAppear {
+            refreshInputs()
             controller.start()
             if controller.showOnboarding {
                 // openOnly: present() dismisses, and dismissing the panel from inside
@@ -82,6 +95,13 @@ struct MenuBarView: View {
 
     /// A `.window` style panel does not dismiss itself the way an NSMenu does, so
     /// every row that leads somewhere has to close it explicitly.
+    private func refreshInputs() {
+        inputItems = InputMenu.items(
+            devices: AudioInputSelection.inputDevices(),
+            chosenUID: controller.settings.preferredInputDeviceUID
+        )
+    }
+
     private func present(_ title: String, _ id: String) {
         dismiss()
         openOnly(title, id)

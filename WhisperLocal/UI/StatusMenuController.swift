@@ -107,6 +107,20 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         WindowOpener.shared.open(title: "Welcome", id: "onboarding")
     }
 
+    /// A menu item that opens a window only to be looked at.
+    ///
+    /// An ellipsis is a promise: Apple's rule is that it means the command needs
+    /// more from you before it can act, which is true of "Settings…" and "Edit
+    /// Context…" and not of two windows that just show you something. Finder says
+    /// "Get Info", not "Get Info…", for the same reason.
+    ///
+    /// Dev drops them first so the two can be looked at side by side — the same
+    /// staging the native menu went through. Unlike that one, this has to be
+    /// flipped afterwards rather than left sitting behind the gate.
+    private func viewerLabel(_ title: String) -> String {
+        AppIdentity.isDevBuild ? title : "\(title)…"
+    }
+
     /// Rebuilt on every open, so it always describes the moment it was opened.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
@@ -139,10 +153,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             WindowOpener.shared.open(title: AppIdentity.settingsWindowTitle, id: "settings")
             self?.controller.showSettings = true
         })
-        menu.addItem(ActionItem("Dictation Log…") {
+        menu.addItem(ActionItem(viewerLabel("Dictation Log")) {
             WindowOpener.shared.open(title: "Dictation Log", id: "log")
         })
-        menu.addItem(ActionItem("Permissions / Onboarding…") { [weak self] in
+        menu.addItem(ActionItem(viewerLabel("Permissions / Onboarding")) { [weak self] in
             WindowOpener.shared.open(title: "Welcome", id: "onboarding")
             self?.controller.showOnboarding = true
         })

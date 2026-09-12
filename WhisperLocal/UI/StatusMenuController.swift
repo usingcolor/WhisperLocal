@@ -36,10 +36,28 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
         item.menu = menu
         item.button?.setAccessibilityLabel(AppIdentity.productName)
+        // ⌘-dragging the item out of the menu bar quits, which is what the app has
+        // always done and the one gesture the SwiftUI item handled for us. Without
+        // this the item simply refuses to move; with `.removalAllowed` and no
+        // observer it would vanish and leave the app running with the hotkey live
+        // and no way back to Settings or Quit.
+        item.behavior = .removalAllowed
+        removalObservation = item.observe(\.isVisible, options: [.new]) { item, _ in
+            guard !item.isVisible else { return }
+            Task { @MainActor in
+                MenuBarRemoval.quit()
+                // Reached only when the user cancelled the quit to keep a take.
+                // The item is already gone by then, so put it back rather than
+                // leaving them with no menu bar at all.
+                item.isVisible = true
+            }
+        }
         statusItem = item
         observeState()
         updateButton()
     }
+
+    private var removalObservation: NSKeyValueObservation?
 
     // MARK: - Icon
 

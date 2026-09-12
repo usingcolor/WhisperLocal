@@ -59,7 +59,12 @@ enum AppIdentity {
 
     /// Dev uses a real NSMenu for the menu bar item; Release keeps the SwiftUI panel
     /// until the two have been compared in full-screen Spaces.
-    static var usesNativeStatusMenu: Bool { isDevBuild }
+    /// Both channels now. The SwiftUI panel it replaced is a window pinned to the
+    /// icon rather than a menu, and in a full-screen Space the system only holds
+    /// the menu bar down for a menu — so the bar hid the moment the pointer moved
+    /// and took the panel with it. The NSMenu was written for that and ran in Dev
+    /// while the two were compared; this is the comparison settled.
+    static var usesNativeStatusMenu: Bool { true }
 
     /// Same Keychain service as the public app so API keys do not need to be re-entered.
     static var keychainService: String { publicBundleID }

@@ -254,7 +254,7 @@ jobs:
 
           Prefer not to bypass Gatekeeper? Build from source — a locally built app is never quarantined. See the README.
 
-          Verify your download against `SHA256SUMS`, published with this release.
+          Verify your download against the SHA-256 printed at the bottom of these notes.
           ADHOC_EOF
           fi
 
@@ -281,6 +281,15 @@ jobs:
           sys.stdout.write(parts[0].rstrip() + "\n\n## " + matches[0].rstrip() + "\n")
           PY_EOF
 
-          gh release create "$tag" dist/*.dmg dist/SHA256SUMS \
+          # The DMG is the only release asset on purpose. shields.io's only
+          # cumulative downloads badge counts every asset in every release, so
+          # publishing the checksum here too made the README claim twice the
+          # real number of downloads. It is printed in the notes instead, where
+          # it can be read without downloading anything.
+          printf '\n---\n\nSHA-256 of `%s`:\n\n    %s\n' \
+            "$(basename dist/*.dmg)" "$(shasum -a 256 dist/*.dmg | awk '{print $1}')" \
+            >> "$notes"
+
+          gh release create "$tag" dist/*.dmg \
             --title "WhisperLocal ${version}" \
             --notes-file "$notes"

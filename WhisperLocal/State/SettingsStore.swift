@@ -146,6 +146,12 @@ final class SettingsStore: ObservableObject {
     /// the preferred language. People install keyboards they never dictate in.
     @Published var followedKeyboardLanguages: [String] { didSet { persist(followedKeyboardLanguages, key: "followedKeyboardLanguages") } }
     @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
+    /// Give every HUD capsule the same height instead of letting each one be sized
+    /// by its own text. The capsules carry four different font sizes behind the
+    /// same vertical padding, which leaves their heights a few points apart — a
+    /// difference the glass rims make plain. On by default; the toggle is here to
+    /// be looked at rather than because both are worth keeping.
+    @Published var levelHUDCapsules: Bool { didSet { persist(levelHUDCapsules, key: "levelHUDCapsules") } }
     /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
     @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
     @Published var recentPolishLogCountRaw: Int { didSet { persist(recentPolishLogCountRaw, key: "recentPolishLogCount") } }
@@ -361,6 +367,7 @@ final class SettingsStore: ObservableObject {
                 : []
         }
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
+        levelHUDCapsules = defaults.object(forKey: "levelHUDCapsules") as? Bool ?? true
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int
             ?? CleanupPrompt.defaultRecentPolishLogCount

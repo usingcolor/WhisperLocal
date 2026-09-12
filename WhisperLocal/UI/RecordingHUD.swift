@@ -578,8 +578,15 @@ private final class HUDPanel: NSPanel {
 
 struct RecordingHUDView: View {
     @ObservedObject var controller: RecordingHUDController
+    @ObservedObject private var settings = SettingsStore.shared
     @State private var cancelHovering = false
     @State private var micHovering = false
+
+    /// The tallest a capsule gets on its own: 13pt semibold sets a 16pt line, and
+    /// the padding adds 9 above and below. Levelling to the tallest means nothing
+    /// has to shrink — the shorter capsules grow into it and the text keeps the
+    /// room it had.
+    private static let levelledPillHeight: CGFloat = 34
 
     /// Breathing room around the row, so a capsule's lensing and the merge between
     /// two of them are never clipped by the panel edge.
@@ -715,7 +722,13 @@ struct RecordingHUDView: View {
     ) -> some View {
         content()
             .padding(.horizontal, horizontal)
+            // Equal padding around unequal text gives unequal capsules: 10pt bold
+            // lands at 30, 11pt medium at 31, 13pt semibold at 34. Centred in the
+            // row, that splits into a couple of points of mismatch at the top and
+            // the same again at the bottom — invisible on plain text, plain to see
+            // on four glass rims sitting side by side.
             .padding(.vertical, 9)
+            .frame(height: settings.levelHUDCapsules ? Self.levelledPillHeight : nil)
             .modifier(HUDPill())
     }
 

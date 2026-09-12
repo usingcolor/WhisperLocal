@@ -116,11 +116,11 @@ Everything else is optional and switchable in Settings: other speech models (Whi
 
 | Cleanup engine | Takes with a hard failure | Judged against GPT-4o Mini | Typical wait | Per 1,000 takes |
 |---|---|---|---|---|
-| **GPT-5.6 Luna** — what the OpenAI picker starts on | 5% | **55%** | 1.1s | $0.21 |
+| **GPT-5.6 Luna** — the OpenAI API default | 5% | **55%** | 1.1s | $0.21 |
 | GPT-5.6 Sol | **0%** | **55%** | 1.2s | $3.76 |
 | Claude Opus 5 | **0%** | 54% | 1.5s | $3.59 |
 | GPT-5.6 Terra | 3% | 54% | 1.1s | $1.92 |
-| **Claude Haiku 4.5** — what the Anthropic picker starts on | 4% | 50% | **0.8s** | $1.00 |
+| **Claude Haiku 4.5** — the Anthropic API default | 4% | 50% | **0.8s** | $1.00 |
 | Claude Sonnet 5 | 5% | 49% | 1.2s | $2.74 |
 | GPT-4o Mini | 11% | — | **0.6s** | **$0.12** |
 | GPT-4.1 Mini | 14% | 46% | 0.7s | $0.32 |

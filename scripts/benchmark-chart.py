@@ -5,7 +5,7 @@ ROWS = [  # engine, failure %, price label, kind
     ("Claude Opus 5",        0,  "$3.59", "cloud"),
     ("GPT-5.6 Sol",          0,  "$3.76", "cloud"),
     ("GPT-5.6 Terra",        3,  "$1.92", "cloud"),
-    ("Claude Haiku 4.5",     4,  "$1.00", "cloud"),
+    ("Claude Haiku 4.5",     4,  "$1.00", "anthropicpick"),
     ("GPT-5.6 Luna",         5,  "$0.21", "cloudpick"),
     ("Claude Sonnet 5",      5,  "$2.74", "cloud"),
     ("GPT-4o Mini",         11,  "$0.12", "cloud"),
@@ -46,17 +46,19 @@ def svg(theme):
         add(f'<text x="{gx:.0f}" y="{TOP-20}" text-anchor="middle" fill="{c["muted"]}" font-size="11">{pct}%</text>')
     for i, (name, pct, price, kind) in enumerate(ROWS):
         y = TOP + i * ROW_H
-        fill = {"cloud": c["accent"], "cloudpick": c["accent"],
+        fill = {"cloud": c["accent"], "cloudpick": c["accent"], "anthropicpick": c["accent"],
                 "device": c["warm"], "default": c["warm"], "none": c["pale"]}[kind]
-        weight = ' font-weight="700"' if kind in ("cloudpick", "default") else ""
+        marked = kind in ("cloudpick", "anthropicpick", "default")
+        weight = ' font-weight="700"' if marked else ""
         add(f'<text x="{BAR_X-12}" y="{y+4}" text-anchor="end" fill="{c["ink"]}"{weight}>{name}</text>')
         width = max(pct * SCALE, 2.5)
         add(f'<rect x="{BAR_X}" y="{y-8}" width="{width:.1f}" height="15" rx="1.5" fill="{fill}" '
-            f'{"stroke=\'"+(c["accent"] if kind == "cloudpick" else c["warm"])+"\' stroke-width=\'2\'" if kind in ("cloudpick", "default") else ""}/>')
+            f'{"stroke=\'"+(c["warm"] if kind == "default" else c["accent"])+"\' stroke-width=\'2\'" if marked else ""}/>')
         add(f'<text x="{BAR_X + width + 9:.0f}" y="{y+4}" fill="{c["ink"]}"{weight}>{pct}%</text>')
         add(f'<text x="{PRICE_X}" y="{y+4}" text-anchor="end" fill="{c["muted"]}"{weight}>{price}</text>')
         note = {"default": ("← the default", c["warm"]),
-                "cloudpick": ("← what the OpenAI picker starts on", c["accent"])}.get(kind)
+                "cloudpick": ("← OpenAI API default", c["accent"]),
+                "anthropicpick": ("← Anthropic API default", c["accent"])}.get(kind)
         if note:
             add(f'<text x="{BAR_X + width + 52:.0f}" y="{y+4}" fill="{note[1]}" font-weight="700">{note[0]}</text>')
     footer = TOP + len(ROWS) * ROW_H + 20

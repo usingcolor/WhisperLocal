@@ -22,15 +22,16 @@
 <rect x="196" y="108" width="18.3" height="15" rx="1.5" fill="#7AA2FF" />
 <text x="223" y="120" fill="#E5E9F0">3%</text>
 <text x="752" y="120" text-anchor="end" fill="#98A2B3">$1.92</text>
-<text x="184" y="147" text-anchor="end" fill="#E5E9F0">Claude Haiku 4.5</text>
-<rect x="196" y="135" width="24.4" height="15" rx="1.5" fill="#7AA2FF" />
-<text x="229" y="147" fill="#E5E9F0">4%</text>
-<text x="752" y="147" text-anchor="end" fill="#98A2B3">$1.00</text>
+<text x="184" y="147" text-anchor="end" fill="#E5E9F0" font-weight="700">Claude Haiku 4.5</text>
+<rect x="196" y="135" width="24.4" height="15" rx="1.5" fill="#7AA2FF" stroke='#7AA2FF' stroke-width='2'/>
+<text x="229" y="147" fill="#E5E9F0" font-weight="700">4%</text>
+<text x="752" y="147" text-anchor="end" fill="#98A2B3" font-weight="700">$1.00</text>
+<text x="272" y="147" fill="#7AA2FF" font-weight="700">← Anthropic API default</text>
 <text x="184" y="174" text-anchor="end" fill="#E5E9F0" font-weight="700">GPT-5.6 Luna</text>
 <rect x="196" y="162" width="30.5" height="15" rx="1.5" fill="#7AA2FF" stroke='#7AA2FF' stroke-width='2'/>
 <text x="236" y="174" fill="#E5E9F0" font-weight="700">5%</text>
 <text x="752" y="174" text-anchor="end" fill="#98A2B3" font-weight="700">$0.21</text>
-<text x="278" y="174" fill="#7AA2FF" font-weight="700">← what the OpenAI picker starts on</text>
+<text x="278" y="174" fill="#7AA2FF" font-weight="700">← OpenAI API default</text>
 <text x="184" y="201" text-anchor="end" fill="#E5E9F0">Claude Sonnet 5</text>
 <rect x="196" y="189" width="30.5" height="15" rx="1.5" fill="#7AA2FF" />
 <text x="236" y="201" fill="#E5E9F0">5%</text>

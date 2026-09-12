@@ -195,13 +195,7 @@ struct SettingsView: View {
                     "Music and video playing on this Mac stay out of your transcript. Their volume dips while you talk.",
                     more: "Echo cancellation and noise suppression, applied to the microphone. Off by default: it changes what the speech model hears whether or not anything is playing, and it does nothing on headphones, where the mic never hears playback at all. Weakest when two voices overlap, so someone talking in a video can still get through while you are talking."
                 )
-                Toggle("Use the built-in mic while headphones are playing", isOn: $settings.preferBuiltInMicOverBluetooth)
-                helpText(
-                    "Keeps music and video playing at full quality while you dictate.",
-                    more: "AirPods and most Bluetooth headsets cannot play high-quality audio and record at the same time — opening their mic drops playback to narrowband mono until the take ends. Their mic is also a worse input for speech recognition than the built-in array. Turn this off if you dictate away from your Mac and need the headset mic."
-                )
             }
-
 
             Section("Startup") {
                 startupControls

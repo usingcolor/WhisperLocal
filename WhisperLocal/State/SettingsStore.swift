@@ -130,8 +130,10 @@ final class SettingsStore: ObservableObject {
     @Published var openAIModel: String { didSet { persist(openAIModel, key: "openAIModel") } }
     @Published var anthropicModel: String { didSet { persist(anthropicModel, key: "anthropicModel") } }
     @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
-    /// Use the built-in mic instead of a Bluetooth headset that is also playing audio.
-    @Published var preferBuiltInMicOverBluetooth: Bool { didSet { persist(preferBuiltInMicOverBluetooth, key: "preferBuiltInMicOverBluetooth") } }
+    /// UID of the microphone the user picked, or empty to follow System Settings.
+    /// Stored by UID rather than by the numeric device id, which is reassigned on
+    /// reconnect, and by UID rather than by name, because two devices can share one.
+    @Published var preferredInputDeviceUIDRaw: String { didSet { persist(preferredInputDeviceUIDRaw, key: "preferredInputDevice") } }
     /// Dev-only experiment: macOS voice processing (echo cancellation). Off until
     /// its effect on transcript quality has actually been measured.
     @Published var enableEchoCancellation: Bool { didSet { persist(enableEchoCancellation, key: "enableEchoCancellation") } }
@@ -189,6 +191,11 @@ final class SettingsStore: ObservableObject {
     var localPolishEngine: LocalPolishEngine {
         get { LocalPolishEngine(rawValue: localPolishEngineRaw) ?? .appleIntelligence }
         set { localPolishEngineRaw = newValue.rawValue }
+    }
+
+    var preferredInputDeviceUID: String? {
+        get { preferredInputDeviceUIDRaw.isEmpty ? nil : preferredInputDeviceUIDRaw }
+        set { preferredInputDeviceUIDRaw = newValue ?? "" }
     }
 
     var recentPolishLogCount: Int {
@@ -339,7 +346,7 @@ final class SettingsStore: ObservableObject {
         openAIModel = defaults.string(forKey: "openAIModel") ?? CloudModelCatalog.openAIDefault
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
         insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
-        preferBuiltInMicOverBluetooth = defaults.object(forKey: "preferBuiltInMicOverBluetooth") as? Bool ?? true
+        preferredInputDeviceUIDRaw = defaults.string(forKey: "preferredInputDevice") ?? ""
         enableEchoCancellation = defaults.object(forKey: "enableEchoCancellation") as? Bool ?? false
         preferredLanguageCode = defaults.string(forKey: "preferredLanguage") ?? "en"
         if let stored = defaults.array(forKey: "followedKeyboardLanguages") as? [String] {

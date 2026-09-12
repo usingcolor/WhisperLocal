@@ -236,6 +236,11 @@ final class AudioRecorder: ObservableObject {
             converterSourceFormat: hardwareFormat
         )
 
+        // Playback either side of the mic opening. People report music jumping in
+        // volume when a take starts, and nothing in this app touches output — so
+        // the log has to say whether the system moved the output device, its
+        // volume, or its sample rate underneath us.
+        let outputBefore = AudioOutputSnapshot.current()
         do {
             try engine.start()
         } catch {
@@ -243,6 +248,8 @@ final class AudioRecorder: ObservableObject {
             throw AudioRecorderError.engineStartFailed(error as NSError)
         }
         refreshCachedInputRoute()
+        logInputDevice(of: input)
+        logOutputChange(from: outputBefore)
 
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -288,18 +295,39 @@ final class AudioRecorder: ObservableObject {
         }
     }
 
-    /// Point the input unit at the built-in mic when the default input is a
-    /// Bluetooth device that is also playing. Otherwise leave the user's choice
-    /// alone — someone across the room needs the headset mic, and that is their
-    /// call to make in Settings.
+    /// Point the input unit at the device this take should use.
+    ///
+    /// An explicit choice wins outright: someone who picked a mic means it, even
+    /// if it is the headset that will drop playback to narrowband. With no choice
+    /// made, the old rule stands — swap a Bluetooth device that is also playing
+    /// for a microphone off the radio, so music stays in A2DP and ASR gets full band.
     private func applyPreferredInputDevice(to input: AVAudioInputNode) {
-        guard SettingsStore.shared.preferBuiltInMicOverBluetooth else { return }
-        let route = AudioInputRoute.current()
-        guard AudioInputSelection.defaultInputWouldDisruptPlayback(route),
-              let builtIn = AudioInputSelection.builtInInputDevice(),
-              let unit = input.audioUnit else { return }
+        let connected = AudioInputSelection.inputDevices()
+        let plan = AudioInputSelection.plan(
+            preferredUID: SettingsStore.shared.preferredInputDeviceUID,
+            connected: connected,
+            route: AudioInputRoute.current()
+        )
+        switch plan {
+        case .systemDefault:
+            return
+        case .chosen(let uid):
+            guard let device = connected.first(where: { $0.uid == uid }) else { return }
+            if pin(device.id, to: input) {
+                logger.info("Recording from the chosen mic \(device.name, privacy: .public)")
+            }
+        case .protectPlayback(let uid):
+            guard let device = connected.first(where: { $0.uid == uid }) else { return }
+            if pin(device.id, to: input) {
+                logger.info("Using \(device.name, privacy: .public) so Bluetooth playback stays in A2DP")
+            }
+        }
+    }
 
-        var deviceID = builtIn
+    @discardableResult
+    private func pin(_ device: AudioDeviceID, to input: AVAudioInputNode) -> Bool {
+        guard let unit = input.audioUnit else { return false }
+        var deviceID = device
         let status = AudioUnitSetProperty(
             unit,
             kAudioOutputUnitProperty_CurrentDevice,
@@ -308,10 +336,65 @@ final class AudioRecorder: ObservableObject {
             &deviceID,
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
-        if status == noErr {
-            logger.info("Using built-in mic so Bluetooth playback stays in A2DP")
-        } else {
-            logger.error("Could not select the built-in mic (\(status, privacy: .public))")
+        guard status == noErr else {
+            logger.error("Could not select input device \(device, privacy: .public) (\(status, privacy: .public))")
+            return false
+        }
+        return true
+    }
+
+    /// Move a take in progress onto another microphone without ending it.
+    ///
+    /// The graph has to be rebuilt — the device belongs to the input unit, and its
+    /// format may differ — so there is a gap of a few hundred milliseconds where
+    /// nothing is captured. What was already said is untouched: the sample buffer
+    /// is not cleared here, only in `start()`, so the take continues into the same
+    /// recording and the words either side of the gap end up in one transcript.
+    func useInput(uid: String?) {
+        let wasRecording = isRecording
+        SettingsStore.shared.preferredInputDeviceUID = uid
+        guard isEngineLive || wasRecording else { return }
+        logger.info("Switching microphone mid-take: \(uid ?? "system default", privacy: .public)")
+        do {
+            try startEngine()
+            isRecording = wasRecording
+        } catch {
+            logger.error("Could not switch microphone: \(error.localizedDescription, privacy: .public)")
+            inputFailed = true
+        }
+    }
+
+    /// Which microphone this take is really on, asked of the input unit itself
+    /// rather than inferred from settings.
+    private func logInputDevice(of input: AVAudioInputNode) {
+        guard let unit = input.audioUnit else { return }
+        var device = AudioDeviceID()
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = AudioUnitGetProperty(
+            unit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &device,
+            &size
+        )
+        guard status == noErr else { return }
+        logger.info("Recording from \(AudioInputSelection.label(of: device), privacy: .public)")
+    }
+
+    /// Logs the output device before the mic opened, and again once the system has
+    /// had a moment to react to it.
+    private func logOutputChange(from before: AudioOutputSnapshot) {
+        logger.info("Output before mic: \(before.summary, privacy: .public)")
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard let self else { return }
+            let after = AudioOutputSnapshot.current()
+            if after == before {
+                self.logger.info("Output after mic: unchanged")
+            } else {
+                self.logger.info("Output after mic: \(after.summary, privacy: .public) — CHANGED")
+            }
         }
     }
 

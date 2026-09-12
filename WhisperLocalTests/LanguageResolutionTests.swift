@@ -115,3 +115,23 @@ final class EnglishPromptGoldenTests: XCTestCase {
         XCTAssertEqual(hex, Self.baselineSHA256, "English prompts changed from the pre-language version")
     }
 }
+
+/// The language block carries the cross-script dictionary rule, and only it does —
+/// English prompts have to stay byte-identical, which the golden test checks.
+final class LanguageNoticeDictionaryTests: XCTestCase {
+    func testNoticeAsksForTheDictionarySpellingBack() {
+        let notice = CleanupPrompt.languageNotice(SpokenLanguage(code: "ko"))
+        XCTAssertTrue(notice.contains("restore the dictionary's own spelling"))
+        XCTAssertTrue(notice.contains("Never translate"))
+    }
+
+    func testEnglishTakesCarryNoNotice() {
+        let message = CleanupPrompt.userMessage(
+            for: .dictation,
+            text: "hello there",
+            language: .english
+        )
+        XCTAssertFalse(message.contains("<language"))
+        XCTAssertFalse(message.contains("restore the dictionary"))
+    }
+}

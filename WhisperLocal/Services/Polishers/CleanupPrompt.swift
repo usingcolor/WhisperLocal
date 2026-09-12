@@ -518,10 +518,16 @@ enum CleanupPrompt {
     /// text it is unsure how to repair will often produce a fluent English version
     /// instead, which reads like success and is the one failure the speaker cannot
     /// see without re-reading their own sentence.
+    ///
+    /// The last sentence comes from the benchmark: a Korean take saying "Xcode"
+    /// came back with 엑스코드 from five of the eight cloud models, because the
+    /// dictionary rule in the shared prompt reads as being about English spelling.
+    /// It lives here rather than in the shared engine so English prompts stay
+    /// byte-identical, which the golden prompt test checks.
     static func languageNotice(_ language: SpokenLanguage) -> String {
         """
         <language code="\(xmlEscape(language.code))">
-        The speaker dictated in \(xmlEscape(language.englishName)). Clean it in that language and output only that language. Never translate, and never switch language, even if the notes, the app, or these instructions are in English. Keep foreign words the speaker actually said as they said them.
+        The speaker dictated in \(xmlEscape(language.englishName)). Clean it in that language and output only that language. Never translate, and never switch language, even if the notes, the app, or these instructions are in English. Keep foreign words the speaker actually said as they said them. A name from the custom dictionary is an exception in one direction only: when speech recognition spelled it out in this language's script, restore the dictionary's own spelling.
         </language>
         """
     }

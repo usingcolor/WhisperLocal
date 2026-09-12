@@ -46,3 +46,16 @@ final class AnthropicTemperatureTests: XCTestCase {
     }
 }
 
+/// A default the picker cannot show is a default nobody can get back to.
+final class CloudDefaultModelTests: XCTestCase {
+    @MainActor
+    func testDefaultsAreModelsThePickerOffers() {
+        XCTAssertTrue(CloudModelCatalog.openAIRecommended.contains { $0.id == CloudModelCatalog.openAIDefault })
+        XCTAssertTrue(CloudModelCatalog.anthropicRecommended.contains { $0.id == CloudModelCatalog.anthropicDefault })
+    }
+
+    @MainActor
+    func testTheRetiredModelIsGone() {
+        XCTAssertFalse(CloudModelCatalog.anthropicRecommended.contains { $0.id.contains("3-5-haiku") })
+    }
+}

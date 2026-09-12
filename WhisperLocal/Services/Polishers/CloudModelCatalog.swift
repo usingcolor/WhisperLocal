@@ -48,7 +48,12 @@ final class CloudModelCatalog: ObservableObject {
         CloudModelOption(id: "claude-sonnet-4-5", displayName: "Claude Sonnet 4.5")
     ]
 
-    static let openAIDefault = "gpt-4o-mini"
+    /// The polish benchmark settled this one: on 125 dictations GPT-4o Mini left a
+    /// hard failure in 11% of takes against Luna's 5%, and the judge preferred
+    /// Luna in 55% of head-to-head pairs. Luna costs about 2 cents more per
+    /// thousand takes and answers half a second later, which for text you have
+    /// just finished speaking is not a cost worth 6 points of accuracy.
+    static let openAIDefault = "gpt-5.6-luna"
     static let anthropicDefault = "claude-haiku-4-5"
 
     private static let openAICacheKey = "openAIFetchedModelsJSON"

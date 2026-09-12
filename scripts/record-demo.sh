@@ -50,13 +50,19 @@ if [[ ! -s "$raw" ]]; then
 fi
 
 # 720 wide, even dimensions for yuv420p, no audio, faststart so it plays inline.
+#
+# No audio on purpose: the room is not what anyone wants to hear. The MP4 shipped
+# in assets/ has a voice-over laid over this footage afterwards, so re-running this
+# script produces the silent take and the narration has to be added back before it
+# replaces assets/demo.mp4.
 ffmpeg -hide_banner -loglevel error -y -i "$raw" \
   -vf "scale=720:-2:flags=lanczos,fps=30" \
   -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 26 -preset slow \
   -movflags +faststart -an "$final"
 
-# The README plays a GIF, not this MP4: GitHub serves a repo-hosted video as
-# text/plain and its blob viewer will not play one either. Same geometry as the
+# The README plays a GIF, not this MP4: the blob viewer offers a repo-hosted video
+# only as "View raw", and raw.githubusercontent serves it as application/octet-stream
+# with nosniff, so nothing on that page will play it. Same geometry as the
 # MP4 at 13 fps, which is what keeps a 21-second demo near a megabyte.
 #
 # stats_mode=full, not diff, and it matters: diff builds the palette from pixels

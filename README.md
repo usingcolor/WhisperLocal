@@ -21,9 +21,12 @@
   <a href="#contributing">Contributing</a>
 </p>
 
-<!-- A GIF, not the .mp4 beside it: GitHub serves a repo-hosted video as
-     text/plain and its blob viewer will not play one either, so nothing but an
-     image plays on this page. assets/demo.mp4 is the source to regenerate from. -->
+<!-- A GIF, not the .mp4 beside it, and there is no way around it: the blob
+     viewer offers a repo-hosted video only as "View raw", and raw.githubusercontent
+     serves it as application/octet-stream with nosniff, so even a <video> tag
+     pointed at it refuses to play. assets/demo.mp4 is the same footage carrying a
+     voice-over, and the source the GIF is made from. The GIF is silent, so the
+     narration reaches only someone who downloads the MP4. -->
 <p align="center">
   <img src="assets/demo.gif" alt="WhisperLocal in use: hold Globe/Fn, speak, and cleaned text lands at the cursor" width="720">
 </p>

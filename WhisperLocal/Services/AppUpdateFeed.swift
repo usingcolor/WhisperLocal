@@ -15,9 +15,13 @@ enum AppUpdateFeed {
         var dmgURL: URL
         var dmgName: String
         var dmgBytes: Int
-        /// SHA-256 of the DMG from a sibling `SHA256SUMS` asset, if the release published one.
+        /// SHA-256 of the DMG, read from the release notes, or from a `SHA256SUMS`
+        /// asset on releases old enough to have published one.
         var sha256: String?
-        /// GitHub asset URL for `SHA256SUMS`. Fetched by the updater; missing is non-fatal.
+        /// GitHub asset URL for `SHA256SUMS`, when a release has one. Releases stopped
+        /// carrying it — the DMG is the only asset now, so that shields.io's downloads
+        /// badge counts downloads rather than checksum fetches — and the digest moved
+        /// into the notes. Kept so a release that still has the file is still checked.
         var sha256SumsURL: URL?
     }
 
@@ -56,6 +60,34 @@ enum AppUpdateFeed {
         return latestVersion > currentVersion
     }
 
+    /// The DMG's digest as printed at the end of the release notes.
+    ///
+    /// The release workflow writes "SHA-256 of `<dmg>`:" followed by the digest,
+    /// which is where it lives now that the DMG is the only release asset. Matched
+    /// against the DMG's own name so a release naming several files cannot hand
+    /// back the wrong one; a bare digest with no name is accepted only when it is
+    /// the single one in the notes.
+    static func parseSHA256(fromNotes notes: String?, for dmgName: String) -> String? {
+        guard let notes, !notes.isEmpty else { return nil }
+        let digests = matches(of: "\\b[a-fA-F0-9]{64}\\b", in: notes)
+        guard !digests.isEmpty else { return nil }
+        if let named = notes.range(of: dmgName) {
+            let after = notes[named.upperBound...]
+            if let first = matches(of: "\\b[a-fA-F0-9]{64}\\b", in: String(after)).first {
+                return first.lowercased()
+            }
+        }
+        return digests.count == 1 ? digests[0].lowercased() : nil
+    }
+
+    private static func matches(of pattern: String, in text: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.matches(in: text, range: range).compactMap {
+            Range($0.range, in: text).map { String(text[$0]) }
+        }
+    }
+
     static func parseRelease(from data: Data) throws -> Release {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard let json else { throw FeedError.invalidJSON }
@@ -76,7 +108,7 @@ enum AppUpdateFeed {
             dmgURL: asset.url,
             dmgName: asset.name,
             dmgBytes: asset.size,
-            sha256: nil,
+            sha256: parseSHA256(fromNotes: json["body"] as? String, for: asset.name),
             sha256SumsURL: pickSHA256SUMS(from: assets)
         )
     }

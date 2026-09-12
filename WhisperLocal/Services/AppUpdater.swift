@@ -107,8 +107,13 @@ final class AppUpdater: ObservableObject {
         return try await attachChecksum(try AppUpdateFeed.parseRelease(from: data))
     }
 
-    /// Missing `SHA256SUMS` is non-fatal (releases before pinning). A listed file that will not parse is ignored.
+    /// The digest normally comes from the release notes, parsed with the feed. This
+    /// only fetches the `SHA256SUMS` asset for a release that still has one and did
+    /// not print the digest — and a missing digest stays non-fatal either way,
+    /// because `verifyBundle` checks the signature and pins the publisher, which is
+    /// the check that actually decides whether an update installs.
     private func attachChecksum(_ release: AppUpdateFeed.Release) async -> AppUpdateFeed.Release {
+        if let known = release.sha256, !known.isEmpty { return release }
         guard let url = release.sha256SumsURL else { return release }
         var request = URLRequest(url: url)
         request.setValue("WhisperLocal/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")

@@ -73,7 +73,7 @@ Releases are Developer ID signed, notarized, and stapled, so Gatekeeper lets the
 <details>
 <summary>Verifying a download, and opening older builds</summary>
 
-Check against the `SHA256SUMS` published with each release:
+Each release page prints the SHA-256 of its DMG at the bottom of the notes. Compare it with:
 
 ```bash
 shasum -a 256 ~/Downloads/WhisperLocal-*-arm64.dmg
@@ -105,7 +105,11 @@ The defaults assume macOS 26. Older versions still work, with more setup:
 | **26 or later** | Apple Speech, built in — nothing to download | Apple Intelligence, on-device — nothing to download |
 | **14 – 15** | Whisper `small.en`, downloaded on first use | Fillers stripped; turn on Gemma 4 (~2.7 GB) or a cloud API key for LLM polish |
 
-Everything else is optional and switchable in Settings: other speech models (WhisperKit `tiny.en` / `base.en` / Large v3 Turbo, NVIDIA Parakeet TDT 0.6B v2), cloud cleanup, custom instructions, per-app rules, a personal dictionary, a local dictation log with JSON / CSV export, and whether WhisperLocal opens at login.
+Everything else is optional and switchable in Settings: other transcription models (WhisperKit `tiny.en` / `base.en` / Large v3 Turbo, NVIDIA Parakeet TDT 0.6B v2), cloud cleanup, custom instructions, per-app rules, a personal dictionary, a local dictation log with JSON / CSV export, and whether WhisperLocal opens at login.
+
+**Dictating in another language.** Set one in Settings › Language, or let it follow your keyboard: switch to a Korean or Japanese input source and the next take is transcribed and cleaned in that language, with the language shown on the recording HUD before you speak. The first take in a new language may download an on-device model; until that finishes the take falls back to your default language rather than making you wait.
+
+**Choosing a microphone.** The recording HUD names the one in use and opens the list of the others; the same list is in the menu bar and in Settings › Dictation. Picking one mid-take switches it without ending the take. Left alone, takes follow System Settings — except when the default input is a Bluetooth headset that is also playing, where takes use the built-in or a wired mic instead, because opening a headset's microphone drops its playback to narrowband and changes its volume.
 
 **Picking a cleanup engine.** Out of the box WhisperLocal cleans on your Mac with Apple Intelligence, and nothing leaves it. Cloud cleanup stays off until you add an API key, which lives in the Keychain. The numbers below come from the [polish benchmark](Benchmarks/README.md) in this repo: 125 hand-written dictations, each cleaned by every engine through the app's own polishing code, checked by script and then compared head to head by a judge model.
 
@@ -186,7 +190,7 @@ Most of the interesting logic — text cleanup, prompt assembly, audio chunking,
 
 - **"WhisperLocal pastes wrong in *my* app."** Insertion quirks are hand-maintained lists in [`TextInserter.swift`](WhisperLocal/Services/TextInserter.swift) — often a one-line change. Bug reports are as useful as patches: tell us the app and what happened.
 - **Cleanup that gets it wrong.** The prompt lives in [`CleanupPrompt.swift`](WhisperLocal/Services/Polishers/CleanupPrompt.swift). Paste what you said and what you expected.
-- **Languages other than English.** English-only by design today. Broadening this is a real, well-scoped project.
+- **More dictation languages.** Any language Apple Speech has an on-device model for can be dictated in today, but only some are offered, and cleanup quality outside English is barely measured — the benchmark's 125 cases are English. Adding cases in another language is as useful as code.
 - **Documentation.** If something here confused you, that's a bug in this file.
 
 Before a PR: run `xcodegen generate` and the `PolishTests` scheme, add a test when you fix a behavior, keep changes focused, and never commit API keys or signing identities.

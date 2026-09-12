@@ -161,8 +161,6 @@ final class RecordingHUDController: ObservableObject {
         self.languageBadge = language?.nativeName
         hidePending = false
         isHovering = false
-        // A new take re-centres; the anchor below then holds for its lifetime.
-        anchoredLeftEdge = nil
         refreshInputs()
         ensurePanel()
         positionOnActiveScreen()
@@ -236,7 +234,6 @@ final class RecordingHUDController: ObservableObject {
         languageBadge = nil
         isHovering = false
         hidePending = false
-        anchoredLeftEdge = nil
     }
 
     /// Arms the hide. `hidePending` says the HUD is due to disappear and stays
@@ -263,11 +260,10 @@ final class RecordingHUDController: ObservableObject {
         let current = panel.frame.size
         guard abs(current.width - wanted.width) > 0.5 || abs(current.height - wanted.height) > 0.5 else { return }
         panel.setContentSize(wanted)
-        // The first fit of a session decides where the row starts, because this is
-        // the first moment the real width is known — `show()` positions a panel
-        // still carrying the last take's size.
-        if anchoredLeftEdge == nil, let screen = Self.activeScreen() {
-            anchoredLeftEdge = screen.visibleFrame.midX - wanted.width / 2
+        // Only ever grows. A phase wider than anything seen before moves the left
+        // edge once, by half the growth, and then it is settled for good.
+        if phaseSetsReservedWidth, wanted.width > reservedWidth {
+            UserDefaults.standard.set(Double(wanted.width), forKey: Self.reservedWidthKey)
         }
         positionOnActiveScreen()
     }
@@ -317,14 +313,31 @@ final class RecordingHUDController: ObservableObject {
         positionOnActiveScreen()
     }
 
-    /// Where the row starts, held for the life of one HUD session.
+    /// The widest the row has ever needed, which is what the HUD reserves space
+    /// for. The left edge is then a function of the screen alone, so the HUD opens
+    /// in the same place on every take — the row grows to the right inside that
+    /// reserved width instead of the panel re-centring around it.
     ///
-    /// The status capsule is a different width in every phase — "Listening" is not
-    /// "Transcribing", and the level meter is only there while recording. Centring
-    /// the panel on each of those slid the whole row sideways, badge and mic chip
-    /// included, several times per take. Centred once, then anchored: the capsules
-    /// grow to the right and nothing already on screen moves.
-    private var anchoredLeftEdge: CGFloat?
+    /// A remembered measurement, not a preference. The width depends on the phase,
+    /// the language badge, the length of the microphone's name and the display's
+    /// font, so a constant here would be wrong for somebody. This learns it once
+    /// and then stops moving, across relaunches too.
+    private static let reservedWidthKey = "hudReservedWidth"
+
+    private var reservedWidth: CGFloat {
+        CGFloat(UserDefaults.standard.double(forKey: Self.reservedWidthKey))
+    }
+
+    /// Learned from the phases a normal take passes through, and only those. An
+    /// error or a note puts a whole sentence in the capsule — "Microphone isn't
+    /// ready. Check System Settings…" — and letting one of those set the reserved
+    /// width would leave every later take sitting far left of centre for good.
+    private var phaseSetsReservedWidth: Bool {
+        switch phase {
+        case .error, .successNote: return false
+        default: return true
+        }
+    }
 
     private static func activeScreen() -> NSScreen? {
         let mouse = NSEvent.mouseLocation
@@ -334,14 +347,13 @@ final class RecordingHUDController: ObservableObject {
     private func positionOnActiveScreen() {
         guard let panel, let screen = Self.activeScreen() else { return }
         let frame = screen.visibleFrame
-        var x = anchoredLeftEdge ?? (frame.midX - panel.frame.width / 2)
-        // An anchor that no longer fits — the row outgrew it, or the pointer moved
-        // to another display — is worse than one that moves. Re-centre and keep
-        // that instead.
-        if x < frame.minX || x + panel.frame.width > frame.maxX {
-            x = frame.midX - panel.frame.width / 2
-            anchoredLeftEdge = x
-        }
+        // Centre the reserved width, not this phase's width. Narrower phases sit a
+        // little left of centre; every phase and every take sits in one place,
+        // which is the point.
+        let reserved = max(reservedWidth, panel.frame.width)
+        let centred = frame.midX - reserved / 2
+        // A row wider than the screen has nowhere to go; staying on it wins.
+        let x = max(frame.minX + 8, min(centred, frame.maxX - panel.frame.width - 8))
         panel.setFrameOrigin(NSPoint(x: x, y: frame.minY + 48))
     }
 }

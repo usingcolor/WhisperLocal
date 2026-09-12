@@ -142,7 +142,7 @@ final class LanguageCoordinator: ObservableObject {
            !LanguageSupport.speechModelCanServe(language, model: model) {
             return "\(model.shortName) is English-only — pick Apple Speech or Whisper Large v3 Turbo for \(name)"
         }
-        return "\(name) speech model is not ready yet"
+        return "\(name) transcription model is not ready yet"
     }
 
     private func refresh() {

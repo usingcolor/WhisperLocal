@@ -194,8 +194,8 @@ struct SettingsView: View {
                 microphoneControls
             }
 
-            Section("Speech model") {
-                Picker("Speech model", selection: Binding(
+            Section("Transcription") {
+                Picker("Model", selection: Binding(
                     get: { settings.asrModel },
                     set: { newValue in
                         settings.asrModel = newValue
@@ -212,7 +212,7 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
-                LabeledContent("Speech status") {
+                LabeledContent("Status") {
                     HStack(spacing: 8) {
                         if controller.transcription.isLoadingModel {
                             ProgressView()
@@ -222,6 +222,19 @@ struct SettingsView: View {
                         Text(controller.transcription.statusMessage)
                             .foregroundStyle(controller.transcription.isReady ? Color.secondary : Color.orange)
                             .textSelection(.enabled)
+                    }
+                }
+                // A failed load does not retry itself, and re-picking the model it
+                // is already on does not fire the picker. Without a button here the
+                // only way back was relaunching, or stumbling on the fact that
+                // opening this page happens to retry.
+                if !controller.transcription.isReady, !controller.transcription.isLoadingModel {
+                    Button("Try loading it again") {
+                        Task {
+                            await controller.transcription.ensureModel(
+                                named: settings.asrModel, force: true
+                            )
+                        }
                     }
                 }
                 if let loaded = controller.transcription.loadedModel,
@@ -288,7 +301,7 @@ struct SettingsView: View {
         Toggle("Ignore playback", isOn: $settings.enableEchoCancellation)
         helpText(
             "Music and video playing on this Mac stay out of your transcript. Their volume dips while you talk.",
-            more: "Echo cancellation and noise suppression, applied to the microphone. Off by default: it changes what the speech model hears whether or not anything is playing, and it does nothing on headphones, where the mic never hears playback at all. Weakest when two voices overlap, so someone talking in a video can still get through while you are talking."
+            more: "Echo cancellation and noise suppression, applied to the microphone. Off by default: it changes what the transcriber hears whether or not anything is playing, and it does nothing on headphones, where the mic never hears playback at all. Weakest when two voices overlap, so someone talking in a video can still get through while you are talking."
         )
     }
 
@@ -303,7 +316,7 @@ struct SettingsView: View {
 
             Section("How dictation is polished") {
                 polishInUseBanner
-                Text("This is the polish that runs after speech-to-text. Choose one option — it stays in effect until you choose the other.")
+                Text("This is the polish that runs after transcription. Choose one option — it stays in effect until you choose the other.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -944,7 +957,7 @@ struct SettingsView: View {
                 }
                 helpText(
                     "While a followed keyboard is active, the take is in its language. Any other keyboard — or ABC, which is not tied to one language — uses the default language.",
-                    more: "Keyboards you have installed but never dictate in can stay off. A keyboard is listed only if it names exactly one language: 2-Set Korean names Korean, while ABC names 93, so it never appears here. If a language cannot be used right now — its speech model still downloading, or a polish model that does not read it — the take falls back to the default language, then to English, and the reason shows below."
+                    more: "Keyboards you have installed but never dictate in can stay off. A keyboard is listed only if it names exactly one language: 2-Set Korean names Korean, while ABC names 93, so it never appears here. If a language cannot be used right now — its transcription model still downloading, or a polish model that does not read it — the take falls back to the default language, then to English, and the reason shows below."
                 )
                 nextTakeRows
             }
@@ -1198,7 +1211,7 @@ struct SettingsView: View {
         case .appleSpeech:
             helpText(
                 "Apple’s on-device transcriber (macOS 26). English only.",
-                more: "English even if that is not your system language. The OS may download a shared speech model on first use. Each take is written to a private temp file and deleted after transcription; audio stays on this Mac."
+                more: "English even if that is not your system language. The OS may download a shared transcription model on first use. Each take is written to a private temp file and deleted after transcription; audio stays on this Mac."
             )
         }
     }

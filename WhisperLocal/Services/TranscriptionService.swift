@@ -8,7 +8,7 @@ final class TranscriptionService: ObservableObject {
     @Published private(set) var isReady = false
     @Published private(set) var isLoadingModel = false
     /// Same string shown in the menu bar and Settings.
-    @Published private(set) var statusMessage = "Speech: not loaded"
+    @Published private(set) var statusMessage = "Not loaded"
     @Published private(set) var lastError: String?
     /// Model the user asked for (picker / settings).
     @Published private(set) var requestedModel: ASRModelOption?

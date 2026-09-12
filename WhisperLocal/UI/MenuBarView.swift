@@ -63,7 +63,7 @@ struct MenuBarView: View {
             }
             MenuSeparator()
 
-            MenuRow("Reload Speech Model") {
+            MenuRow("Reload the transcription model") {
                 dismiss()
                 Task {
                     await controller.transcription.ensureModel(

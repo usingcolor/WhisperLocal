@@ -4,7 +4,7 @@ Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applic
      with the real signing state of this build. Do not hand-write it here. -->
 {{SIGNING_SECTION}}
 
-Then grant Microphone and Accessibility. Default ASR is Apple Speech on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
+Then grant Microphone and Accessibility. Transcription runs on Apple Speech by default on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
 
 ## 0.2.1
 

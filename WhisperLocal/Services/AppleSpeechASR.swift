@@ -44,7 +44,7 @@ final class AppleSpeechASR {
     nonisolated static var availabilityMessage: String {
         if #available(macOS 26.0, *) {
             if SpeechTranscriber.isAvailable {
-                return "On-device Apple SpeechTranscriber. English. The system may download a shared speech model on first use."
+                return "On-device Apple SpeechTranscriber. English. The system may download a shared transcription model on first use."
             }
             return "Apple Speech is not available on this Mac’s hardware."
         }
@@ -210,12 +210,12 @@ final class AppleSpeechASR {
         }
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            onStatus("Downloading \(label) speech model…")
+            onStatus("Downloading the \(label) transcription model…")
             let progress = request.progress
             let ticker = Task { @MainActor in
                 while !Task.isCancelled {
                     let pct = Int((progress.fractionCompleted * 100).rounded())
-                    onStatus("Downloading \(label) speech model (\(pct)%)…")
+                    onStatus("Downloading the \(label) transcription model (\(pct)%)…")
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
             }

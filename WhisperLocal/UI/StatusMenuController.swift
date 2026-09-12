@@ -3,8 +3,7 @@ import Combine
 import os
 import SwiftUI
 
-/// The menu bar item as a real `NSMenu`. Dev-only while it is compared with the
-/// SwiftUI panel (`AppIdentity.usesNativeStatusMenu`).
+/// The menu bar item as a real `NSMenu`, on both channels.
 ///
 /// The reason it exists: in a full-screen Space the menu bar hides until the mouse
 /// reaches the top, and the system only holds it down while a *menu* is open. The
@@ -152,15 +151,22 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(microphoneItem())
         menu.addItem(.separator())
 
-        menu.addItem(ActionItem("Reload Speech Model") { [weak self] in
-            guard let self else { return }
-            Task {
-                await self.controller.transcription.ensureModel(
-                    named: self.controller.settings.asrModel, force: true
-                )
-            }
-        })
-        menu.addItem(.separator())
+        // Only when it can help. A reload is a repair, and it was the one repair
+        // action in a menu of nine — shown to everyone, useful in one state. A
+        // failed load does not retry itself, so the affordance has to exist; it
+        // just does not have to be there when the model is fine. The menu is
+        // rebuilt on every open, so this is correct each time.
+        if !controller.transcription.isReady {
+            menu.addItem(ActionItem("Retry loading \(controller.settings.asrModel.shortName)") { [weak self] in
+                guard let self else { return }
+                Task {
+                    await self.controller.transcription.ensureModel(
+                        named: self.controller.settings.asrModel, force: true
+                    )
+                }
+            })
+            menu.addItem(.separator())
+        }
 
         // Straight to terminate so the app delegate can ask about work in flight.
         menu.addItem(ActionItem("Quit \(AppIdentity.productName)", key: "q") {

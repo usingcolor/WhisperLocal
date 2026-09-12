@@ -321,9 +321,13 @@ final class AppUpdater: ObservableObject {
     }
 
     /// `ditto` into a sibling then rename, so a mid-copy failure does not leave a half-written app.
-    /// `LSFileQuarantineEnabled` marks this process's downloads, so Gatekeeper assesses the
-    /// installed app. We do not strip quarantine. Notarized releases pass that assessment;
-    /// ad-hoc fallback builds still need manual approval.
+    ///
+    /// `LSFileQuarantineEnabled` marks this process's downloads, and `ditto` carries that flag
+    /// into the installed bundle, so the script clears it before the rename. Leaving it on was
+    /// deliberate once — Gatekeeper assesses a notarized release and lets it run — but assessment
+    /// does not remove the flag, and a flagged bundle Finder never moved is translocated on every
+    /// launch. `verifyBundle` has already pinned the publisher by then, so nothing is taken on
+    /// trust that Gatekeeper would have caught.
     private func spawnInstaller(dmg: URL, mount: URL, sourceApp: URL, destination: URL) throws {
         try FileManager.default.createDirectory(
             at: UpdateInstallLog.directory,
@@ -368,6 +372,27 @@ final class AppUpdater: ObservableObject {
 
         /bin/rm -rf "$new" "$old"
         /usr/bin/ditto "$src" "$new"
+
+        # Clear the download flag before this becomes the installed app.
+        #
+        # Gatekeeper leaves it in place after assessing the bundle, and a
+        # quarantined app that Finder did not move is run from a randomised
+        # read-only image instead of from where it sits. That breaks the login
+        # item outright, and moves the bundle on every launch. Dragging a DMG to
+        # Applications in Finder clears the flag, so only in-app updates were
+        # affected — every one of them.
+        #
+        # Safe to clear here: the signature and the publisher were both checked
+        # before this script was written, against a pinned team, which is a
+        # stricter test than Gatekeeper's. Never fatal — a missing flag is the
+        # outcome we want, and failing to clear one is not worth rolling back a
+        # good install over, so the log carries the verdict instead.
+        /usr/bin/xattr -dr com.apple.quarantine "$new" 2>/dev/null || true
+        if /usr/bin/xattr -p com.apple.quarantine "$new" >/dev/null 2>&1; then
+          echo "QUARANTINE_STILL_SET"
+        else
+          echo "quarantine cleared"
+        fi
         if [[ -d "$dest" ]]; then
           /bin/mv "$dest" "$old"
           if ! /bin/mv "$new" "$dest"; then

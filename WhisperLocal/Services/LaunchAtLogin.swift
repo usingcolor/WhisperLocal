@@ -82,12 +82,21 @@ final class LaunchAtLogin: ObservableObject {
     nonisolated static func unavailableReason(
         forBundleAt path: String,
         onReadOnlyVolume: Bool,
+        hasApplicationsCopy: Bool = false,
         productName: String
     ) -> String? {
         // Gatekeeper runs a quarantined app from a randomised read-only image whose
         // path is gone the moment the app quits. Everything under it looks like a
         // normal /private/var path, so the marker directory is the only tell.
         if path.contains("/AppTranslocation/") {
+            // "Move it to Applications" is no help to someone who is looking at it
+            // in Applications — which is where an in-app update leaves it, still
+            // flagged as downloaded and so still translocated on every launch. A
+            // Finder move is what clears that flag, and out-and-back is the
+            // shortest one to describe.
+            guard !hasApplicationsCopy else {
+                return "\(productName) is in your Applications folder, but macOS is still running this copy from a temporary location because it is marked as downloaded. In Finder, drag it out of Applications and back in, then reopen it."
+            }
             return "macOS is running this copy from a temporary location. Move \(productName) to your Applications folder, then reopen it."
         }
         // A mounted disk image is read-only; an external drive is not. Testing the
@@ -103,9 +112,15 @@ final class LaunchAtLogin: ObservableObject {
     private static var unavailableReason: String? {
         let url = Bundle.main.bundleURL
         let readOnly = (try? url.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly ?? false
+        // Named from the running bundle so the Dev channel checks for its own copy.
+        // Under translocation the last path component is still the real app name.
+        let installed = FileManager.default.fileExists(
+            atPath: "/Applications/\(url.lastPathComponent)"
+        )
         return unavailableReason(
             forBundleAt: url.path,
             onReadOnlyVolume: readOnly,
+            hasApplicationsCopy: installed,
             productName: AppIdentity.productName
         )
     }

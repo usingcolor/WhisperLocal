@@ -23,6 +23,25 @@ final class LaunchAtLoginLocationTests: XCTestCase {
         )
     }
 
+    /// The case an in-app update leaves behind: installed in Applications, still
+    /// flagged as downloaded, so still translocated. Telling that user to move it
+    /// to Applications sent them to check Finder and come back none the wiser.
+    func testATranslocatedCopyThatIsAlreadyInstalledSaysSomethingUseful() {
+        let path = "/private/var/folders/1p/abc/T/AppTranslocation/9673-8252/d/WhisperLocal.app"
+        let message = LaunchAtLogin.unavailableReason(
+            forBundleAt: path,
+            onReadOnlyVolume: false,
+            hasApplicationsCopy: true,
+            productName: "WhisperLocal"
+        )
+        XCTAssertEqual(
+            message,
+            "WhisperLocal is in your Applications folder, but macOS is still running this copy from a temporary location because it is marked as downloaded. In Finder, drag it out of Applications and back in, then reopen it."
+        )
+        // Not the message that sends them somewhere they have already been.
+        XCTAssertFalse(message?.contains("Move WhisperLocal to your Applications folder") ?? true)
+    }
+
     func testACopyRunningFromAMountedImageIsRefused() {
         XCTAssertEqual(
             reason("/Volumes/WhisperLocal 0.2.0/WhisperLocal.app", readOnly: true),

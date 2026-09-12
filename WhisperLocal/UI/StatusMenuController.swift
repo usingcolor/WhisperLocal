@@ -156,7 +156,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         // failed load does not retry itself, so the affordance has to exist; it
         // just does not have to be there when the model is fine. The menu is
         // rebuilt on every open, so this is correct each time.
-        if !controller.transcription.isReady {
+        //
+        // Not while it is loading. `force: true` restarts the load, and the menu is
+        // most likely to be opened seconds after launch — offering a retry there
+        // would invite cancelling the load that was about to finish.
+        if !controller.transcription.isReady, !controller.transcription.isLoadingModel {
             menu.addItem(ActionItem("Retry loading \(controller.settings.asrModel.shortName)") { [weak self] in
                 guard let self else { return }
                 Task {

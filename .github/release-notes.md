@@ -6,6 +6,13 @@ Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applic
 
 Then grant Microphone and Accessibility. Transcription runs on Apple Speech by default on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
 
+## 0.2.2
+
+- **An update installed from inside the app no longer breaks "Open at login".** The updater flagged what it downloaded as quarantined and carried that flag into the installed app, and macOS runs a flagged app from a temporary randomised location rather than from where it sits — so the login item was refused, correctly, and the app moved on every launch. The flag is now cleared once the download's signature and publisher have been verified. If you are already in this state, drag WhisperLocal out of your Applications folder and back in, then reopen it; the refusal message now says so instead of telling you to move an app that is already there.
+- **The menu bar item stays open in a full-screen Space.** It was a panel pinned to the icon rather than a menu, and the system only holds the menu bar down for a real menu, so it vanished the moment the pointer moved away. It is now a native menu: system highlighting, arrow keys, key equivalents, and a proper submenu for the microphone instead of one row per device.
+- The transcription model is now called that — in Settings, in the menu bar, and here. It had been "Speech model", "ASR", and "speech-to-text" in three different places for one thing.
+- "Reload Speech Model" is gone from the menu bar unless it can help. A model that failed to load does not retry itself, so the repair still exists — it appears as "Retry loading …" only when the model is not ready, and Settings has the same button beside the status line that explains the failure.
+
 ## 0.2.1
 
 - **Music and video no longer jump or dip when a take starts.** Opening the microphone on AirPods pulls the headset out of high-quality playback into its call profile, which restarts whatever is playing on a narrowband link and swaps in that profile's own volume. Dictation now records from the built-in or a wired microphone while a Bluetooth headset is playing, and opens that microphone directly so the headset is never touched on the way past.

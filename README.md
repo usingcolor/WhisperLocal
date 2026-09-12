@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.1/WhisperLocal-0.2.1-arm64.dmg"><b>⬇&nbsp; Download 0.2.1 for Apple Silicon</b></a>
+  <a href="https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.2/WhisperLocal-0.2.2-arm64.dmg"><b>⬇&nbsp; Download 0.2.2 for Apple Silicon</b></a>
   &nbsp;·&nbsp;
   <a href="#usage">Usage</a>
   &nbsp;·&nbsp;
@@ -45,7 +45,7 @@ You get:   I need to rewrite the parser.
 
 Your audio never leaves the Mac. Transcription and cleanup both run on-device by default.
 
-> Early preview (`0.2.1`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
+> Early preview (`0.2.2`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
 
 ## Why not the dictation already built into macOS?
 
@@ -63,7 +63,7 @@ If you want Windows or Linux, streaming transcription, or a large model catalog,
 
 Apple Silicon only. No Xcode and no git clone required.
 
-**[Download WhisperLocal 0.2.1](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.1/WhisperLocal-0.2.1-arm64.dmg)** (`.dmg`) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
+**[Download WhisperLocal 0.2.2](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.2/WhisperLocal-0.2.2-arm64.dmg)** (`.dmg`) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
 
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
 2. Open it and grant **Microphone** and **Accessibility** when asked.

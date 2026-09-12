@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 420" width="760" height="420" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5">
+<title>Takes with a hard failure, by cleanup engine, with the price per thousand takes</title>
+<text x="8" y="18" fill="#19202B" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600">Takes with a hard failure</text>
+<text x="752" y="18" text-anchor="end" fill="#5A6475" font-family="system-ui, -apple-system, sans-serif" font-size="12">125 dictations · price per 1,000 takes</text>
+<line x1="196" y1="48" x2="196" y2="380" stroke="#D9DEE6" stroke-width="1"/>
+<text x="196" y="42" text-anchor="middle" fill="#5A6475" font-size="11">0%</text>
+<line x1="318" y1="48" x2="318" y2="380" stroke="#D9DEE6" stroke-width="1"/>
+<text x="318" y="42" text-anchor="middle" fill="#5A6475" font-size="11">20%</text>
+<line x1="440" y1="48" x2="440" y2="380" stroke="#D9DEE6" stroke-width="1"/>
+<text x="440" y="42" text-anchor="middle" fill="#5A6475" font-size="11">40%</text>
+<line x1="562" y1="48" x2="562" y2="380" stroke="#D9DEE6" stroke-width="1"/>
+<text x="562" y="42" text-anchor="middle" fill="#5A6475" font-size="11">60%</text>
+<text x="184" y="66" text-anchor="end" fill="#19202B">Claude Opus 5</text>
+<rect x="196" y="54" width="2.5" height="15" rx="1.5" fill="#1F5FD6" />
+<text x="208" y="66" fill="#19202B">0%</text>
+<text x="752" y="66" text-anchor="end" fill="#5A6475">$3.59</text>
+<text x="184" y="93" text-anchor="end" fill="#19202B">GPT-5.6 Sol</text>
+<rect x="196" y="81" width="2.5" height="15" rx="1.5" fill="#1F5FD6" />
+<text x="208" y="93" fill="#19202B">0%</text>
+<text x="752" y="93" text-anchor="end" fill="#5A6475">$3.76</text>
+<text x="184" y="120" text-anchor="end" fill="#19202B">GPT-5.6 Terra</text>
+<rect x="196" y="108" width="18.3" height="15" rx="1.5" fill="#1F5FD6" />
+<text x="223" y="120" fill="#19202B">3%</text>
+<text x="752" y="120" text-anchor="end" fill="#5A6475">$1.92</text>
+<text x="184" y="147" text-anchor="end" fill="#19202B">Claude Haiku 4.5</text>
+<rect x="196" y="135" width="24.4" height="15" rx="1.5" fill="#1F5FD6" />
+<text x="229" y="147" fill="#19202B">4%</text>
+<text x="752" y="147" text-anchor="end" fill="#5A6475">$1.00</text>
+<text x="184" y="174" text-anchor="end" fill="#19202B" font-weight="700">GPT-5.6 Luna</text>
+<rect x="196" y="162" width="30.5" height="15" rx="1.5" fill="#1F5FD6" stroke='#1F5FD6' stroke-width='2'/>
+<text x="236" y="174" fill="#19202B" font-weight="700">5%</text>
+<text x="752" y="174" text-anchor="end" fill="#5A6475" font-weight="700">$0.21</text>
+<text x="278" y="174" fill="#1F5FD6" font-weight="700">← the default</text>
+<text x="184" y="201" text-anchor="end" fill="#19202B">Claude Sonnet 5</text>
+<rect x="196" y="189" width="30.5" height="15" rx="1.5" fill="#1F5FD6" />
+<text x="236" y="201" fill="#19202B">5%</text>
+<text x="752" y="201" text-anchor="end" fill="#5A6475">$2.74</text>
+<text x="184" y="228" text-anchor="end" fill="#19202B">GPT-4o Mini</text>
+<rect x="196" y="216" width="67.1" height="15" rx="1.5" fill="#1F5FD6" />
+<text x="272" y="228" fill="#19202B">11%</text>
+<text x="752" y="228" text-anchor="end" fill="#5A6475">$0.12</text>
+<text x="184" y="255" text-anchor="end" fill="#19202B">GPT-4.1 Mini</text>
+<rect x="196" y="243" width="85.4" height="15" rx="1.5" fill="#1F5FD6" />
+<text x="290" y="255" fill="#19202B">14%</text>
+<text x="752" y="255" text-anchor="end" fill="#5A6475">$0.32</text>
+<text x="184" y="282" text-anchor="end" fill="#19202B">Gemma 4 E2B</text>
+<rect x="196" y="270" width="213.5" height="15" rx="1.5" fill="#C23B26" />
+<text x="418" y="282" fill="#19202B">35%</text>
+<text x="752" y="282" text-anchor="end" fill="#5A6475">free</text>
+<text x="184" y="309" text-anchor="end" fill="#19202B">Apple Intelligence</text>
+<rect x="196" y="297" width="323.3" height="15" rx="1.5" fill="#C23B26" />
+<text x="528" y="309" fill="#19202B">53%</text>
+<text x="752" y="309" text-anchor="end" fill="#5A6475">free</text>
+<text x="184" y="336" text-anchor="end" fill="#19202B">Fillers only, no LLM</text>
+<rect x="196" y="324" width="347.7" height="15" rx="1.5" fill="#E7B9B1" />
+<text x="553" y="336" fill="#19202B">57%</text>
+<text x="752" y="336" text-anchor="end" fill="#5A6475">free</text>
+<text x="184" y="363" text-anchor="end" fill="#19202B">No cleanup at all</text>
+<rect x="196" y="351" width="427.0" height="15" rx="1.5" fill="#E7B9B1" />
+<text x="632" y="363" fill="#19202B">70%</text>
+<text x="752" y="363" text-anchor="end" fill="#5A6475">free</text>
+<text x="8" y="406" fill="#5A6475" font-family="system-ui, -apple-system, sans-serif" font-size="11.5">Blue: cloud models. Red: on-device. Pale: no model at all. One run per case, September 2026.</text>
+</svg>

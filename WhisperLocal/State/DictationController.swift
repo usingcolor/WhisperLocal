@@ -164,7 +164,11 @@ final class DictationController: ObservableObject {
         hotKey.start()
 
         permissions.refresh()
-        if !settings.hasCompletedOnboarding || !permissions.allGranted {
+        // A temporary copy joins the list of reasons to open this window on
+        // launch. Left to a Settings row it would never be read, and the symptom
+        // — permissions and the login item quietly not sticking — looks like
+        // something else entirely.
+        if !settings.hasCompletedOnboarding || !permissions.allGranted || AppInstallLocation.current != nil {
             showOnboarding = true
         }
 

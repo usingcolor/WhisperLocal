@@ -72,57 +72,17 @@ final class LaunchAtLogin: ObservableObject {
 
     var isOn: Bool { state.isOn }
 
-    /// A copy running from a read-only mount or an App Translocation container has
-    /// no durable path, so a login item made from it would point at nothing after
-    /// the next restart. Registering would appear to work and then silently fail,
-    /// which is worse than refusing.
+    /// A copy running from a read-only mount or a translocated container has no
+    /// durable path, so a login item made from it would point at nothing after the
+    /// next restart. Registering would appear to work and then silently fail, which
+    /// is worse than refusing.
     ///
-    /// Takes the path and volume facts rather than reading the bundle, so the rule
-    /// can be tested.
-    nonisolated static func unavailableReason(
-        forBundleAt path: String,
-        onReadOnlyVolume: Bool,
-        hasApplicationsCopy: Bool = false,
-        productName: String
-    ) -> String? {
-        // Gatekeeper runs a quarantined app from a randomised read-only image whose
-        // path is gone the moment the app quits. Everything under it looks like a
-        // normal /private/var path, so the marker directory is the only tell.
-        if path.contains("/AppTranslocation/") {
-            // "Move it to Applications" is no help to someone who is looking at it
-            // in Applications — which is where an in-app update leaves it, still
-            // flagged as downloaded and so still translocated on every launch. A
-            // Finder move is what clears that flag, and out-and-back is the
-            // shortest one to describe.
-            guard !hasApplicationsCopy else {
-                return "\(productName) is in your Applications folder, but macOS is still running this copy from a temporary location because it is marked as downloaded. In Finder, drag it out of Applications and back in, then reopen it."
-            }
-            return "macOS is running this copy from a temporary location. Move \(productName) to your Applications folder, then reopen it."
-        }
-        // A mounted disk image is read-only; an external drive is not. Testing the
-        // /Volumes/ prefix instead refused the login item for anyone who keeps
-        // apps on an external drive — a durable path — and told them it was a
-        // disk image.
-        if onReadOnlyVolume {
-            return "This copy is running from a disk image. Drag \(productName) to your Applications folder, then open it from there."
-        }
-        return nil
-    }
-
+    /// `AppInstallLocation` owns the detection and the wording, because the login
+    /// item is only the first thing a temporary copy breaks and the app has to be
+    /// able to say so elsewhere too.
     private static var unavailableReason: String? {
-        let url = Bundle.main.bundleURL
-        let readOnly = (try? url.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly ?? false
-        // Named from the running bundle so the Dev channel checks for its own copy.
-        // Under translocation the last path component is still the real app name.
-        let installed = FileManager.default.fileExists(
-            atPath: "/Applications/\(url.lastPathComponent)"
-        )
-        return unavailableReason(
-            forBundleAt: url.path,
-            onReadOnlyVolume: readOnly,
-            hasApplicationsCopy: installed,
-            productName: AppIdentity.productName
-        )
+        guard let problem = AppInstallLocation.current else { return nil }
+        return AppInstallLocation.remedy(problem, productName: AppIdentity.productName)
     }
 
     func refresh() {

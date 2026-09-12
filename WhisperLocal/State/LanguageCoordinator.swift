@@ -7,9 +7,11 @@ import Speech
 
 /// Decides what language a take runs in, and warms speech models ahead of it.
 ///
-/// Dev-only, enforced here and not just by hiding the Settings section: a Release
-/// build returns English whatever the stored preferences say, so a hand-written
-/// `defaults write` cannot turn this on where it has not been tried.
+/// On for both channels as of 0.2.3. It ran Dev-only while it was unproven —
+/// `isEnabled` returned false there, so a Release build answered English whatever
+/// the stored preferences said — and the gate stays as one switch rather than a
+/// hidden Settings section, so it can go back if the asset flow misbehaves in the
+/// wild.
 ///
 /// The rule itself lives in `LanguageResolution`: a followed keyboard's language,
 /// else the preferred language, else English — each only if it can be served
@@ -39,7 +41,7 @@ final class LanguageCoordinator: ObservableObject {
 
     private init() {}
 
-    static var isEnabled: Bool { AppIdentity.isDevBuild }
+    static var isEnabled: Bool { true }
 
     func start() {
         guard Self.isEnabled, observer == nil else { return }

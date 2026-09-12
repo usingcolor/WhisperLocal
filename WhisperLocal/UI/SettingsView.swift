@@ -43,10 +43,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Language support is a Dev experiment, so its page only exists there.
-    static var visibleCases: [SettingsPage] {
-        allCases.filter { $0 != .language || AppIdentity.isDevBuild }
-    }
+    static var visibleCases: [SettingsPage] { allCases }
 }
 
 private enum PolishWhere: String, Hashable {

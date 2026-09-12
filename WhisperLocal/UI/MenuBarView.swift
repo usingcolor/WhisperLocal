@@ -149,7 +149,8 @@ struct MenuBarHeader: View {
     /// Missing permissions are the one status worth colouring — everything else is
     /// informational and stays secondary so the title keeps the emphasis.
     private var statusIsWarning: Bool {
-        HotKeyManager.secureInputActive
+        AppInstallLocation.current != nil
+            || HotKeyManager.secureInputActive
             || !permissions.inputMonitoringTrusted
             || !permissions.accessibilityTrusted
     }
@@ -158,6 +159,11 @@ struct MenuBarHeader: View {
         // Checked before the permission lines: with secure input on, the hotkey is
         // dead no matter how the permissions look, and this is the only place the
         // user can be told — the hotkey cannot fire to show anything itself.
+        // Before everything: a temporary copy cannot keep a login item or hold on
+        // to permissions, and the user has no way to learn that on their own.
+        if let problem = AppInstallLocation.current {
+            return AppInstallLocation.headline(problem, productName: AppIdentity.productName)
+        }
         if HotKeyManager.secureInputActive {
             return "A password field is focused — the hotkey won’t fire until you click elsewhere"
         }

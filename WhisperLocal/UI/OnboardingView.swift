@@ -1,8 +1,10 @@
+import AppKit
 import SwiftUI
 
 struct OnboardingView: View {
     @ObservedObject var controller: DictationController
     @ObservedObject private var permissions = PermissionManager.shared
+    @ObservedObject private var launchAtLogin = LaunchAtLogin.shared
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
 
@@ -16,6 +18,13 @@ struct OnboardingView: View {
                      : "Speak with Globe / Fn — polished text appears at your cursor. Audio stays on your Mac by default.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Above the permissions, because none of them will stick until it is
+            // fixed: macOS keeps re-launching a flagged copy from a fresh temporary
+            // path, and anything keyed to the bundle starts over each time.
+            if let problem = AppInstallLocation.current {
+                installLocationRow(problem)
             }
 
             permissionRow(
@@ -50,6 +59,27 @@ struct OnboardingView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
+            }
+
+            // Asked for, not left to be discovered. This is the one place a new
+            // install is guaranteed to look, and the toggle otherwise sits three
+            // pages into Settings.
+            if AppInstallLocation.current == nil, !launchAtLogin.isOn, !launchAtLogin.state.isBlocked {
+                GroupBox {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Open at login")
+                                .font(.headline)
+                            Text("\(AppIdentity.productName) waits in the menu bar when you log in. No window opens and no dictation starts on its own.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                        Button("Turn On") { launchAtLogin.setEnabled(true) }
+                    }
+                    .padding(4)
+                }
             }
 
             GroupBox("How to dictate") {
@@ -103,6 +133,37 @@ struct OnboardingView: View {
         }
         .onDisappear {
             permissions.stopPolling()
+        }
+    }
+
+    /// The install problem, stated with the fix rather than the diagnosis.
+    ///
+    /// The app cannot clear the flag itself — it is sandboxed, and /Applications is
+    /// outside it — so the fix is a Finder gesture, and this puts the app under the
+    /// pointer ready for it. Deliberately not a Terminal command: this is a menu
+    /// bar app, and nobody should have to open a shell to make it start at login.
+    @ViewBuilder
+    private func installLocationRow(_ problem: AppInstallLocation.Problem) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("This copy is running from a temporary location")
+                        .font(.headline)
+                }
+                Text(AppInstallLocation.remedy(problem, productName: AppIdentity.productName))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Show in Finder") { AppInstallLocation.revealInstalledCopy() }
+                    Spacer()
+                    Button("Quit & Reopen") { permissions.quitAndRelaunch() }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(4)
         }
     }
 

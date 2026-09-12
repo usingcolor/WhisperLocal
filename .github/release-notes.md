@@ -6,6 +6,12 @@ Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applic
 
 Then grant Microphone and Accessibility. Transcription runs on Apple Speech by default on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
 
+## 0.2.3
+
+- **Dictate in another language.** Set a dictation language in Settings › Language, or let it follow your keyboard: switch to a Korean or Japanese input source and the next take is transcribed and cleaned in that language, with the language shown on the recording HUD before you speak. Switching input source while the key is still held changes the take you are in. A language is only used if it can be served right now — the first take in a new language may download an on-device model, and until that finishes the take falls back to your default language rather than waiting. This ran behind a Dev-only flag while it was unproven; it is on for everyone now.
+- **The app now says when it is running from a temporary copy.** macOS runs an app still flagged as downloaded from a randomised location that disappears on quit, so "Open at login" cannot work and permissions do not stay granted — and nothing told you. The menu bar now shows a warning, and the welcome window explains it with a Show in Finder button: drag the app out of your Applications folder and back in, which clears the flag, then reopen it. No Terminal.
+- **New installs are asked about opening at login** in the welcome window, instead of leaving the switch to be found three pages into Settings.
+
 ## 0.2.2
 
 - **An update installed from inside the app no longer breaks "Open at login".** The updater flagged what it downloaded as quarantined and carried that flag into the installed app, and macOS runs a flagged app from a temporary randomised location rather than from where it sits — so the login item was refused, correctly, and the app moved on every launch. The flag is now cleared once the download's signature and publisher have been verified. If you are already in this state, drag WhisperLocal out of your Applications folder and back in, then reopen it; the refusal message now says so instead of telling you to move an app that is already there.

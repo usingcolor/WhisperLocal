@@ -90,6 +90,12 @@ struct WhisperLocalApp: App {
 @MainActor
 enum MenuBarIcon {
     static func symbol(for controller: DictationController) -> String {
+        // A copy running from a temporary location is as broken as a missing
+        // permission, and just as invisible without this: nothing else in the app
+        // says so unless the user opens the one Settings row that mentions it.
+        if AppInstallLocation.current != nil {
+            return "exclamationmark.triangle"
+        }
         if !controller.permissions.allGranted {
             return "exclamationmark.triangle"
         }

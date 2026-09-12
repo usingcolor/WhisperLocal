@@ -73,8 +73,8 @@ targets:
         INFOPLIST_FILE: WhisperLocal/App/Info.plist
         CODE_SIGN_ENTITLEMENTS: WhisperLocal/App/WhisperLocal.entitlements
         PRODUCT_NAME: WhisperLocal
-        MARKETING_VERSION: "0.2.2"
-        CURRENT_PROJECT_VERSION: "20"
+        MARKETING_VERSION: "0.2.3"
+        CURRENT_PROJECT_VERSION: "21"
         GENERATE_INFOPLIST_FILE: false
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
@@ -141,6 +141,7 @@ targets:
       - path: WhisperLocal/State/SessionContext.swift
       - path: WhisperLocal/Services/LongTake.swift
       - path: WhisperLocal/Services/LaunchAtLogin.swift
+      - path: WhisperLocal/Services/AppInstallLocation.swift
       - path: WhisperLocal/Services/SpokenLanguage.swift
       - path: WhisperLocal/Services/Polishers/PolishChunker.swift
       - path: WhisperLocal/App/AppIdentity.swift

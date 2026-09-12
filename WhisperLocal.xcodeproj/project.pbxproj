@@ -18,6 +18,7 @@
 		1405C8F8290D4C3460E3AB7C /* PolishOutputCapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A359F280852F26DA3E7A4EB /* PolishOutputCapTests.swift */; };
 		1717C586884C2A1BE03373E3 /* TextInserter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D1E69A1A5E6E68B60D9D97 /* TextInserter.swift */; };
 		18B6B2A9941C3D8D4041791B /* OpenAIPolisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005FD23F400A298F93508D18 /* OpenAIPolisher.swift */; };
+		1A4D1865ACE3E51A59E22FAD /* AppInstallLocationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3036B257D405B9BFC9703545 /* AppInstallLocationTests.swift */; };
 		1A5598F8AB7D2EA9AD3579D9 /* SpokenLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89DD92AB3BCDE17D34F829B4 /* SpokenLanguage.swift */; };
 		1BBDFC011CF6AA23F30046CD /* AppUpdateFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */; };
 		1D50AA3CEE8B37409DA4B35B /* AudioInputRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */; };
@@ -50,6 +51,7 @@
 		5702E48D15077D937040FE48 /* Checks.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5FD290323891D2418C4C407 /* Checks.swift */; };
 		58BE50F5E1BFFD45650943DE /* AudioInputRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */; };
 		59C0B52FB06EF6786BA03CE5 /* DictationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 094325BD00C73626F5A7D8BF /* DictationController.swift */; };
+		59CA6F5D3AA73D5071FB55C6 /* AppInstallLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B4B4BA08AE82397E9F5568 /* AppInstallLocation.swift */; };
 		5B84A143538C22F7CF0F5C96 /* Runner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DB01789C39B9900CBEFDCF9 /* Runner.swift */; };
 		5C1D1E7AC805E51D84AD54C5 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = CAFAF41E8683133E12EEB1FE /* HuggingFace */; };
 		5D34AABAF34BCADDAC06AEF3 /* NetworkReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15D0999BC498FE3DD45A01A5 /* NetworkReachability.swift */; };
@@ -117,6 +119,7 @@
 		F55B6AD2BE935B1AB1C599D8 /* AudioInputRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */; };
 		FA8A33D7AD3D3AAC906F95F6 /* WhisperLocalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748E974DF04BD7DC99D7796A /* WhisperLocalApp.swift */; };
 		FC265F40D5DBB593351122A5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D3A0E540785AF85E8AAB0D1B /* Assets.xcassets */; };
+		FF2616E57B659671C9735EAE /* AppInstallLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B4B4BA08AE82397E9F5568 /* AppInstallLocation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -138,6 +141,7 @@
 		24DCD4166F056923578A903D /* LaunchAtLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginTests.swift; sourceTree = "<group>"; };
 		285457187AB8A99CEE67EBD3 /* CloudModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudModelCatalog.swift; sourceTree = "<group>"; };
 		2C217A35266E152B427E49C0 /* LanguageResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageResolutionTests.swift; sourceTree = "<group>"; };
+		3036B257D405B9BFC9703545 /* AppInstallLocationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInstallLocationTests.swift; sourceTree = "<group>"; };
 		345A6B541F6F5BFE772A4FF3 /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
 		3711BFF5E9F6F19E30941906 /* WhisperLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WhisperLocal.entitlements; sourceTree = "<group>"; };
 		38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputRoute.swift; sourceTree = "<group>"; };
@@ -167,6 +171,7 @@
 		9769980C86707AB396B34360 /* LongTake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongTake.swift; sourceTree = "<group>"; };
 		9AB6090B6FF0C21E7AF192D6 /* SessionContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionContext.swift; sourceTree = "<group>"; };
 		9B2368773CE8F483F2B05DC9 /* DictationLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationLogView.swift; sourceTree = "<group>"; };
+		A2B4B4BA08AE82397E9F5568 /* AppInstallLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInstallLocation.swift; sourceTree = "<group>"; };
 		A453DF9BD046B0760A74DA81 /* Bench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bench.swift; sourceTree = "<group>"; };
 		A5763CB6E982097551A2347A /* WindowFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowFocus.swift; sourceTree = "<group>"; };
 		A8E562A03F345275BFEC6A25 /* LanguageCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageCoordinator.swift; sourceTree = "<group>"; };
@@ -310,6 +315,7 @@
 			isa = PBXGroup;
 			children = (
 				8DB586ACEA3342B397ED3B3B /* AnthropicTemperatureTests.swift */,
+				3036B257D405B9BFC9703545 /* AppInstallLocationTests.swift */,
 				D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */,
 				D02094467E1587FC75CCC8A7 /* CloudFallbackTests.swift */,
 				38ADAC703311FF92E61C5EF2 /* DictationLogExportTests.swift */,
@@ -330,6 +336,7 @@
 		D2B6B77DD1E0941BA34A1888 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				A2B4B4BA08AE82397E9F5568 /* AppInstallLocation.swift */,
 				E98A3D822AC9524A9D7D1910 /* AppleSpeechASR.swift */,
 				4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */,
 				0F293F5BB80064BB9F9A755B /* AppUpdater.swift */,
@@ -538,6 +545,8 @@
 				805FE51E1C0A6B9BF9FFC295 /* AnthropicPolisher.swift in Sources */,
 				45590D9419BF9586E4475794 /* AnthropicTemperatureTests.swift in Sources */,
 				384CCA80F4FE7FD229820D14 /* AppIdentity.swift in Sources */,
+				59CA6F5D3AA73D5071FB55C6 /* AppInstallLocation.swift in Sources */,
+				1A4D1865ACE3E51A59E22FAD /* AppInstallLocationTests.swift in Sources */,
 				7CD28AD170006A1D5E402AE7 /* AppUpdateFeed.swift in Sources */,
 				58BE50F5E1BFFD45650943DE /* AudioInputRoute.swift in Sources */,
 				F55B6AD2BE935B1AB1C599D8 /* AudioInputRouteTests.swift in Sources */,
@@ -576,6 +585,7 @@
 				71D93DE7E9B354768A78903C /* AnthropicPolisher.swift in Sources */,
 				91CC81B9A54FFF2FECC92B8D /* AppDelegate.swift in Sources */,
 				62B37D9DFC002EF40881E882 /* AppIdentity.swift in Sources */,
+				FF2616E57B659671C9735EAE /* AppInstallLocation.swift in Sources */,
 				1BBDFC011CF6AA23F30046CD /* AppUpdateFeed.swift in Sources */,
 				A2E42C73CB6EC1F334ACE67F /* AppUpdater.swift in Sources */,
 				62C033A5E33A9B81628F3FDB /* AppleSpeechASR.swift in Sources */,
@@ -702,7 +712,7 @@
 				CODE_SIGN_ENTITLEMENTS = WhisperLocal/App/WhisperLocal.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXCLUDED_ARCHS = x86_64;
@@ -713,7 +723,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.2.3;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(inherited) -weak_framework FoundationModels";
 				PRODUCT_BUNDLE_IDENTIFIER = com.usingcolor.WhisperLocal.dev;
@@ -796,7 +806,7 @@
 				CODE_SIGN_ENTITLEMENTS = WhisperLocal/App/WhisperLocal.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXCLUDED_ARCHS = x86_64;
@@ -807,7 +817,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.2.3;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(inherited) -weak_framework FoundationModels";
 				PRODUCT_BUNDLE_IDENTIFIER = com.usingcolor.WhisperLocal.dev;
@@ -1027,7 +1037,7 @@
 				CODE_SIGN_ENTITLEMENTS = WhisperLocal/App/WhisperLocal.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXCLUDED_ARCHS = x86_64;
@@ -1038,7 +1048,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.2;
+				MARKETING_VERSION = 0.2.3;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "$(inherited) -weak_framework FoundationModels";
 				PRODUCT_BUNDLE_IDENTIFIER = com.usingcolor.WhisperLocal;

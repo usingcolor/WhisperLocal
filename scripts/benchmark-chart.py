@@ -6,12 +6,12 @@ ROWS = [  # engine, failure %, price label, kind
     ("GPT-5.6 Sol",          0,  "$3.76", "cloud"),
     ("GPT-5.6 Terra",        3,  "$1.92", "cloud"),
     ("Claude Haiku 4.5",     4,  "$1.00", "cloud"),
-    ("GPT-5.6 Luna",         5,  "$0.21", "pick"),
+    ("GPT-5.6 Luna",         5,  "$0.21", "cloudpick"),
     ("Claude Sonnet 5",      5,  "$2.74", "cloud"),
     ("GPT-4o Mini",         11,  "$0.12", "cloud"),
     ("GPT-4.1 Mini",        14,  "$0.32", "cloud"),
     ("Gemma 4 E2B",         35,  "free",  "device"),
-    ("Apple Intelligence",  53,  "free",  "device"),
+    ("Apple Intelligence",  53,  "free",  "default"),
     ("Fillers only, no LLM",57,  "free",  "none"),
     ("No cleanup at all",   70,  "free",  "none"),
 ]
@@ -30,7 +30,7 @@ PRICE_X = 752                              # prices line up in their own column
 def svg(theme):
     c, p = THEMES[theme], []
     add = p.append
-    height = TOP + len(ROWS) * ROW_H + 34
+    height = TOP + len(ROWS) * ROW_H + 50
     add(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 {height}" width="760" height="{height}" '
         f'font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5">')
     add('<title>Takes with a hard failure, by cleanup engine, with the price per thousand takes</title>')
@@ -46,19 +46,24 @@ def svg(theme):
         add(f'<text x="{gx:.0f}" y="{TOP-20}" text-anchor="middle" fill="{c["muted"]}" font-size="11">{pct}%</text>')
     for i, (name, pct, price, kind) in enumerate(ROWS):
         y = TOP + i * ROW_H
-        fill = {"cloud": c["accent"], "pick": c["accent"], "device": c["warm"], "none": c["pale"]}[kind]
-        weight = ' font-weight="700"' if kind == "pick" else ""
+        fill = {"cloud": c["accent"], "cloudpick": c["accent"],
+                "device": c["warm"], "default": c["warm"], "none": c["pale"]}[kind]
+        weight = ' font-weight="700"' if kind in ("cloudpick", "default") else ""
         add(f'<text x="{BAR_X-12}" y="{y+4}" text-anchor="end" fill="{c["ink"]}"{weight}>{name}</text>')
         width = max(pct * SCALE, 2.5)
         add(f'<rect x="{BAR_X}" y="{y-8}" width="{width:.1f}" height="15" rx="1.5" fill="{fill}" '
-            f'{"stroke=\'"+c["accent"]+"\' stroke-width=\'2\'" if kind == "pick" else ""}/>')
+            f'{"stroke=\'"+(c["accent"] if kind == "cloudpick" else c["warm"])+"\' stroke-width=\'2\'" if kind in ("cloudpick", "default") else ""}/>')
         add(f'<text x="{BAR_X + width + 9:.0f}" y="{y+4}" fill="{c["ink"]}"{weight}>{pct}%</text>')
         add(f'<text x="{PRICE_X}" y="{y+4}" text-anchor="end" fill="{c["muted"]}"{weight}>{price}</text>')
-        if kind == "pick":
-            add(f'<text x="{BAR_X + width + 52:.0f}" y="{y+4}" fill="{c["accent"]}" font-weight="700">← the default</text>')
+        note = {"default": ("← the default", c["warm"]),
+                "cloudpick": ("← what the OpenAI picker starts on", c["accent"])}.get(kind)
+        if note:
+            add(f'<text x="{BAR_X + width + 52:.0f}" y="{y+4}" fill="{note[1]}" font-weight="700">{note[0]}</text>')
     footer = TOP + len(ROWS) * ROW_H + 20
     add(f'<text x="{LEFT}" y="{footer}" fill="{c["muted"]}" font-family="system-ui, -apple-system, sans-serif" font-size="11.5">'
-        f'Blue: cloud models. Red: on-device. Pale: no model at all. One run per case, September 2026.</text>')
+        f'Red: on-device, no key needed — Apple Intelligence is what cleans your takes out of the box.</text>')
+    add(f'<text x="{LEFT}" y="{footer+17}" fill="{c["muted"]}" font-family="system-ui, -apple-system, sans-serif" font-size="11.5">'
+        f'Blue: cloud models, only once you add an API key. Pale: no model at all. One run per case, September 2026.</text>')
     add('</svg>')
     return "\n".join(p) + "\n"
 

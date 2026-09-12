@@ -107,7 +107,7 @@ The defaults assume macOS 26. Older versions still work, with more setup:
 
 Everything else is optional and switchable in Settings: other speech models (WhisperKit `tiny.en` / `base.en` / Large v3 Turbo, NVIDIA Parakeet TDT 0.6B v2), cloud cleanup, custom instructions, per-app rules, a personal dictionary, a local dictation log with JSON / CSV export, and whether WhisperLocal opens at login.
 
-**Picking a cleanup engine.** Cloud cleanup is off unless you turn it on, and API keys live in the Keychain. The numbers below come from the [polish benchmark](Benchmarks/README.md) in this repo: 125 hand-written dictations, each cleaned by every engine through the app's own polishing code, checked by script and then compared head to head by a judge model.
+**Picking a cleanup engine.** Out of the box WhisperLocal cleans on your Mac with Apple Intelligence, and nothing leaves it. Cloud cleanup stays off until you add an API key, which lives in the Keychain. The numbers below come from the [polish benchmark](Benchmarks/README.md) in this repo: 125 hand-written dictations, each cleaned by every engine through the app's own polishing code, checked by script and then compared head to head by a judge model.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/polish-benchmark-dark.svg">
@@ -116,20 +116,20 @@ Everything else is optional and switchable in Settings: other speech models (Whi
 
 | Cleanup engine | Takes with a hard failure | Judged against GPT-4o Mini | Typical wait | Per 1,000 takes |
 |---|---|---|---|---|
-| **GPT-5.6 Luna** — the cloud default | 5% | **55%** | 1.1s | $0.21 |
+| **GPT-5.6 Luna** — what the OpenAI picker starts on | 5% | **55%** | 1.1s | $0.21 |
 | GPT-5.6 Sol | **0%** | **55%** | 1.2s | $3.76 |
 | Claude Opus 5 | **0%** | 54% | 1.5s | $3.59 |
 | GPT-5.6 Terra | 3% | 54% | 1.1s | $1.92 |
-| **Claude Haiku 4.5** — the Anthropic default | 4% | 50% | **0.8s** | $1.00 |
+| **Claude Haiku 4.5** — what the Anthropic picker starts on | 4% | 50% | **0.8s** | $1.00 |
 | Claude Sonnet 5 | 5% | 49% | 1.2s | $2.74 |
 | GPT-4o Mini | 11% | — | **0.6s** | **$0.12** |
 | GPT-4.1 Mini | 14% | 46% | 0.7s | $0.32 |
 | Gemma 4 E2B — on-device | 35% | 29% | 0.8s | free |
-| Apple Intelligence — on-device, the default | 53% | 14% | 1.3s | free |
+| **Apple Intelligence** — on-device, the default with no key | 53% | 14% | 1.3s | free |
 | Filler stripping only — no LLM | 57% | 12% | — | free |
 | Nothing at all | 70% | — | — | free |
 
-**Bold marks the best figure in each column**, and the two names in bold are the defaults. A **hard failure** is one a script can prove: answering a dictated question instead of cleaning it, switching language, dropping what you said, adding a preamble, or misspelling a word from your dictionary. **Judged** is the share of head-to-head comparisons a judge model preferred, with every pair shown in both orders — 50% is a tie with GPT-4o Mini. Prices are published list prices checked 12 September 2026; the free engines are left out of that comparison.
+**Bold marks the best figure in each column.** The names in bold are what the app preselects: Apple Intelligence out of the box, and one model per cloud provider once you add a key. A **hard failure** is one a script can prove: answering a dictated question instead of cleaning it, switching language, dropping what you said, adding a preamble, or misspelling a word from your dictionary. **Judged** is the share of head-to-head comparisons a judge model preferred, with every pair shown in both orders — 50% is a tie with GPT-4o Mini. Prices are published list prices checked 12 September 2026; the free engines are left out of that comparison.
 
 **What that means in practice.** Any current cloud model cleans well — the judge could not reliably tell them apart — so the columns worth reading are the failures and the price, and paying seventeen times more for Opus 5 buys a zero in one column and nothing you would notice in the other. On-device cleanup is free, private and needs no key, but it is a long way behind: Apple Intelligence is barely ahead of stripping fillers with no model at all, and it is the weakest of them on Korean. In everyday use here, 189 cloud requests came to 7 cents — a dollar would cover a couple of thousand. Most of that is output tokens, and over 60% of the input is served from the prompt cache, because the parts of the request that do not change from take to take are sent first.
 

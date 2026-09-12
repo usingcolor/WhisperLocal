@@ -6,6 +6,20 @@ Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applic
 
 Then grant Microphone and Accessibility. Default ASR is Apple Speech on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
 
+## 0.2.1
+
+- **Music and video no longer jump or dip when a take starts.** Opening the microphone on AirPods pulls the headset out of high-quality playback into its call profile, which restarts whatever is playing on a narrowband link and swaps in that profile's own volume. Dictation now records from the built-in or a wired microphone while a Bluetooth headset is playing, and opens that microphone directly so the headset is never touched on the way past.
+- **Choose which microphone dictation uses** — from the recording HUD, the menu bar, or Settings. Picking one mid-take switches it without ending the take: a short gap, then the rest of the sentence on the new microphone, all in one transcript. Left alone, takes follow System Settings exactly as before.
+- **Claude Sonnet 5 and Opus 5 work again.** Both rejected every request with a 400, so cleanup failed on two of the three models the picker recommends. They are also told not to think, which was spending the output budget before the cleaned text: a long take could come back cut short, or pasted with no cleanup at all.
+- **Dictation lands in ChatGPT again.** Its bundle identifier changed, which quietly dropped it off the list of apps that need a clipboard paste — takes reported success and inserted nothing. Apps are now recognised by name as well, and a write that cannot be confirmed goes to the clipboard with the HUD saying so, rather than being reported as done.
+- **Text no longer arrives twice in Safari and Mail.** Their accessibility tree updates after the edit, so the check for "did it land" ran too early, decided it had failed, and pasted a second copy.
+- **Open WhisperLocal at login**, from Settings › General. The toggle follows System Settings › Login Items rather than remembering its own answer, and re-points itself if you move the app. It refuses on a copy running from a disk image, where a login item would point at nothing after a restart.
+- **The recording HUD is a row of Liquid Glass capsules** rather than one frosted slab, and it holds still: the status capsule changes width with every phase, and the HUD used to slide sideways each time. It now opens in the same place on every take. Hovering it keeps it up, which is how the microphone list is reached after a take has finished.
+- **Settings has a General page.** Opening at login and the dictation log live there now instead of halfway down Dictation, and Dictation is grouped into Hotkey, Microphone, Speech model and Inserted text.
+- The OpenAI picker now starts on GPT-5.6 Luna, chosen by measuring every engine against the same transcripts. Apple Intelligence is still the default and still needs no key. The comparison is in the README.
+- Long Japanese and Chinese takes are split and rejoined correctly. They put no spaces between sentences, so pieces were cut in the middle of one and put back together with spaces that do not belong.
+- Quitting by dragging the menu bar item out of the menu bar works again, as it did in 0.2.0.
+
 ## 0.2.0
 
 - **Long dictations no longer come out empty.** The clipboard was being restored on a fixed timer while a long paste was still being read, so the text was replaced mid-paste. Over 300 characters this failed most of the time. The app now waits for the paste to land, and if it still cannot confirm it, leaves the dictation on the clipboard and tells you to press ⌘V rather than discarding it.

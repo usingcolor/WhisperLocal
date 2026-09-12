@@ -55,9 +55,28 @@ ffmpeg -hide_banner -loglevel error -y -i "$raw" \
   -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 26 -preset slow \
   -movflags +faststart -an "$final"
 
+# The README plays a GIF, not this MP4: GitHub serves a repo-hosted video as
+# text/plain and its blob viewer will not play one either. Same geometry as the
+# MP4 at 13 fps, which is what keeps a 21-second demo near a megabyte.
+#
+# stats_mode=full, not diff, and it matters: diff builds the palette from pixels
+# that change, and it dropped the red recording dot to grey — the one pixel in
+# the HUD that means "you are recording". full at 128 colours is both truer and
+# smaller than diff at 256.
+gif="${final%.mp4}.gif"
+palette="$(mktemp -t whisperlocal-palette).png"
+ffmpeg -hide_banner -loglevel error -y -i "$final" \
+  -vf "fps=13,scale=720:-2:flags=lanczos,palettegen=stats_mode=full:max_colors=128" \
+  -frames:v 1 "$palette"
+ffmpeg -hide_banner -loglevel error -y -i "$final" -i "$palette" \
+  -lavfi "fps=13,scale=720:-2:flags=lanczos[v];[v][1:v]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" \
+  "$gif"
+rm -f "$palette"
+printf 'gif: %s  (%.1f MB)\n' "$gif" "$(echo "$(wc -c < "$gif")/1048576" | bc -l)"
+
 bytes=$(wc -c < "$final" | tr -d ' ')
 printf '\ndone: %s  (%s, %.1f MB)\n' "$final" "$(ffprobe -v error -select_streams v:0 \
   -show_entries stream=width,height,duration -of csv=p=0 "$final")" "$(echo "$bytes/1048576" | bc -l)"
 echo
-echo "Next: drag it into a GitHub issue comment, copy the URL GitHub gives back,"
-echo "and put that in the demo slot near the top of README.md."
+echo "Next: copy both into assets/ — the GIF is what the README plays, the MP4 is"
+echo "the source to regenerate it from."

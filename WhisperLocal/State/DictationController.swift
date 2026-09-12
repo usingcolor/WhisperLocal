@@ -150,7 +150,12 @@ final class DictationController: ObservableObject {
             Task { @MainActor in self?.cancelRecording() }
         }
         hud.onCancel = { [weak self] in
-            self?.abandonProcessing()
+            // The same path Escape takes. `abandonProcessing` was wrong for a take
+            // still recording: it cancels the work but never stops the recorder or
+            // clears the hotkey session, so the HUD would have said "Cancelled"
+            // with the microphone still open. `cancelRecording` routes to it when
+            // there is no recording left to stop.
+            self?.cancelRecording()
         }
         hud.onSelectInput = { [weak self] uid in
             // Mid-take this rebuilds the input graph and keeps recording into the

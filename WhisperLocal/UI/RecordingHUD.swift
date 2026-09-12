@@ -34,11 +34,16 @@ final class RecordingHUDController: ObservableObject {
     /// Menu items hold their target weakly, so the target has to outlive the call.
     private var menuTarget: HUDInputMenuTarget?
 
-    /// Transcription and polish can be abandoned; an insert already in flight cannot
-    /// be usefully stopped, so the button goes away for it.
+    /// A take can be abandoned while it is being recorded and while it is being
+    /// worked on; an insert already in flight cannot be usefully stopped, so the
+    /// button goes away for that one.
+    ///
+    /// Recording used to be missing here, which left Escape able to throw a take
+    /// away and the HUD unable to — two affordances for one intent, one of them
+    /// silently weaker.
     var isCancellable: Bool {
         switch phase {
-        case .processing, .settingContext, .polishing: return true
+        case .waitingForMic, .recording, .processing, .settingContext, .polishing: return true
         default: return false
         }
     }
@@ -54,8 +59,8 @@ final class RecordingHUDController: ObservableObject {
     }
 
     /// The chip is worth showing while the mic is open or the take has just
-    /// finished. During transcription and polish the same corner carries Cancel,
-    /// and by then the microphone no longer matters to this take.
+    /// finished. It goes away for transcription and polish, where the microphone
+    /// no longer has anything to do with this take.
     var showsInputChip: Bool {
         switch phase {
         case .waitingForMic, .recording, .success, .successNote: return activeInputName != nil

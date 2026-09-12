@@ -288,8 +288,12 @@ final class AudioRecorder: ObservableObject {
             input.isVoiceProcessingAGCEnabled = false
             logger.info("Voice processing ON (echo cancellation, ducking, AGC off)")
         } catch {
+            // `engineUsesVoiceProcessing` deliberately keeps saying what this
+            // engine was *asked* for. Recording the failure instead left the flag
+            // disagreeing with the setting forever, and `start()` then tore the
+            // graph down and rebuilt it on every single take — a mic restart each
+            // time, and a Bluetooth profile switch with it.
             logger.error("Voice processing failed, using raw input: \(error.localizedDescription, privacy: .public)")
-            engineUsesVoiceProcessing = false
         }
         pin(target.id, to: input)
 

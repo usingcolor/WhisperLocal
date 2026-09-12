@@ -66,10 +66,12 @@ final class RecordingHUDController: ObservableObject {
     func setHovering(_ hovering: Bool) {
         isHovering = hovering
         if hovering {
-            // Keep it up: the pointer arriving is the request.
+            // Keep it up: the pointer arriving is the request. `hidePending` is
+            // left standing, so the HUD still knows it owes a hide — cancelling
+            // the task used to be the whole story, and a pointer that arrived
+            // before the timer fired left the HUD on screen for good.
             hideTask?.cancel()
         } else if hidePending {
-            hidePending = false
             scheduleHide(after: 0.4)
         }
     }
@@ -234,17 +236,18 @@ final class RecordingHUDController: ObservableObject {
         hidePending = false
     }
 
+    /// Arms the hide. `hidePending` says the HUD is due to disappear and stays
+    /// true until it does, so a hover can suspend the countdown at any point in it
+    /// and the pointer leaving always re-arms.
     private func scheduleHide(after seconds: Double) {
         hideTask?.cancel()
+        hidePending = true
         hideTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
             // Hovering means the pointer is on its way to the microphone menu.
-            // Hold the HUD open and hide once it leaves.
-            if isHovering {
-                hidePending = true
-                return
-            }
+            // Hold the HUD open; `setHovering(false)` schedules the real hide.
+            guard !isHovering else { return }
             hide()
         }
     }

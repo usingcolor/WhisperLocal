@@ -155,11 +155,15 @@ final class AudioInputUnit {
     }
 
     /// Release the hardware now rather than whenever the last reference goes.
+    ///
+    /// Stop first. `AudioOutputUnitStop` waits for the render thread, so after it
+    /// returns nothing can be inside `render()` any more; dropping the callbacks
+    /// before it would release a closure the HAL could still be calling.
     func dispose() {
+        stop()
         removeListeners()
         onBuffer = nil
         onConfigurationChange = nil
-        stop()
     }
 
     // MARK: - Watching for the ground moving

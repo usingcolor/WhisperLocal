@@ -47,3 +47,7 @@ Secrets.xcconfig
 .vscode/
 *.swp
 *~
+
+# Polish benchmark: outputs, verdicts and downloaded datasets stay local
+Benchmarks/results/
+Benchmarks/data/

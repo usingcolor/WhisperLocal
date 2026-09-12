@@ -155,7 +155,55 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SWIFT_VERSION: "5.10"
         SWIFT_STRICT_CONCURRENCY: minimal
+  # Polish benchmark (Benchmarks/README.md). Compiles the app's own polish code
+  # rather than a copy, so it measures what ships.
+  PolishBench:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Benchmarks/PolishBench
+      - path: WhisperLocal/Services/Polishers/TextPolisher.swift
+      - path: WhisperLocal/Services/Polishers/CleanupPrompt.swift
+      - path: WhisperLocal/Services/Polishers/DictionaryCSV.swift
+      - path: WhisperLocal/Services/Polishers/CloudModelCatalog.swift
+      - path: WhisperLocal/Services/Polishers/OpenAIPolisher.swift
+      - path: WhisperLocal/Services/Polishers/AnthropicPolisher.swift
+      - path: WhisperLocal/Services/Polishers/LocalLLMPolisher.swift
+      - path: WhisperLocal/Services/Polishers/GemmaMLXPolisher.swift
+      - path: WhisperLocal/Services/Polishers/PolishChunker.swift
+      - path: WhisperLocal/Services/SpokenLanguage.swift
+      - path: WhisperLocal/Services/TextInserter.swift
+      - path: WhisperLocal/State/SessionContext.swift
+      - path: WhisperLocal/App/AppIdentity.swift
+    settings:
+      base:
+        PRODUCT_NAME: polish-bench
+        PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal.polish-bench
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_VERSION: "5.10"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        ENABLE_HARDENED_RUNTIME: NO
+        OTHER_LDFLAGS: "$(inherited) -weak_framework FoundationModels"
+    dependencies:
+      - package: mlx-swift-lm
+        product: MLXLLM
+      - package: mlx-swift-lm
+        product: MLXLMCommon
+      - package: mlx-swift-lm
+        product: MLXHuggingFace
+      - package: swift-huggingface
+        product: HuggingFace
+      - package: swift-transformers
+        product: Tokenizers
 schemes:
+  PolishBench:
+    build:
+      targets:
+        PolishBench: all
+    run:
+      config: Release
   PolishTests:
     build:
       targets:

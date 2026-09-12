@@ -161,6 +161,8 @@ final class RecordingHUDController: ObservableObject {
         self.languageBadge = language?.nativeName
         hidePending = false
         isHovering = false
+        // A new take re-centres; the anchor below then holds for its lifetime.
+        anchoredLeftEdge = nil
         refreshInputs()
         ensurePanel()
         positionOnActiveScreen()
@@ -234,6 +236,7 @@ final class RecordingHUDController: ObservableObject {
         languageBadge = nil
         isHovering = false
         hidePending = false
+        anchoredLeftEdge = nil
     }
 
     /// Arms the hide. `hidePending` says the HUD is due to disappear and stays
@@ -260,6 +263,12 @@ final class RecordingHUDController: ObservableObject {
         let current = panel.frame.size
         guard abs(current.width - wanted.width) > 0.5 || abs(current.height - wanted.height) > 0.5 else { return }
         panel.setContentSize(wanted)
+        // The first fit of a session decides where the row starts, because this is
+        // the first moment the real width is known — `show()` positions a panel
+        // still carrying the last take's size.
+        if anchoredLeftEdge == nil, let screen = Self.activeScreen() {
+            anchoredLeftEdge = screen.visibleFrame.midX - wanted.width / 2
+        }
         positionOnActiveScreen()
     }
 
@@ -308,15 +317,32 @@ final class RecordingHUDController: ObservableObject {
         positionOnActiveScreen()
     }
 
-    private func positionOnActiveScreen() {
-        guard let panel else { return }
+    /// Where the row starts, held for the life of one HUD session.
+    ///
+    /// The status capsule is a different width in every phase — "Listening" is not
+    /// "Transcribing", and the level meter is only there while recording. Centring
+    /// the panel on each of those slid the whole row sideways, badge and mic chip
+    /// included, several times per take. Centred once, then anchored: the capsules
+    /// grow to the right and nothing already on screen moves.
+    private var anchoredLeftEdge: CGFloat?
+
+    private static func activeScreen() -> NSScreen? {
         let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
-        guard let screen else { return }
+        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+    }
+
+    private func positionOnActiveScreen() {
+        guard let panel, let screen = Self.activeScreen() else { return }
         let frame = screen.visibleFrame
-        let x = frame.midX - panel.frame.width / 2
-        let y = frame.minY + 48
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        var x = anchoredLeftEdge ?? (frame.midX - panel.frame.width / 2)
+        // An anchor that no longer fits — the row outgrew it, or the pointer moved
+        // to another display — is worse than one that moves. Re-centre and keep
+        // that instead.
+        if x < frame.minX || x + panel.frame.width > frame.maxX {
+            x = frame.midX - panel.frame.width / 2
+            anchoredLeftEdge = x
+        }
+        panel.setFrameOrigin(NSPoint(x: x, y: frame.minY + 48))
     }
 }
 

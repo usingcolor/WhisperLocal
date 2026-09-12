@@ -17,11 +17,61 @@ final class DictationLogExportTests: XCTestCase {
 
     func testCSVEscapesCommasAndQuotes() {
         let csv = DictationLogExport.csv(entries: [entry])
-        XCTAssertTrue(csv.hasPrefix("date,outcome,app,insert,audio_seconds,stages,cleanup_note,error,raw,polished\n"))
+        XCTAssertTrue(csv.hasPrefix("date,outcome,app,insert,audio_seconds,language,microphone,stages,cleanup_note,error,raw,polished\n"))
         XCTAssertTrue(csv.contains("success"))
         XCTAssertTrue(csv.contains("Notes"))
         XCTAssertTrue(csv.contains("\"um hello, \"\"world\"\"\""))
         XCTAssertTrue(csv.contains("1.5"))
+    }
+
+    /// A column added to the header and not to the rows shifts every field after
+    /// it, quietly, in a file people open in a spreadsheet.
+    func testEveryRowHasAsManyFieldsAsTheHeader() {
+        let csv = DictationLogExport.csv(entries: [entry])
+        let lines = csv.split(separator: "\n", omittingEmptySubsequences: true)
+        XCTAssertEqual(lines.count, 2)
+        let columns = { (line: Substring) -> Int in
+            var count = 1
+            var inQuotes = false
+            for character in line {
+                if character == "\"" { inQuotes.toggle() }
+                if character == ",", !inQuotes { count += 1 }
+            }
+            return count
+        }
+        XCTAssertEqual(columns(lines[0]), columns(lines[1]))
+    }
+
+    func testTheLanguageAndMicrophoneAreExported() {
+        var tagged = entry
+        tagged.language = "Korean"
+        tagged.microphone = "MacBook Air Microphone → AirPods Pro"
+        XCTAssertTrue(DictationLogExport.csv(entries: [tagged]).contains("Korean"))
+        let text = DictationLogExport.plainText(for: tagged)
+        XCTAssertTrue(text.contains("Language: Korean"))
+        XCTAssertTrue(text.contains("Microphone: MacBook Air Microphone → AirPods Pro"))
+    }
+
+    /// The store returns an empty array on any decoding failure, so a required
+    /// field here would erase every take the user had already recorded the first
+    /// time they ran the new version. Entries written before these existed must
+    /// still load.
+    func testAnEntryWrittenBeforeTheseFieldsStillDecodes() throws {
+        let old = """
+        [{
+          "id": "00000000-0000-0000-0000-000000000002",
+          "date": 760000000,
+          "raw": "hello",
+          "polished": "Hello.",
+          "stages": ["Fillers"],
+          "outcome": "success"
+        }]
+        """
+        let entries = try JSONDecoder().decode([DictationLogEntry].self, from: Data(old.utf8))
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertNil(entries[0].language)
+        XCTAssertNil(entries[0].microphone)
+        XCTAssertEqual(entries[0].raw, "hello")
     }
 
     func testJSONRoundTrip() throws {

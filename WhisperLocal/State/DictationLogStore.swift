@@ -13,6 +13,15 @@ struct DictationLogEntry: Identifiable, Codable, Equatable {
     let outcome: Outcome
     let errorMessage: String?
     let audioSeconds: Double?
+    /// The language the take ran in, and the microphone it came from.
+    ///
+    /// `var` with a default, and optional, on purpose: entries written before
+    /// these existed have neither key, and `load` returns an empty array on any
+    /// decoding failure — so a required field here would silently erase every
+    /// take the user had already recorded.
+    var language: String? = nil
+    /// More than one name, joined, when the microphone was switched mid-take.
+    var microphone: String? = nil
 
     enum Outcome: String, Codable {
         case success

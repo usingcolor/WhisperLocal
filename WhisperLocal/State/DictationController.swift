@@ -207,6 +207,23 @@ final class DictationController: ObservableObject {
         hud.setLanguage(next)
     }
 
+
+    /// What the log should say this take ran in, and came from.
+    ///
+    /// The language is recorded even when it is English: a log states what
+    /// happened, and "nothing here" is not the same fact as "English". The
+    /// microphone is joined the way stages are, so a mid-take switch reads as one
+    /// field rather than hiding behind whichever device happened to be last.
+    private var loggedLanguage: String {
+        takeLanguage.englishName
+    }
+
+    private var loggedMicrophone: String? {
+        let trail = recorder.inputTrail
+        guard !trail.isEmpty else { return recorder.currentInputName }
+        return trail.joined(separator: " → ")
+    }
+
     /// What would be lost by quitting right now, phrased to finish "WhisperLocal is
     /// still …". Nil when there is nothing in flight.
     var workInProgressDescription: String? {
@@ -471,7 +488,9 @@ final class DictationController: ObservableObject {
                 insertMethod: nil,
                 outcome: .error,
                 errorMessage: "No microphone input",
-                audioSeconds: Double(samples.count) / TranscriptionService.sampleRate
+                audioSeconds: Double(samples.count) / TranscriptionService.sampleRate,
+                language: loggedLanguage,
+                microphone: loggedMicrophone
             ))
             return
         }
@@ -542,7 +561,9 @@ final class DictationController: ObservableObject {
                     insertMethod: nil,
                     outcome: .heardNothing,
                     errorMessage: "Heard nothing",
-                    audioSeconds: audioSeconds
+                    audioSeconds: audioSeconds,
+                    language: loggedLanguage,
+                    microphone: loggedMicrophone
                 ))
                 return
             }
@@ -593,7 +614,9 @@ final class DictationController: ObservableObject {
                     insertMethod: insertion.method.rawValue,
                     outcome: .success,
                     errorMessage: nil,
-                    audioSeconds: audioSeconds
+                    audioSeconds: audioSeconds,
+                    language: loggedLanguage,
+                    microphone: loggedMicrophone
                 ))
                 let generation = sessionGeneration
                 // An insert we could not confirm keeps the dictation on the
@@ -636,7 +659,9 @@ final class DictationController: ObservableObject {
                     insertMethod: insertion.method.rawValue,
                     outcome: .insertFailed,
                     errorMessage: "Could not insert text\(target)",
-                    audioSeconds: audioSeconds
+                    audioSeconds: audioSeconds,
+                    language: loggedLanguage,
+                    microphone: loggedMicrophone
                 ))
             }
         } catch {
@@ -653,7 +678,9 @@ final class DictationController: ObservableObject {
                 insertMethod: nil,
                 outcome: .error,
                 errorMessage: error.localizedDescription,
-                audioSeconds: audioSeconds
+                audioSeconds: audioSeconds,
+                language: loggedLanguage,
+                microphone: loggedMicrophone
             ))
         }
     }

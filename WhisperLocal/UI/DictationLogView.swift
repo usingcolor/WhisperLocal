@@ -416,6 +416,14 @@ private struct DictationLogDetailView: View {
         if let seconds = entry.audioSeconds {
             facts.append(Fact(id: "Audio", value: String(format: "%.1f s", seconds)))
         }
+        // Absent on takes recorded before these were logged, which is why they are
+        // conditional rather than showing an empty row.
+        if let language = entry.language, !language.isEmpty {
+            facts.append(Fact(id: "Language", value: language))
+        }
+        if let microphone = entry.microphone, !microphone.isEmpty {
+            facts.append(Fact(id: "Microphone", value: microphone))
+        }
         if !entry.stages.isEmpty {
             facts.append(Fact(id: "Pipeline", value: entry.stages.joined(separator: " → ")))
         }

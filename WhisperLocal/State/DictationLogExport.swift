@@ -68,6 +68,7 @@ enum DictationLogExport {
     static func csv(entries: [DictationLogEntry]) -> String {
         let header = [
             "date", "outcome", "app", "insert", "audio_seconds",
+            "language", "microphone",
             "stages", "cleanup_note", "error", "raw", "polished"
         ]
         var lines = [header.map(escapeCSV).joined(separator: ",")]
@@ -78,6 +79,8 @@ enum DictationLogExport {
                 entry.appName ?? "",
                 entry.insertMethod ?? "",
                 entry.audioSeconds.map { String(format: "%.1f", $0) } ?? "",
+                entry.language ?? "",
+                entry.microphone ?? "",
                 entry.stages.joined(separator: " | "),
                 entry.cleanupNote ?? "",
                 entry.errorMessage ?? "",
@@ -105,6 +108,12 @@ enum DictationLogExport {
         }
         if let seconds = entry.audioSeconds {
             lines.append("Audio: \(String(format: "%.1f", seconds)) s")
+        }
+        if let language = entry.language, !language.isEmpty {
+            lines.append("Language: \(language)")
+        }
+        if let microphone = entry.microphone, !microphone.isEmpty {
+            lines.append("Microphone: \(microphone)")
         }
         if !entry.stages.isEmpty {
             lines.append("Stages: \(entry.stages.joined(separator: " → "))")

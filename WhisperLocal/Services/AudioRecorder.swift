@@ -13,6 +13,13 @@ final class AudioRecorder: ObservableObject {
     /// controller so the take ends there instead of silently recording nothing.
     @Published private(set) var inputFailed = false
 
+    /// The microphone the live graph is open on, by name, and every one this take
+    /// has used. The trail is what the dictation log records: a mid-take switch is
+    /// exactly the thing worth knowing when a transcript reads oddly halfway
+    /// through, and a single name would hide it.
+    @Published private(set) var currentInputName: String?
+    private(set) var inputTrail: [String] = []
+
     private var inputUnit: AudioInputUnit?
     /// Only for echo cancellation, which the voice-processing unit will not do on a
     /// device we name. Every other take runs on `inputUnit`.
@@ -122,6 +129,8 @@ final class AudioRecorder: ObservableObject {
             logger.info("Prepended \(prepended, privacy: .public) preroll frames")
         }
 
+        inputTrail = []
+
         let wantsVoiceProcessing = SettingsStore.shared.enableEchoCancellation
         if isEngineLive, engineUsesVoiceProcessing != wantsVoiceProcessing {
             logger.info("Rebuilding the input graph for a voice-processing change")
@@ -129,6 +138,7 @@ final class AudioRecorder: ObservableObject {
         }
 
         if isEngineLive {
+            inputTrail = currentInputName.map { [$0] } ?? []
             isRecording = true
             return
         }
@@ -195,6 +205,13 @@ final class AudioRecorder: ObservableObject {
         stopEngineHardware()
 
         guard let target = deviceForThisTake() else { throw AudioRecorderError.noInputDevice }
+        currentInputName = target.name
+        // Only while a take is running: a prewarm or an idle rebuild is not part of
+        // anyone's recording. `isCapturing` is already true by the time `start()`
+        // reaches here, so the device a cold take opens lands in the trail.
+        if isCapturing, inputTrail.last != target.name {
+            inputTrail.append(target.name)
+        }
 
         // A new graph has to prove its own liveness: silence carried over from the
         // last one would announce a microphone that is not passing audio yet.

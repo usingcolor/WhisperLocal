@@ -112,6 +112,7 @@
 		DD5F9B314242AE6F0F901EED /* Judge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04B1CABB1D5ECFB59B05E153 /* Judge.swift */; };
 		E1FF16BB19B278E5559110F6 /* LaunchAtLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24DCD4166F056923578A903D /* LaunchAtLoginTests.swift */; };
 		E5B382402026A0EA34458CA6 /* DictationLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B2368773CE8F483F2B05DC9 /* DictationLogView.swift */; };
+		E5DF2A0A9AFD02FD96EA30DA /* AudioInputUnit.swift in Sources */ = {isa = PBXBuildFile; fileRef = D08151FF557D39AC6F8295BD /* AudioInputUnit.swift */; };
 		F4C3CE0FA33D73AC4444CF46 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A99161BEE11539679C79444C /* FluidAudio */; };
 		F55B6AD2BE935B1AB1C599D8 /* AudioInputRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */; };
 		FA8A33D7AD3D3AAC906F95F6 /* WhisperLocalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748E974DF04BD7DC99D7796A /* WhisperLocalApp.swift */; };
@@ -179,6 +180,7 @@
 		CA97989F10BB9CC020C7F483 /* SessionContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionContextTests.swift; sourceTree = "<group>"; };
 		D02094467E1587FC75CCC8A7 /* CloudFallbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFallbackTests.swift; sourceTree = "<group>"; };
 		D036D4D666946E1E4C5A30F9 /* WhisperLocal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhisperLocal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D08151FF557D39AC6F8295BD /* AudioInputUnit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputUnit.swift; sourceTree = "<group>"; };
 		D2F4DE6071F327928C57D2E6 /* AudioInputRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioInputRouteTests.swift; sourceTree = "<group>"; };
 		D397411F2FAC3ECA1546964F /* StreamingTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingTranscriber.swift; sourceTree = "<group>"; };
 		D3A0E540785AF85E8AAB0D1B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -332,6 +334,7 @@
 				4BEC390D07740C11C29482E4 /* AppUpdateFeed.swift */,
 				0F293F5BB80064BB9F9A755B /* AppUpdater.swift */,
 				38492DD6FC7E7B4828DC5DE4 /* AudioInputRoute.swift */,
+				D08151FF557D39AC6F8295BD /* AudioInputUnit.swift */,
 				F83D3461601CD53D69C8AE0F /* AudioRecorder.swift */,
 				F44C4928A4E716CB8E7823B2 /* HotKeyManager.swift */,
 				C0D24AA5C02FA478C2F2E021 /* LanguageSupport.swift */,
@@ -577,6 +580,7 @@
 				A2E42C73CB6EC1F334ACE67F /* AppUpdater.swift in Sources */,
 				62C033A5E33A9B81628F3FDB /* AppleSpeechASR.swift in Sources */,
 				1D50AA3CEE8B37409DA4B35B /* AudioInputRoute.swift in Sources */,
+				E5DF2A0A9AFD02FD96EA30DA /* AudioInputUnit.swift in Sources */,
 				68484A6EFE8E4A48F43AE7BE /* AudioRecorder.swift in Sources */,
 				7AE90627E94B12E6739392B7 /* CleanupPrompt.swift in Sources */,
 				ACDF4257E090B5ECF7FBA95D /* CloudModelCatalog.swift in Sources */,

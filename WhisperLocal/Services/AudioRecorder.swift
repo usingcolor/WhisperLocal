@@ -13,13 +13,19 @@ final class AudioRecorder: ObservableObject {
     /// controller so the take ends there instead of silently recording nothing.
     @Published private(set) var inputFailed = false
 
+    private var inputUnit: AudioInputUnit?
+    /// Only for echo cancellation, which the voice-processing unit will not do on a
+    /// device we name. Every other take runs on `inputUnit`.
     private var engine: AVAudioEngine?
     private var tapInstalled = false
+    private var configObserver: NSObjectProtocol?
     private var outputFormat: AVAudioFormat?
     private var converter: AVAudioConverter?
-    private var configObserver: NSObjectProtocol?
     private var sleepObserver: NSObjectProtocol?
     private var idleStopTask: Task<Void, Never>?
+    /// Device notifications arrive in bursts — format, rate and liveness all at
+    /// once — so the rebuild is coalesced instead of running three times.
+    private var configChangeTask: Task<Void, Never>?
     private var engineStartedAt: Date?
     /// Snapshot for idle-hold length. Refreshed when the engine starts or the
     /// graph reconfigures — not on every take, so `stop()` stays off coreaudiod.
@@ -182,20 +188,111 @@ final class AudioRecorder: ObservableObject {
     }
 
     private var isEngineLive: Bool {
-        tapInstalled && engine?.isRunning == true
+        inputUnit?.isRunning == true || (tapInstalled && engine?.isRunning == true)
     }
 
     private func startEngine() throws {
         stopEngineHardware()
 
+        guard let target = deviceForThisTake() else { throw AudioRecorderError.noInputDevice }
+
+        // A new graph has to prove its own liveness: silence carried over from the
+        // last one would announce a microphone that is not passing audio yet.
+        lock.lock()
+        didAnnounceInputReady = false
+        samplesSinceEngineStart = 0
+        didLogFirstBuffer = false
+        lock.unlock()
+        isInputReady = false
+
+        // Playback either side of the mic opening. A take used to change the
+        // headset's Bluetooth profile, and with it the volume, without this app
+        // touching output at all — so the log says whether the system moved the
+        // output device, its volume, or its sample rate underneath us.
+        let outputBefore = AudioOutputSnapshot.current()
+        engineStartedAt = Date()
+
+        engineUsesVoiceProcessing = SettingsStore.shared.enableEchoCancellation
+        if engineUsesVoiceProcessing {
+            try startVoiceProcessingEngine(on: target)
+        } else {
+            try startInputUnit(on: target)
+        }
+
+        refreshCachedInputRoute()
+        logOutputChange(from: outputBefore)
+    }
+
+    /// The ordinary path: our own unit, on the device we picked.
+    private func startInputUnit(on target: InputTarget) throws {
+        let unit: AudioInputUnit
+        do {
+            unit = try AudioInputUnit(deviceID: target.id)
+        } catch {
+            throw AudioRecorderError.engineStartFailed(error as NSError)
+        }
+        let hardwareFormat = unit.format
+        logger.info(
+            "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch on \(target.name, privacy: .public)"
+        )
+        let (outputFormat, converter) = try makeConversion(from: hardwareFormat)
+        self.inputUnit = unit
+
+        unit.onBuffer = { [weak self] buffer in
+            self?.ingest(
+                buffer,
+                outputFormat: outputFormat,
+                converter: converter,
+                converterSourceFormat: hardwareFormat
+            )
+        }
+        unit.onConfigurationChange = { [weak self] in
+            Task { @MainActor in self?.scheduleConfigurationRebuild() }
+        }
+
+        do {
+            try unit.start()
+        } catch {
+            stopEngineHardware()
+            throw AudioRecorderError.engineStartFailed(error as NSError)
+        }
+        unit.watchForChanges(followingSystemDefault: target.followsSystemDefault)
+    }
+
+    /// Echo cancellation only.
+    ///
+    /// The voice-processing unit rejects a device chosen the way `AudioInputUnit`
+    /// chooses one — it needs the speaker signal as well as the microphone, and
+    /// takes only the aggregate the engine builds for it. So this path keeps
+    /// AVAudioEngine, and with it the old cost: the default input is opened for a
+    /// moment before the device we want is pinned, which on a Bluetooth headset is
+    /// audible. That is the trade this setting already carries, and it is the
+    /// setting for someone listening on speakers, where there is no headset to
+    /// disturb.
+    private func startVoiceProcessingEngine(on target: InputTarget) throws {
         let engine = AVAudioEngine()
         let input = engine.inputNode
-        // Voice processing first: turning it on rebuilds the underlying audio unit,
-        // which would discard a device selection made before it. Both must happen
-        // before the format is read, since the format belongs to the unit and the
-        // device it points at.
-        applyVoiceProcessing(to: input)
-        applyPreferredInputDevice(to: input)
+        do {
+            // Turning this on rebuilds the underlying unit, so it must happen
+            // before the device is pinned or the format is read.
+            try input.setVoiceProcessingEnabled(true)
+            // Cancellation alone cannot cope with double-talk — two voices at once
+            // is where the adaptive filter stops adapting and residual speech leaks
+            // into the transcript. Dipping the far end is the direct remedy.
+            var ducking = AVAudioVoiceProcessingOtherAudioDuckingConfiguration()
+            ducking.enableAdvancedDucking = true
+            ducking.duckingLevel = .default
+            input.voiceProcessingOtherAudioDuckingConfiguration = ducking
+            // AGC rides gain up through quiet passages, which pumps whatever
+            // residual survived cancellation. Steady levels suit the model better.
+            input.isVoiceProcessingAGCEnabled = false
+            logger.info("Voice processing ON (echo cancellation, ducking, AGC off)")
+        } catch {
+            logger.error("Voice processing failed, using raw input: \(error.localizedDescription, privacy: .public)")
+            engineUsesVoiceProcessing = false
+        }
+        pin(target.id, to: input)
+
         // A `format: nil` tap delivers the node's *output* format, so read that.
         // (Under voice processing both sides report the same 7-channel discrete
         // layout; the downmix that handles it lives in `ingest`.)
@@ -203,13 +300,38 @@ final class AudioRecorder: ObservableObject {
         if hardwareFormat.sampleRate <= 0 || hardwareFormat.channelCount == 0 {
             hardwareFormat = input.inputFormat(forBus: 0)
         }
-        if hardwareFormat.sampleRate > 0 {
-            let raw = input.inputFormat(forBus: 0)
-            logger.info(
-                "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch (device \(raw.sampleRate, privacy: .public) Hz, \(raw.channelCount, privacy: .public) ch)"
+        logger.info(
+            "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch on \(target.name, privacy: .public)"
+        )
+        let (outputFormat, converter) = try makeConversion(from: hardwareFormat)
+        self.engine = engine
+
+        input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            self?.ingest(
+                buffer,
+                outputFormat: outputFormat,
+                converter: converter,
+                converterSourceFormat: hardwareFormat
             )
         }
+        tapInstalled = true
 
+        do {
+            try engine.start()
+        } catch {
+            stopEngineHardware()
+            throw AudioRecorderError.engineStartFailed(error as NSError)
+        }
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.scheduleConfigurationRebuild() }
+        }
+    }
+
+    private func makeConversion(from hardwareFormat: AVAudioFormat) throws -> (AVAudioFormat, AVAudioConverter?) {
         guard let outputFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: targetSampleRate,
@@ -218,110 +340,13 @@ final class AudioRecorder: ObservableObject {
         ) else {
             throw AudioRecorderError.formatUnavailable
         }
-
         let converter: AVAudioConverter? = {
             guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0 else { return nil }
             return AVAudioConverter(from: hardwareFormat, to: outputFormat)
         }()
-
         self.outputFormat = outputFormat
         self.converter = converter
-        self.engine = engine
-        engineStartedAt = Date()
-
-        installTap(
-            on: engine,
-            outputFormat: outputFormat,
-            converter: converter,
-            converterSourceFormat: hardwareFormat
-        )
-
-        // Playback either side of the mic opening. People report music jumping in
-        // volume when a take starts, and nothing in this app touches output — so
-        // the log has to say whether the system moved the output device, its
-        // volume, or its sample rate underneath us.
-        let outputBefore = AudioOutputSnapshot.current()
-        do {
-            try engine.start()
-        } catch {
-            stopEngineHardware()
-            throw AudioRecorderError.engineStartFailed(error as NSError)
-        }
-        refreshCachedInputRoute()
-        logInputDevice(of: input)
-        logOutputChange(from: outputBefore)
-
-        configObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.reinstallTapAfterConfigurationChange()
-            }
-        }
-    }
-
-    /// macOS voice processing: acoustic echo cancellation, so the mic stops hearing
-    /// this Mac's own speakers. Dev-only for now — it brings noise suppression and
-    /// gain control along with it, and their effect on transcript quality has not
-    /// been measured. Failure is non-fatal: dictation continues on the raw input.
-    private func applyVoiceProcessing(to input: AVAudioInputNode) {
-        let wanted = SettingsStore.shared.enableEchoCancellation
-        // Records what this engine was *asked* for, not what succeeded. Storing the
-        // outcome meant a failure left the flag disagreeing with the setting
-        // forever, and start() then tore the graph down and rebuilt it on every
-        // single take — a mic restart each time, and a Bluetooth profile switch
-        // with it.
-        engineUsesVoiceProcessing = wanted
-        guard wanted else { return }
-        do {
-            try input.setVoiceProcessingEnabled(true)
-            // Duck other audio while you speak. Cancellation alone cannot cope with
-            // double-talk — two voices at once is where the adaptive filter stops
-            // adapting and residual speech leaks into the transcript. Dipping the
-            // far end is the direct remedy: less echo to cancel in the moment that
-            // cancellation is worst at.
-            var ducking = AVAudioVoiceProcessingOtherAudioDuckingConfiguration()
-            ducking.enableAdvancedDucking = true
-            ducking.duckingLevel = .default
-            input.voiceProcessingOtherAudioDuckingConfiguration = ducking
-            // AGC rides gain up through quiet passages, which pumps whatever residual
-            // survived cancellation. Steady levels suit the speech model better.
-            input.isVoiceProcessingAGCEnabled = false
-            logger.info("Voice processing ON (echo cancellation, ducking, AGC off)")
-        } catch {
-            logger.error("Voice processing failed, using raw input: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    /// Point the input unit at the device this take should use.
-    ///
-    /// An explicit choice wins outright: someone who picked a mic means it, even
-    /// if it is the headset that will drop playback to narrowband. With no choice
-    /// made, the old rule stands — swap a Bluetooth device that is also playing
-    /// for a microphone off the radio, so music stays in A2DP and ASR gets full band.
-    private func applyPreferredInputDevice(to input: AVAudioInputNode) {
-        let connected = AudioInputSelection.inputDevices()
-        let plan = AudioInputSelection.plan(
-            preferredUID: SettingsStore.shared.preferredInputDeviceUID,
-            connected: connected,
-            route: AudioInputRoute.current()
-        )
-        switch plan {
-        case .systemDefault:
-            return
-        case .chosen(let uid):
-            guard let device = connected.first(where: { $0.uid == uid }) else { return }
-            if pin(device.id, to: input) {
-                logger.info("Recording from the chosen mic \(device.name, privacy: .public)")
-            }
-        case .protectPlayback(let uid):
-            guard let device = connected.first(where: { $0.uid == uid }) else { return }
-            if pin(device.id, to: input) {
-                logger.info("Using \(device.name, privacy: .public) so Bluetooth playback stays in A2DP")
-            }
-        }
+        return (outputFormat, converter)
     }
 
     @discardableResult
@@ -341,6 +366,49 @@ final class AudioRecorder: ObservableObject {
             return false
         }
         return true
+    }
+
+    /// One microphone, named before anything is opened.
+    struct InputTarget {
+        let id: AudioDeviceID
+        let name: String
+        /// True when nothing in particular was asked for, so the take should move
+        /// if System Settings points input somewhere else.
+        let followsSystemDefault: Bool
+    }
+
+    /// Which device this take opens.
+    ///
+    /// An explicit choice wins outright: someone who picked a mic means it, even
+    /// if it is the headset that will drop playback to narrowband. With no choice
+    /// made, the rule stands — swap a Bluetooth device that is also playing for a
+    /// microphone off the radio, so music stays in A2DP and ASR gets full band.
+    ///
+    /// This resolves to a concrete device rather than "whatever the default is",
+    /// because the unit has to be told before it is initialised. Following the
+    /// default then means watching for it to change, not leaving the choice open.
+    private func deviceForThisTake() -> InputTarget? {
+        let connected = AudioInputSelection.inputDevices()
+        let plan = AudioInputSelection.plan(
+            preferredUID: SettingsStore.shared.preferredInputDeviceUID,
+            connected: connected,
+            route: AudioInputRoute.current()
+        )
+        switch plan {
+        case .systemDefault:
+            guard let device = connected.first(where: { $0.isSystemDefault }) ?? connected.first else {
+                return nil
+            }
+            return InputTarget(id: device.id, name: device.name, followsSystemDefault: true)
+        case .chosen(let uid):
+            guard let device = connected.first(where: { $0.uid == uid }) else { return nil }
+            logger.info("Recording from the chosen mic \(device.name, privacy: .public)")
+            return InputTarget(id: device.id, name: device.name, followsSystemDefault: false)
+        case .protectPlayback(let uid):
+            guard let device = connected.first(where: { $0.uid == uid }) else { return nil }
+            logger.info("Using \(device.name, privacy: .public) so Bluetooth playback stays in A2DP")
+            return InputTarget(id: device.id, name: device.name, followsSystemDefault: false)
+        }
     }
 
     /// Move a take in progress onto another microphone without ending it.
@@ -364,24 +432,6 @@ final class AudioRecorder: ObservableObject {
         }
     }
 
-    /// Which microphone this take is really on, asked of the input unit itself
-    /// rather than inferred from settings.
-    private func logInputDevice(of input: AVAudioInputNode) {
-        guard let unit = input.audioUnit else { return }
-        var device = AudioDeviceID()
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        let status = AudioUnitGetProperty(
-            unit,
-            kAudioOutputUnitProperty_CurrentDevice,
-            kAudioUnitScope_Global,
-            0,
-            &device,
-            &size
-        )
-        guard status == noErr else { return }
-        logger.info("Recording from \(AudioInputSelection.label(of: device), privacy: .public)")
-    }
-
     /// Logs the output device before the mic opened, and again once the system has
     /// had a moment to react to it.
     private func logOutputChange(from before: AudioOutputSnapshot) {
@@ -398,78 +448,34 @@ final class AudioRecorder: ObservableObject {
         }
     }
 
-    private func installTap(
-        on engine: AVAudioEngine,
-        outputFormat: AVAudioFormat,
-        converter: AVAudioConverter?,
-        converterSourceFormat: AVAudioFormat
-    ) {
-        let input = engine.inputNode
-        // nil format = hardware bus format. Passing a guessed format after prepare() is what
-        // produced silence or -10867.
-        input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-            self?.ingest(
-                buffer,
-                outputFormat: outputFormat,
-                converter: converter,
-                converterSourceFormat: converterSourceFormat
-            )
+    /// The device changed its format, went away, or — when no microphone was asked
+    /// for — was replaced as the system default. Rebuild on the device that is
+    /// there now.
+    private func scheduleConfigurationRebuild() {
+        configChangeTask?.cancel()
+        configChangeTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled, self.isEngineLive || self.inputUnit != nil else { return }
+            self.rebuildAfterConfigurationChange()
         }
-        tapInstalled = true
     }
 
-    private func reinstallTapAfterConfigurationChange() {
-        guard let engine else { return }
-        if tapInstalled {
-            engine.inputNode.removeTap(onBus: 0)
-            tapInstalled = false
-        }
-
-        var hardwareFormat = engine.inputNode.inputFormat(forBus: 0)
-        if hardwareFormat.sampleRate <= 0 || hardwareFormat.channelCount == 0 {
-            hardwareFormat = engine.inputNode.outputFormat(forBus: 0)
-        }
-        guard let outputFormat else { return }
-        let converter: AVAudioConverter? = {
-            guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0 else { return nil }
-            return AVAudioConverter(from: hardwareFormat, to: outputFormat)
-        }()
-        self.converter = converter
-        if hardwareFormat.sampleRate > 0 {
-            logger.info(
-                "Mic reconfigured \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch"
-            )
-        }
-        // A profile switch is the moment the stream becomes live. Re-arm the
-        // liveness latch so we do not keep "ready" from pre-switch silence.
+    private func rebuildAfterConfigurationChange() {
+        logger.info("Input device changed under the take; rebuilding")
+        let wasRecording = isRecording
         lock.lock()
-        didAnnounceInputReady = false
-        samplesSinceEngineStart = 0
         preroll.removeAll(keepingCapacity: true)
         lock.unlock()
-        isInputReady = false
-        engineStartedAt = Date()
-        refreshCachedInputRoute()
-
-        installTap(
-            on: engine,
-            outputFormat: outputFormat,
-            converter: converter,
-            converterSourceFormat: hardwareFormat
-        )
-        if !engine.isRunning {
-            do {
-                try engine.start()
-            } catch {
-                logger.error("Mic restart after reconfigure failed: \(error.localizedDescription, privacy: .public)")
-                // Unplugging an interface mid-take used to leave the take running
-                // against a dead graph: no audio arrived, nothing said so, and the
-                // transcript simply stopped where the device did.
-                if isRecording { inputFailed = true }
-            }
-        }
-        if !isRecording {
-            scheduleIdleStop()
+        do {
+            try startEngine()
+            isRecording = wasRecording
+            if !wasRecording { scheduleIdleStop() }
+        } catch {
+            logger.error("Mic restart after reconfigure failed: \(error.localizedDescription, privacy: .public)")
+            // Unplugging an interface mid-take used to leave the take running
+            // against a dead graph: no audio arrived, nothing said so, and the
+            // transcript simply stopped where the device did.
+            if wasRecording { inputFailed = true }
         }
     }
 
@@ -501,18 +507,17 @@ final class AudioRecorder: ObservableObject {
     private func stopEngineHardware() {
         idleStopTask?.cancel()
         idleStopTask = nil
+        configChangeTask?.cancel()
+        configChangeTask = nil
         if let configObserver {
             NotificationCenter.default.removeObserver(configObserver)
             self.configObserver = nil
         }
+        inputUnit?.dispose()
+        inputUnit = nil
         if let engine {
-            if tapInstalled {
-                engine.inputNode.removeTap(onBus: 0)
-                tapInstalled = false
-            }
-            if engine.isRunning {
-                engine.stop()
-            }
+            if tapInstalled { engine.inputNode.removeTap(onBus: 0) }
+            if engine.isRunning { engine.stop() }
         }
         tapInstalled = false
         engine = nil

@@ -208,7 +208,11 @@ final class TextInserter {
         }
 
         let isTerminal = isTerminalApp(bundleID: bundleID, name: appName)
-        let useClipboardFirst = isTerminal || prefersClipboardPaste(app: frontApp, bundleID: bundleID)
+        let isChromium = prefersClipboardPaste(app: frontApp, bundleID: bundleID)
+        let useClipboardFirst = isTerminal || isChromium
+        // Only the Chromium apps, because only they need it and it is not ours to
+        // switch on in anything else.
+        if isChromium { enableChromiumAccessibility(for: frontApp) }
 
         // Electron/Chromium (Cursor, Slack, Chrome, …): AX insert lies about success.
         switch await insertViaAccessibility(sanitized, skip: useClipboardFirst) {
@@ -245,6 +249,33 @@ final class TextInserter {
             textOnClipboard: method == .failed || method == .clipboardUnverified
         )
     }
+
+    /// Ask a Chromium app to expose its accessibility tree.
+    ///
+    /// Electron and Chromium apps — Claude, Slack, VS Code, Cursor, Discord, the
+    /// browsers — build the accessibility tree for their web contents only once a
+    /// client asks for it, by setting `AXManualAccessibility` on the application
+    /// element. Until something asks, every read of the focused field comes back
+    /// empty. That is not a paste failing: it is a paste that cannot be seen. The
+    /// take landed, the confirmation could not prove it, and the HUD told the user
+    /// to press ⌘V into a field that already had their text — advice that would
+    /// have pasted it twice.
+    ///
+    /// Once per process, and only for the apps that need it. The tree is built
+    /// asynchronously, so the first take right after enabling can still come back
+    /// unconfirmed; the paste poll is what covers that.
+    private func enableChromiumAccessibility(for app: NSRunningApplication?) {
+        guard let app, app.processIdentifier > 0 else { return }
+        let pid = app.processIdentifier
+        guard !Self.accessibilityEnabledPIDs.contains(pid) else { return }
+        Self.accessibilityEnabledPIDs.insert(pid)
+        let element = AXUIElementCreateApplication(pid)
+        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+    }
+
+    /// Keyed by pid, so an app that quits and comes back is asked again rather than
+    /// being remembered as already enabled under a pid somebody else now holds.
+    private static var accessibilityEnabledPIDs: Set<pid_t> = []
 
     /// Last resort: leave the text somewhere recoverable. A take that got this far
     /// is real user effort, and silently dropping it is the one outcome with no

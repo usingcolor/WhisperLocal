@@ -184,6 +184,20 @@ final class TextInserter {
         "wezterm", "hyper", "tabby", "termius", "waveterm", "console"
     ]
 
+    /// Ask at the start of a take rather than at the paste.
+    ///
+    /// Chromium builds the tree asynchronously, so asking as the text goes in
+    /// leaves the first take into a freshly launched app unconfirmable — the
+    /// request went out a few hundred milliseconds before the probe, and lost.
+    /// Asking here hands it the whole recording and transcription instead, which
+    /// is seconds rather than milliseconds. Cheap and idempotent: after the first
+    /// call for a process it does nothing.
+    func prepareForInsertion(into target: TargetAppContext?) {
+        guard let app = Self.resolveTarget(target) ?? NSWorkspace.shared.frontmostApplication,
+              prefersClipboardPaste(app: app, bundleID: app.bundleIdentifier) else { return }
+        enableChromiumAccessibility(for: app)
+    }
+
     func insert(_ text: String, into target: TargetAppContext? = nil) async -> InsertionResult {
         // Prefer the app the take was aimed at. Re-reading the frontmost app here
         // means a Space switch mid-dictation pastes into whatever happens to be in

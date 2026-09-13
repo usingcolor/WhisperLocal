@@ -309,6 +309,11 @@ final class DictationController: ObservableObject {
         do {
             sessionGeneration += 1
             dictationTargetApp = TargetAppContext.captureFrontmost()
+            // A Chromium app has to be asked to build its accessibility tree, and
+            // it builds it asynchronously. Asking now, rather than when the text
+            // goes in, is the difference between it being ready and the first take
+            // into a freshly launched app coming back unconfirmed.
+            TextInserter.shared.prepareForInsertion(into: dictationTargetApp)
             takeLanguage = LanguageCoordinator.shared.languageForTake(transcription: transcription)
             try recorder.start()
             recordingBeganAt = Date()

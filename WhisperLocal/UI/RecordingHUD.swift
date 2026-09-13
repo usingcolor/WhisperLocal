@@ -1,5 +1,10 @@
 import AppKit
+import os
 import SwiftUI
+
+/// Tracing for the HUD's position. Stays until the drag is settled for good —
+/// pulling it after one good report is how the last round went wrong.
+let hudPosLog = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "hudpos")
 
 @MainActor
 final class RecordingHUDController: ObservableObject {
@@ -291,6 +296,7 @@ final class RecordingHUDController: ObservableObject {
         // Also a move: AppKit keeps the top-left corner still, so a height change
         // slides the origin and posts `didMove`. Unflagged, the resize at the start
         // of every phase read as a drag and saved a position nobody chose.
+        hudPosLog.info("resize \(current.debugDescription, privacy: .public) -> \(wanted.debugDescription, privacy: .public)")
         programmatically { panel.setContentSize(wanted) }
         // Only ever grows. A phase wider than anything seen before moves the left
         // edge once, by half the growth, and then it is settled for good.
@@ -345,7 +351,7 @@ final class RecordingHUDController: ObservableObject {
         // trial, not a decision — it has to be flipped on for Release once the
         // drag has been lived with, rather than left here shipping a difference
         // between the two builds that nobody chose.
-        panel.isMovableByWindowBackground = Self.isRepositionable
+        panel.isDragEnabled = Self.isRepositionable
         if Self.isRepositionable {
             // `queue: nil` on purpose: the block then runs synchronously on the
             // thread that posted, which is the main thread. Handing it a queue
@@ -409,7 +415,12 @@ final class RecordingHUDController: ObservableObject {
     /// middle of the screen, over and over. Synchronous, and keyed on a flag rather
     /// than on coordinates that two code paths were both writing.
     private func rememberIfUserMoved() {
-        guard Self.isRepositionable, !isRepositioning, let panel else { return }
+        hudPosLog.info("didMove origin=\(self.panel.map { "\($0.frame.origin)" } ?? "nil", privacy: .public) size=\(self.panel.map { "\($0.frame.size)" } ?? "nil", privacy: .public) repositioning=\(self.isRepositioning, privacy: .public) dragging=\(HUDPanel.isDragging, privacy: .public) visible=\(self.panel?.isVisible == true, privacy: .public)")
+        // Only a drag of ours counts. Anything else that moves this window — and on
+        // macOS 26 that means the window manager snapping it to a screen edge — is
+        // not a position the user chose, and saving it was what pinned the HUD to
+        // the left of the screen for good.
+        guard Self.isRepositionable, HUDPanel.isDragging, !isRepositioning, let panel else { return }
         // The screen the panel is on, not the one the pointer is on: a drag can
         // finish with the pointer past the edge of the display it started from.
         guard let screen = panel.screen ?? Self.activeScreen(),
@@ -470,6 +481,7 @@ final class RecordingHUDController: ObservableObject {
                 in: frame
             )
         }
+        hudPosLog.info("place branch=\(self.customAnchor == nil ? "CENTRE" : "anchor", privacy: .public) anchor=\(self.customAnchor.map { "\($0)" } ?? "nil", privacy: .public) size=\(size.debugDescription, privacy: .public) visible=\(frame.debugDescription, privacy: .public) -> \(origin.debugDescription, privacy: .public)")
         programmatically { panel.setFrameOrigin(origin) }
     }
 }
@@ -598,18 +610,51 @@ private final class HUDPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// Belt and braces for the drag. `isMovableByWindowBackground` only fires for a
-    /// mouse-down the content view left alone, and an `NSHostingView` does not
-    /// reliably leave one alone. Anything SwiftUI declines still travels up the
-    /// responder chain to here, and `performDrag` runs the same drag loop AppKit
-    /// would have. Whichever of the two gets the event, the HUD moves; the buttons
-    /// keep their own clicks either way, because a click they handle never arrives.
+    /// Whether the user may drag this panel. Not `isMovableByWindowBackground`:
+    /// that hands the drag to AppKit, and AppKit's window drag is what macOS hangs
+    /// its edge snapping off.
+    var isDragEnabled = false
+
+    /// True only while the drag loop below is running. The position is worth
+    /// saving then and at no other moment.
+    @MainActor static var isDragging = false
+
+    /// Drags the panel by hand rather than letting AppKit do it.
+    ///
+    /// `isMovableByWindowBackground` and `performDrag` both route through AppKit's
+    /// own window drag, and on macOS 26 that drag snaps a window to the screen
+    /// edge: let go anywhere near one and the window is animated to it over about
+    /// a third of a second. The HUD would arrive at the left edge, vertically
+    /// centred, and since a snap moves the window like any other move, it was
+    /// recorded as the position the user had chosen — so the HUD went back there
+    /// on every take, and no amount of dragging could dislodge it.
+    ///
+    /// Tracking the mouse ourselves and setting the origin directly keeps the
+    /// panel where it is put. It is a modal loop, which is how a drag is meant to
+    /// be run: it returns when the button comes up.
     override func mouseDown(with event: NSEvent) {
-        guard isMovableByWindowBackground else {
+        guard isDragEnabled else {
             super.mouseDown(with: event)
             return
         }
-        performDrag(with: event)
+        let startMouse = NSEvent.mouseLocation
+        let startOrigin = frame.origin
+        MainActor.assumeIsolated { HUDPanel.isDragging = true }
+        defer { MainActor.assumeIsolated { HUDPanel.isDragging = false } }
+
+        while let next = NSApp.nextEvent(
+            matching: [.leftMouseDragged, .leftMouseUp],
+            until: .distantFuture,
+            inMode: .eventTracking,
+            dequeue: true
+        ) {
+            if next.type == .leftMouseUp { break }
+            let now = NSEvent.mouseLocation
+            setFrameOrigin(NSPoint(
+                x: startOrigin.x + (now.x - startMouse.x),
+                y: startOrigin.y + (now.y - startMouse.y)
+            ))
+        }
     }
 }
 

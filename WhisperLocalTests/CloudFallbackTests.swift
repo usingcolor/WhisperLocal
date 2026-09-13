@@ -104,7 +104,7 @@ final class PolishFallbackTests: XCTestCase {
         XCTAssertEqual(result.text, "local(hello)")
         XCTAssertEqual(local.calls, 1)
         XCTAssertFalse(result.cleanupFailed, "the text was cleaned, just not by the cloud")
-        XCTAssertEqual(result.cleanupNote, "Cloud failed — polished on this Mac")
+        XCTAssertEqual(result.cleanupNote, "Cloud failed — local polish")
         XCTAssertTrue(result.cloudUnavailable)
     }
 
@@ -114,7 +114,7 @@ final class PolishFallbackTests: XCTestCase {
         let result = await pipeline(cloud: cloud, local: local, localIsReady: true, online: false).run("hello")
         XCTAssertEqual(cloud.calls, 0, "offline must not pay the request timeout")
         XCTAssertEqual(result.text, "local(hello)")
-        XCTAssertEqual(result.cleanupNote, "Offline — polished on this Mac")
+        XCTAssertEqual(result.cleanupNote, "Offline — local polish")
     }
 
     func testUnreadyLocalModelIsNotColdStarted() async {
@@ -126,7 +126,7 @@ final class PolishFallbackTests: XCTestCase {
         XCTAssertEqual(local.calls, 0, "must not wake an unloaded local model")
         XCTAssertEqual(result.text, "hello", "raw text is still pasted")
         XCTAssertTrue(result.cleanupFailed)
-        XCTAssertEqual(result.cleanupNote, "Cloud unavailable — pasted without cleanup")
+        XCTAssertEqual(result.cleanupNote, "Cloud down — no cleanup")
     }
 
     func testBothFailingStillPastesTheTranscript() async {

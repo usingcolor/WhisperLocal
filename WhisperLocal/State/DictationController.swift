@@ -287,14 +287,14 @@ final class DictationController: ObservableObject {
         guard permissions.microphoneGranted else {
             isIntentTake = false
             hotKey.markSessionActive(false)
-            phase = .error("Microphone permission required")
+            phase = .error("Needs Microphone access")
             showOnboarding = true
             return
         }
         guard permissions.accessibilityTrusted else {
             isIntentTake = false
             hotKey.markSessionActive(false)
-            phase = .error("Accessibility permission required")
+            phase = .error("Needs Accessibility access")
             showOnboarding = true
             return
         }
@@ -630,7 +630,7 @@ final class DictationController: ObservableObject {
                 // away. Keyed on the flag, not one method: an unconfirmed
                 // accessibility write leaves it there too.
                 if insertion.textOnClipboard {
-                    hud.flashSuccess(note: "Couldn’t confirm the paste — press ⌘V to insert it")
+                    hud.flashSuccess(note: "Not confirmed — press ⌘V")
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
                 } else if let note = result.cleanupNote {
                     // Not gated on cleanupFailed: a successful on-device fallback
@@ -647,11 +647,14 @@ final class DictationController: ObservableObject {
                 hud.hide()
             } else {
                 phase = .error("Could not insert text")
-                let target = insertion.appName.map { " into \($0)" } ?? ""
+                // The app's name is deliberately not in the HUD copy. It was the
+                // longest part of the sentence and the one piece that could be any
+                // length at all, and the person reading it is looking straight at
+                // the app in question. The log still records `appName` for later.
                 hud.flashError(
                     insertion.textOnClipboard
-                        ? "Couldn’t insert text\(target) — press ⌘V to paste it"
-                        : "Could not insert text\(target) — check Accessibility"
+                        ? "Not inserted — press ⌘V"
+                        : "Needs Accessibility access"
                 )
                 log.append(DictationLogEntry(
                     id: UUID(),
@@ -663,7 +666,10 @@ final class DictationController: ObservableObject {
                     appName: insertion.appName,
                     insertMethod: insertion.method.rawValue,
                     outcome: .insertFailed,
-                    errorMessage: "Could not insert text\(target)",
+                    // The HUD dropped the app name to stay one width; the log is
+                    // where it earns its place, read later and with room for it.
+                    errorMessage: insertion.appName.map { "Could not insert text into \($0)" }
+                        ?? "Could not insert text",
                     audioSeconds: audioSeconds,
                     language: loggedLanguage,
                     microphone: loggedMicrophone

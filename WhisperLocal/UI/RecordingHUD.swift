@@ -663,18 +663,7 @@ struct RecordingHUDView: View {
 
     // MARK: - Capsules
 
-    /// A sentence, not a label — it sets its own width rather than being squeezed
-    /// into the slot the phase labels agreed on.
-    private var headlineIsSentence: Bool {
-        switch controller.phase {
-        case .error, .successNote: return true
-        default: return false
-        }
-    }
-
-    private var usesConstantWidth: Bool {
-        settings.fixedHUDStatusWidth && !headlineIsSentence
-    }
+    private var usesConstantWidth: Bool { settings.fixedHUDStatusWidth }
 
     private var statusPill: some View {
         pill {
@@ -705,8 +694,16 @@ struct RecordingHUDView: View {
                         Spacer(minLength: 0)
                     }
                 }
+                // A floor, not a fixed width. Every message the app writes itself
+                // is short enough to sit inside the slot, so errors and notes hold
+                // the same width as the rest of the take instead of shrinking to
+                // their own text — which would be movement again, just in the other
+                // direction. What can still push past it is the text the app does
+                // not author: `localizedDescription` and the transcription status.
+                // Those grow rather than being truncated, because a failure whose
+                // reason has been cut off is worse than a wide capsule.
                 .frame(
-                    width: usesConstantWidth
+                    minWidth: usesConstantWidth
                         ? Self.contentSlot(isContext: controller.isContextCapture)
                         : nil,
                     alignment: .leading

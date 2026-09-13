@@ -140,7 +140,7 @@ enum PolisherError: LocalizedError {
         case .notAvailable(let reason):
             return reason
         case .truncated:
-            return "Cleanup was cut short. Pasted without AI cleanup."
+            return "Cleanup cut short"
         }
     }
 
@@ -150,7 +150,7 @@ enum PolisherError: LocalizedError {
         case .truncated:
             return "Cleanup was cut short. Pasted without AI cleanup."
         default:
-            return "Pasted without AI cleanup"
+            return "Pasted — no cleanup"
         }
     }
 
@@ -285,17 +285,17 @@ enum PolishFailureKind: Sendable, Equatable {
     /// Shown when the on-device model picked the work up instead.
     var fallbackNote: String {
         switch self {
-        case .offline: return "Offline — polished on this Mac"
-        case .providerUnavailable, .requestFailed: return "Cloud failed — polished on this Mac"
+        case .offline: return "Offline — local polish"
+        case .providerUnavailable, .requestFailed: return "Cloud failed — local polish"
         }
     }
 
     /// Shown when nothing could clean the text.
     var rawNote: String {
         switch self {
-        case .offline: return "Offline — pasted without cleanup"
-        case .providerUnavailable: return "Cloud unavailable — pasted without cleanup"
-        case .requestFailed: return "Pasted without AI cleanup"
+        case .offline: return "Offline — no cleanup"
+        case .providerUnavailable: return "Cloud down — no cleanup"
+        case .requestFailed: return "Pasted — no cleanup"
         }
     }
 }
@@ -534,7 +534,7 @@ struct PolishPipeline: Sendable {
                     ? (cloudPasteNote ?? cloudFailure.rawNote)
                     : cloudFailure.rawNote
             } else {
-                cleanupNote = localPasteNote ?? "Pasted without AI cleanup"
+                cleanupNote = localPasteNote ?? "Pasted — no cleanup"
             }
         }
 

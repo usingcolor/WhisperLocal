@@ -159,6 +159,11 @@ struct SettingsView: View {
                     "Gives every capsule in the HUD the same height.",
                     more: "Off, each capsule is sized by its own text: the language badge and the cancel button come out at 30pt, the microphone at 31, the status at 34. Centred in the row that leaves their top and bottom edges a couple of points apart, which the glass rims make easy to see."
                 )
+                Toggle("Hold the status capsule at one width", isOn: $settings.fixedHUDStatusWidth)
+                helpText(
+                    "Stops the middle capsule resizing as a take moves from listening to done.",
+                    more: "It is held at the width of the widest thing a take can say, so shorter phases sit in more glass than their text needs. Off, every phase is sized to its own text and the capsule steps narrower at each one. Errors size to themselves either way — they carry a whole sentence, and squeezing one into a label's width would hide the reason."
+                )
             }
 
             Section("History") {

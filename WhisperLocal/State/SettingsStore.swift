@@ -152,6 +152,12 @@ final class SettingsStore: ObservableObject {
     /// difference the glass rims make plain. On by default; the toggle is here to
     /// be looked at rather than because both are worth keeping.
     @Published var levelHUDCapsules: Bool { didSet { persist(levelHUDCapsules, key: "levelHUDCapsules") } }
+    /// Hold the status capsule at one width for the whole take instead of letting
+    /// it resize under every phase. Sized to the widest label the take can produce,
+    /// so short phases like "Done" sit in more glass than their text needs — which
+    /// is the trade, and the reason this is a switch rather than just the
+    /// behaviour. Errors still size to themselves.
+    @Published var fixedHUDStatusWidth: Bool { didSet { persist(fixedHUDStatusWidth, key: "fixedHUDStatusWidth") } }
     /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
     @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
     @Published var recentPolishLogCountRaw: Int { didSet { persist(recentPolishLogCountRaw, key: "recentPolishLogCount") } }
@@ -368,6 +374,7 @@ final class SettingsStore: ObservableObject {
         }
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
         levelHUDCapsules = defaults.object(forKey: "levelHUDCapsules") as? Bool ?? true
+        fixedHUDStatusWidth = defaults.object(forKey: "fixedHUDStatusWidth") as? Bool ?? true
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int
             ?? CleanupPrompt.defaultRecentPolishLogCount

@@ -58,13 +58,19 @@ final class RecordingHUDController: ObservableObject {
         )
     }
 
-    /// The chip is worth showing while the mic is open or the take has just
-    /// finished. It goes away for transcription and polish, where the microphone
-    /// no longer has anything to do with this take.
+    /// Shown for the whole take, not only while the mic is open.
+    ///
+    /// It used to go away for transcription and polish, on the reasoning that the
+    /// microphone has nothing to do with the take by then. True, and it cost more
+    /// than it was worth: the chip leaving took about 200pt out of the row and
+    /// coming back for `.success` put them straight back, which was the largest
+    /// movement in the whole take — bigger than every text change put together.
+    /// A chip that stays is also the only way to change the microphone at the end
+    /// of a take, which is what hovering the HUD is for.
     var showsInputChip: Bool {
         switch phase {
-        case .waitingForMic, .recording, .success, .successNote: return activeInputName != nil
-        default: return false
+        case .idle: return false
+        default: return activeInputName != nil
         }
     }
 
@@ -361,9 +367,16 @@ final class RecordingHUDController: ObservableObject {
 
     /// Puts the HUD back where it ships, for anyone who has dragged it somewhere
     /// they regret.
+    ///
+    /// This drops the learned width too. That width is a high-water mark that only
+    /// ever grows, so a figure measured while the row was still resizing under
+    /// every phase outlives the thing it measured and goes on holding the HUD left
+    /// of centre. Clearing it here means there is a way back that is not a command
+    /// in a terminal.
     func resetPosition() {
         UserDefaults.standard.removeObject(forKey: Self.anchorXKey)
         UserDefaults.standard.removeObject(forKey: Self.anchorYKey)
+        UserDefaults.standard.removeObject(forKey: Self.reservedWidthKey)
         positionOnActiveScreen()
     }
 
@@ -650,25 +663,54 @@ struct RecordingHUDView: View {
 
     // MARK: - Capsules
 
+    /// A sentence, not a label — it sets its own width rather than being squeezed
+    /// into the slot the phase labels agreed on.
+    private var headlineIsSentence: Bool {
+        switch controller.phase {
+        case .error, .successNote: return true
+        default: return false
+        }
+    }
+
+    private var usesConstantWidth: Bool {
+        settings.fixedHUDStatusWidth && !headlineIsSentence
+    }
+
     private var statusPill: some View {
         pill {
             HStack(spacing: 9) {
+                // A fixed slot, so the headline starts at the same x all take. A
+                // constant width with the content centred would still slide the
+                // icon and the first letter about on every phase, which is the
+                // movement the eye actually follows.
                 statusIcon
-                Text(headline)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(controller.detailIsWarning ? HUDInk.warning : HUDInk.primary)
-                    .shadow(color: HUDInk.shadow, radius: 2, y: 0.5)
-                    .lineLimit(1)
-                    .fixedSize()
-                if controller.phase == .recording {
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(.primary.opacity(0.15))
-                        Capsule()
-                            .fill(controller.isContextCapture ? Color.orange : Color.accentColor)
-                            .frame(width: max(4, 96 * CGFloat(min(1, controller.audioLevel))))
+                    .frame(width: usesConstantWidth ? Self.iconSlot : nil)
+                HStack(spacing: 9) {
+                    Text(headline)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(controller.detailIsWarning ? HUDInk.warning : HUDInk.primary)
+                        .shadow(color: HUDInk.shadow, radius: 2, y: 0.5)
+                        .lineLimit(1)
+                        .fixedSize()
+                    if controller.phase == .recording {
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.primary.opacity(0.15))
+                            Capsule()
+                                .fill(controller.isContextCapture ? Color.orange : Color.accentColor)
+                                .frame(width: max(4, Self.meterWidth * CGFloat(min(1, controller.audioLevel))))
+                        }
+                        .frame(width: Self.meterWidth, height: 4)
                     }
-                    .frame(width: 96, height: 4)
+                    if usesConstantWidth {
+                        Spacer(minLength: 0)
+                    }
                 }
+                .frame(
+                    width: usesConstantWidth
+                        ? Self.contentSlot(isContext: controller.isContextCapture)
+                        : nil,
+                    alignment: .leading
+                )
             }
         }
     }
@@ -738,24 +780,66 @@ struct RecordingHUDView: View {
     }
 
     private var baseHeadline: String {
-        if controller.isContextCapture {
-            switch controller.phase {
-            case .waitingForMic:
-                return "Context: waiting for mic…"
-            case .recording:
-                return "Listening for context…"
-            case .processing, .settingContext:
-                return "Transcribing context…"
-            case .polishing:
-                return "Polishing context…"
-            case .successNote(let note):
-                return note
-            default:
-                return controller.phase.label
-            }
-        }
-        return controller.phase.label
+        Self.headlineText(for: controller.phase, isContext: controller.isContextCapture)
     }
+
+    /// The headline for a phase, in whichever mode the take is in.
+    ///
+    /// Static because the width below measures these same strings. A separate list
+    /// of labels kept beside this switch would drift the first time somebody
+    /// reworded one, and the drift would show up as a clipped headline rather than
+    /// as anything that looks like a mistake.
+    static func headlineText(for phase: DictationPhase, isContext: Bool) -> String {
+        guard isContext else { return phase.label }
+        switch phase {
+        case .waitingForMic: return "Context: waiting for mic…"
+        case .recording: return "Listening for context…"
+        case .processing, .settingContext: return "Transcribing context…"
+        case .polishing: return "Polishing context…"
+        default: return phase.label
+        }
+    }
+
+    /// The phases whose labels set the constant width.
+    ///
+    /// `.error` and `.successNote` are deliberately absent. Both carry a whole
+    /// sentence rather than a label — one real `localizedDescription` measures
+    /// 630pt — and sizing every take for that would leave the HUD mostly empty
+    /// glass for the second an error is on screen. They are allowed to be wider
+    /// than the slot instead, which is the same concession the old learned width
+    /// made.
+    private static let widthDefiningPhases: [DictationPhase] = [
+        .waitingForMic, .recording, .processing, .settingContext,
+        .polishing, .inserting, .success
+    ]
+
+    /// A slot the icon always fills, so the headline starts at the same x in every
+    /// phase. The icons disagree: the small `ProgressView` is 16pt, the spinner 14,
+    /// the recording dot 10.
+    static let iconSlot: CGFloat = 16
+    static let meterWidth: CGFloat = 96
+    private static let meterGap: CGFloat = 9
+
+    /// Width of everything right of the icon, held constant across a take.
+    ///
+    /// Measured rather than written down: the widest is not the longest label but
+    /// "Listening…", because recording is the one phase carrying the meter. Context
+    /// capture gets its own figure — its labels run about 70pt longer, and making
+    /// every ordinary take carry that is a cost for a mode most people never use.
+    @MainActor
+    static func contentSlot(isContext: Bool) -> CGFloat {
+        if let cached = contentSlotCache[isContext] { return cached }
+        let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        let width = widthDefiningPhases.map { phase -> CGFloat in
+            let text = headlineText(for: phase, isContext: isContext) as NSString
+            let label = ceil(text.size(withAttributes: [.font: font]).width)
+            return phase == .recording ? label + meterGap + meterWidth : label
+        }.max() ?? 0
+        contentSlotCache[isContext] = width
+        return width
+    }
+
+    @MainActor private static var contentSlotCache: [Bool: CGFloat] = [:]
 
     @ViewBuilder
     private var statusIcon: some View {

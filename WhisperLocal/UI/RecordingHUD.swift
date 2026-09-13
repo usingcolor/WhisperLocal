@@ -680,7 +680,14 @@ struct RecordingHUDView: View {
                         .foregroundStyle(controller.detailIsWarning ? HUDInk.warning : HUDInk.primary)
                         .shadow(color: HUDInk.shadow, radius: 2, y: 0.5)
                         .lineLimit(1)
-                        .fixedSize()
+                        .truncationMode(.tail)
+                        // Free to shrink only when there is a width to be held to.
+                        // With the switch off this is the old behaviour exactly:
+                        // ideal width, nothing ever cut.
+                        .fixedSize(horizontal: !usesConstantWidth, vertical: false)
+                        // Ahead of the spacer, so the text takes the room before the
+                        // padding does and only gives way once there is none left.
+                        .layoutPriority(1)
                     if controller.phase == .recording {
                         ZStack(alignment: .leading) {
                             Capsule().fill(.primary.opacity(0.15))
@@ -694,22 +701,25 @@ struct RecordingHUDView: View {
                         Spacer(minLength: 0)
                     }
                 }
-                // A floor, not a fixed width. Every message the app writes itself
-                // is short enough to sit inside the slot, so errors and notes hold
-                // the same width as the rest of the take instead of shrinking to
-                // their own text — which would be movement again, just in the other
-                // direction. What can still push past it is the text the app does
-                // not author: `localizedDescription` and the transcription status.
-                // Those grow rather than being truncated, because a failure whose
-                // reason has been cut off is worse than a wide capsule.
+                // One width, held. Every message the app writes itself is short
+                // enough to sit inside it, so nothing ordinary is ever cut; what
+                // can outrun it is the text the app does not author —
+                // `localizedDescription` and the transcription status, one real
+                // case of which measures 630pt. Those truncate rather than stretch
+                // the HUD to twice its size, and the whole line is on the capsule
+                // as a tooltip and in the log.
                 .frame(
-                    minWidth: usesConstantWidth
+                    width: usesConstantWidth
                         ? Self.contentSlot(isContext: controller.isContextCapture)
                         : nil,
                     alignment: .leading
                 )
             }
         }
+        // The only way back to a message the width cut short. Hovering already
+        // holds the HUD open, so there is time to read it — and it is a pointer,
+        // not a command in a terminal.
+        .help(headline)
     }
 
     /// Names the microphone this take is on, and opens the list of the others.
@@ -832,8 +842,13 @@ struct RecordingHUDView: View {
             let label = ceil(text.size(withAttributes: [.font: font]).width)
             return phase == .recording ? label + meterGap + meterWidth : label
         }.max() ?? 0
-        contentSlotCache[isContext] = width
-        return width
+        // A couple of points of slack. The measurement above is NSFont's; the
+        // layout is SwiftUI's, and they need not agree to the pixel. Without it a
+        // fraction of disagreement would truncate "Listening…" — the very phase
+        // that sets this width, and the one on screen the longest.
+        let slot = width + 2
+        contentSlotCache[isContext] = slot
+        return slot
     }
 
     @MainActor private static var contentSlotCache: [Bool: CGFloat] = [:]

@@ -721,9 +721,12 @@ struct RecordingHUDView: View {
                         }
                         .frame(width: Self.meterWidth, height: 4)
                     }
-                    if usesConstantWidth {
-                        Spacer(minLength: 0)
-                    }
+                    // No Spacer here, and it matters: a Spacer is a subview, so
+                    // the stack's own 9pt lands between it and the text and eats
+                    // that much of the slot — enough to cut "Not confirmed —
+                    // press ⌘V" by a single point, and to squeeze the meter while
+                    // recording. The frame's leading alignment already puts short
+                    // content where a spacer would have.
                 }
                 // One width, held. Every message the app writes itself is short
                 // enough to sit inside it, so nothing ordinary is ever cut; what

@@ -136,11 +136,20 @@ final class RecordingHUDController: ObservableObject {
     private var levelTimer: Timer?
     private var screenObserver: NSObjectProtocol?
     private var moveObserver: NSObjectProtocol?
-    /// Where we last put the panel ourselves. `NSWindow.didMoveNotification` fires
-    /// for our own `setFrameOrigin` exactly as it does for a drag, and carries
-    /// nothing to tell them apart — so a move that landed where we aimed is ours,
-    /// and anything else was the user's hand.
-    private var lastProgrammaticOrigin: NSPoint?
+    /// True while we are moving or resizing the panel ourselves.
+    ///
+    /// `NSWindow.didMoveNotification` fires for our own `setFrameOrigin`, and for
+    /// `setContentSize` too — that moves the origin, because AppKit holds the
+    /// top-left corner still and the origin is the bottom-left — exactly as it does
+    /// for a drag, and carries nothing to tell them apart. Comparing coordinates
+    /// was the first attempt and it was wrong: see `rememberIfUserMoved`.
+    private var isRepositioning = false
+
+    private func programmatically(_ change: () -> Void) {
+        isRepositioning = true
+        change()
+        isRepositioning = false
+    }
 
     init() {
         // Position is otherwise only computed when the HUD is shown or updated, so
@@ -279,7 +288,10 @@ final class RecordingHUDController: ObservableObject {
         let wanted = NSSize(width: ceil(size.width), height: ceil(size.height))
         let current = panel.frame.size
         guard abs(current.width - wanted.width) > 0.5 || abs(current.height - wanted.height) > 0.5 else { return }
-        panel.setContentSize(wanted)
+        // Also a move: AppKit keeps the top-left corner still, so a height change
+        // slides the origin and posts `didMove`. Unflagged, the resize at the start
+        // of every phase read as a drag and saved a position nobody chose.
+        programmatically { panel.setContentSize(wanted) }
         // Only ever grows. A phase wider than anything seen before moves the left
         // edge once, by half the growth, and then it is settled for good.
         if phaseSetsReservedWidth, wanted.width > reservedWidth {
@@ -335,12 +347,16 @@ final class RecordingHUDController: ObservableObject {
         // between the two builds that nobody chose.
         panel.isMovableByWindowBackground = Self.isRepositionable
         if Self.isRepositionable {
+            // `queue: nil` on purpose: the block then runs synchronously on the
+            // thread that posted, which is the main thread. Handing it a queue
+            // instead defers it, and a deferred save loses the drag — the whole
+            // bug this replaces.
             moveObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.didMoveNotification,
                 object: panel,
-                queue: .main
+                queue: nil
             ) { [weak self] _ in
-                Task { @MainActor in self?.rememberIfUserMoved() }
+                MainActor.assumeIsolated { self?.rememberIfUserMoved() }
             }
         }
         self.panel = panel
@@ -380,18 +396,27 @@ final class RecordingHUDController: ObservableObject {
         positionOnActiveScreen()
     }
 
+    /// Saves the position the moment a drag moves the panel.
+    ///
+    /// This used to tell our moves from the user's by comparing where the panel
+    /// landed against where we last aimed, from a handler deferred onto the main
+    /// queue and then onto a `Task`. Both halves were wrong. The panel would be
+    /// dragged, and before the save ran, a phase change called
+    /// `positionOnActiveScreen`, which found no anchor saved yet, centred the
+    /// panel, and recorded that centre as where we had aimed. The save then woke
+    /// up, found the panel exactly where we aimed, concluded the move was ours and
+    /// discarded it — so the drag was thrown away and the HUD snapped back to the
+    /// middle of the screen, over and over. Synchronous, and keyed on a flag rather
+    /// than on coordinates that two code paths were both writing.
     private func rememberIfUserMoved() {
-        guard Self.isRepositionable, let panel else { return }
-        let origin = panel.frame.origin
-        if let aimed = lastProgrammaticOrigin,
-           abs(origin.x - aimed.x) < 0.5, abs(origin.y - aimed.y) < 0.5 { return }
+        guard Self.isRepositionable, !isRepositioning, let panel else { return }
         // The screen the panel is on, not the one the pointer is on: a drag can
         // finish with the pointer past the edge of the display it started from.
         guard let screen = panel.screen ?? Self.activeScreen(),
-              let anchor = HUDPlacement.anchor(forOrigin: origin, in: screen.visibleFrame) else { return }
+              let anchor = HUDPlacement.anchor(forOrigin: panel.frame.origin, in: screen.visibleFrame)
+        else { return }
         UserDefaults.standard.set(Double(anchor.x), forKey: Self.anchorXKey)
         UserDefaults.standard.set(Double(anchor.y), forKey: Self.anchorYKey)
-        lastProgrammaticOrigin = origin
     }
 
     /// The widest the row has ever needed, which is what the HUD reserves space
@@ -445,8 +470,7 @@ final class RecordingHUDController: ObservableObject {
                 in: frame
             )
         }
-        lastProgrammaticOrigin = origin
-        panel.setFrameOrigin(origin)
+        programmatically { panel.setFrameOrigin(origin) }
     }
 }
 

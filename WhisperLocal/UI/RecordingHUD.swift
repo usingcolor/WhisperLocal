@@ -727,8 +727,6 @@ struct RecordingHUDView: View {
 
     // MARK: - Capsules
 
-    private var usesConstantWidth: Bool { settings.fixedHUDStatusWidth }
-
     private var statusPill: some View {
         pill {
             HStack(spacing: 9) {
@@ -737,7 +735,7 @@ struct RecordingHUDView: View {
                 // icon and the first letter about on every phase, which is the
                 // movement the eye actually follows.
                 statusIcon
-                    .frame(width: usesConstantWidth ? Self.iconSlot : nil)
+                    .frame(width: Self.iconSlot)
                 HStack(spacing: 9) {
                     Text(headline)
                         .font(.system(size: 13, weight: .semibold))
@@ -745,12 +743,9 @@ struct RecordingHUDView: View {
                         .shadow(color: HUDInk.shadow, radius: 2, y: 0.5)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        // Free to shrink only when there is a width to be held to.
-                        // With the switch off this is the old behaviour exactly:
-                        // ideal width, nothing ever cut.
-                        .fixedSize(horizontal: !usesConstantWidth, vertical: false)
-                        // Ahead of the spacer, so the text takes the room before the
-                        // padding does and only gives way once there is none left.
+                        // Deliberately not fixedSize: the text has to be free to
+                        // give way, or a line longer than the slot would push the
+                        // capsule wider instead of being cut.
                         .layoutPriority(1)
                     if controller.phase == .recording {
                         ZStack(alignment: .leading) {
@@ -776,9 +771,7 @@ struct RecordingHUDView: View {
                 // the HUD to twice its size, and the whole line is on the capsule
                 // as a tooltip and in the log.
                 .frame(
-                    width: usesConstantWidth
-                        ? Self.contentSlot(isContext: controller.isContextCapture)
-                        : nil,
+                    width: Self.contentSlot(isContext: controller.isContextCapture),
                     alignment: .leading
                 )
             }

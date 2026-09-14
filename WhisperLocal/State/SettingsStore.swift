@@ -158,6 +158,12 @@ final class SettingsStore: ObservableObject {
     /// is the trade, and the reason this is a switch rather than just the
     /// behaviour. Errors still size to themselves.
     @Published var fixedHUDStatusWidth: Bool { didSet { persist(fixedHUDStatusWidth, key: "fixedHUDStatusWidth") } }
+    /// Where the HUD sits. `custom` is set by dragging it there.
+    @Published var hudPosition: HUDPosition { didSet { persist(hudPosition.rawValue, key: "hudPosition") } }
+    /// Whether the HUD can be dragged at all. Off by default: the HUD is in front
+    /// of whatever you are dictating into, and a window that moves when brushed is
+    /// worse than one that cannot move, for anyone who did not want to move it.
+    @Published var allowHUDDrag: Bool { didSet { persist(allowHUDDrag, key: "allowHUDDrag") } }
     /// When on, the last N successful takes are sent with this polish request. Off by default; not saved into the system prompt.
     @Published var includeRecentPolishLogs: Bool { didSet { persist(includeRecentPolishLogs, key: "includeRecentPolishLogs") } }
     @Published var recentPolishLogCountRaw: Int { didSet { persist(recentPolishLogCountRaw, key: "recentPolishLogCount") } }
@@ -375,6 +381,8 @@ final class SettingsStore: ObservableObject {
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
         levelHUDCapsules = defaults.object(forKey: "levelHUDCapsules") as? Bool ?? true
         fixedHUDStatusWidth = defaults.object(forKey: "fixedHUDStatusWidth") as? Bool ?? true
+        hudPosition = (defaults.string(forKey: "hudPosition").flatMap(HUDPosition.init(rawValue:))) ?? .bottomCentre
+        allowHUDDrag = defaults.object(forKey: "allowHUDDrag") as? Bool ?? false
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false
         recentPolishLogCountRaw = defaults.object(forKey: "recentPolishLogCount") as? Int
             ?? CleanupPrompt.defaultRecentPolishLogCount

@@ -63,3 +63,76 @@ final class HUDPlacementTests: XCTestCase {
         XCTAssertEqual(anchor.y, 0.1, accuracy: 0.001)
     }
 }
+
+final class HUDPositionTests: XCTestCase {
+    private let screen = CGRect(x: 0, y: 0, width: 1470, height: 923)
+    private let panel = CGSize(width: 700, height: 54)
+
+    private func place(_ position: HUDPosition, reserved: CGFloat = 0, custom: CGPoint? = nil) -> CGPoint {
+        HUDPlacement.origin(
+            for: position, panelSize: panel, reservedWidth: reserved, custom: custom, in: screen
+        )
+    }
+
+    func testBottomCentreSitsAboveTheBottomEdge() {
+        let p = place(.bottomCentre)
+        XCTAssertEqual(p.y, HUDPlacement.verticalInset, accuracy: 0.001)
+        XCTAssertEqual(p.x, screen.midX - panel.width / 2, accuracy: 0.001)
+    }
+
+    func testTopCentreLeavesRoomForThePanelBelowTheTop() {
+        let p = place(.topCentre)
+        XCTAssertEqual(p.y, screen.maxY - panel.height - HUDPlacement.verticalInset, accuracy: 0.001)
+        XCTAssertEqual(p.x, screen.midX - panel.width / 2, accuracy: 0.001)
+    }
+
+    /// The centred positions reserve a width so the row losing its cancel capsule
+    /// at insert does not slide the HUD sideways mid-take.
+    func testCentredPositionsCentreTheReservedWidthNotTheLiveOne() {
+        let p = place(.bottomCentre, reserved: 900)
+        XCTAssertEqual(p.x, screen.midX - 450, accuracy: 0.001)
+    }
+
+    func testAReservedWidthNarrowerThanThePanelIsIgnored() {
+        let p = place(.bottomCentre, reserved: 100)
+        XCTAssertEqual(p.x, screen.midX - panel.width / 2, accuracy: 0.001)
+    }
+
+    func testCornersSitAtTheHorizontalInset() {
+        XCTAssertEqual(place(.bottomLeft).x, HUDPlacement.horizontalInset, accuracy: 0.001)
+        XCTAssertEqual(
+            place(.bottomRight).x,
+            screen.maxX - panel.width - HUDPlacement.horizontalInset,
+            accuracy: 0.001
+        )
+    }
+
+    func testCustomUsesTheDraggedAnchor() {
+        let p = place(.custom, custom: CGPoint(x: 0.25, y: 0.5))
+        XCTAssertEqual(p.x, screen.width * 0.25, accuracy: 0.001)
+        XCTAssertEqual(p.y, screen.height * 0.5, accuracy: 0.001)
+    }
+
+    /// Choosing "Where I drag it" before ever dragging must not drop the HUD in a
+    /// corner — there is no anchor to honour, so the default is the honest answer.
+    func testCustomWithoutAnAnchorFallsBackToTheDefault() {
+        XCTAssertEqual(place(.custom).x, place(.bottomCentre).x, accuracy: 0.001)
+        XCTAssertEqual(place(.custom).y, place(.bottomCentre).y, accuracy: 0.001)
+    }
+
+    /// A preset on a display too small for the panel still has to land on it.
+    func testPresetsStayOnASmallDisplay() {
+        let small = CGRect(x: 0, y: 0, width: 640, height: 400)
+        let p = HUDPlacement.origin(
+            for: .bottomRight, panelSize: panel, reservedWidth: 0, custom: nil, in: small
+        )
+        XCTAssertEqual(p.x, HUDPlacement.edgeInset, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(p.y, small.minY + HUDPlacement.edgeInset)
+    }
+
+    func testEveryPositionHasALabel() {
+        for spot in HUDPosition.allCases {
+            XCTAssertFalse(spot.label.isEmpty, "\(spot.rawValue) has no label")
+        }
+    }
+}

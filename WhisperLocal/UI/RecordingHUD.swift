@@ -203,6 +203,7 @@ final class RecordingHUDController: ObservableObject {
         // the microphone. It only covers its own 330×76 at the bottom of the
         // screen, and only while a take is running or just finished.
         panel?.ignoresMouseEvents = false
+        (panel as? HUDPanel)?.isDragEnabled = Self.isRepositionable
         panel?.orderFrontRegardless()
 
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self, weak levelPublisher] timer in
@@ -226,6 +227,7 @@ final class RecordingHUDController: ObservableObject {
         ensurePanel()
         positionOnActiveScreen()
         panel?.ignoresMouseEvents = false
+        (panel as? HUDPanel)?.isDragEnabled = Self.isRepositionable
         panel?.orderFrontRegardless()
     }
 
@@ -347,12 +349,8 @@ final class RecordingHUDController: ObservableObject {
         if #unavailable(macOS 26.0) {
             panel.appearance = NSAppearance(named: .darkAqua)
         }
-        // Dev only while the placement is being tried out. This is a gate for the
-        // trial, not a decision — it has to be flipped on for Release once the
-        // drag has been lived with, rather than left here shipping a difference
-        // between the two builds that nobody chose.
         panel.isDragEnabled = Self.isRepositionable
-        if Self.isRepositionable {
+        do {
             // `queue: nil` on purpose: the block then runs synchronously on the
             // thread that posted, which is the main thread. Handing it a queue
             // instead defers it, and a deferred save loses the drag — the whole
@@ -369,8 +367,9 @@ final class RecordingHUDController: ObservableObject {
         positionOnActiveScreen()
     }
 
-    /// Dragging the HUD somewhere else, and remembering where.
-    static var isRepositionable: Bool { AppIdentity.isDevBuild }
+    /// Dragging the HUD somewhere else, and remembering where. A preference now
+    /// rather than a build gate — the trial is over.
+    static var isRepositionable: Bool { SettingsStore.shared.allowHUDDrag }
 
     private static let anchorXKey = "hudAnchorX"
     private static let anchorYKey = "hudAnchorY"
@@ -399,6 +398,7 @@ final class RecordingHUDController: ObservableObject {
         UserDefaults.standard.removeObject(forKey: Self.anchorXKey)
         UserDefaults.standard.removeObject(forKey: Self.anchorYKey)
         UserDefaults.standard.removeObject(forKey: Self.reservedWidthKey)
+        SettingsStore.shared.hudPosition = .bottomCentre
         positionOnActiveScreen()
     }
 
@@ -428,6 +428,10 @@ final class RecordingHUDController: ObservableObject {
         else { return }
         UserDefaults.standard.set(Double(anchor.x), forKey: Self.anchorXKey)
         UserDefaults.standard.set(Double(anchor.y), forKey: Self.anchorYKey)
+        // Dragging it somewhere is how the custom position gets chosen — leaving
+        // the picker on a preset while the HUD sat elsewhere would make the two
+        // disagree, and the picker would be the one lying.
+        SettingsStore.shared.hudPosition = .custom
     }
 
     /// The widest the row has ever needed, which is what the HUD reserves space
@@ -465,22 +469,13 @@ final class RecordingHUDController: ObservableObject {
         guard let panel, let screen = Self.activeScreen() else { return }
         let frame = screen.visibleFrame
         let size = panel.frame.size
-        let origin: CGPoint
-        if Self.isRepositionable, let anchor = customAnchor {
-            // The user put the left edge where they wanted it, so it is pinned
-            // outright and the reserved width does not come into it.
-            origin = HUDPlacement.origin(forAnchor: anchor, panelSize: size, in: frame)
-        } else {
-            // Centre the reserved width, not this phase's width. Narrower phases sit
-            // a little left of centre; every phase and every take sits in one place,
-            // which is the point.
-            let reserved = max(reservedWidth, size.width)
-            origin = HUDPlacement.clamp(
-                CGPoint(x: frame.midX - reserved / 2, y: frame.minY + HUDPlacement.defaultBottomInset),
-                panelSize: size,
-                in: frame
-            )
-        }
+        let origin = HUDPlacement.origin(
+            for: SettingsStore.shared.hudPosition,
+            panelSize: size,
+            reservedWidth: reservedWidth,
+            custom: customAnchor,
+            in: frame
+        )
         hudPosLog.info("place branch=\(self.customAnchor == nil ? "CENTRE" : "anchor", privacy: .public) anchor=\(self.customAnchor.map { "\($0)" } ?? "nil", privacy: .public) size=\(size.debugDescription, privacy: .public) visible=\(frame.debugDescription, privacy: .public) -> \(origin.debugDescription, privacy: .public)")
         programmatically { panel.setFrameOrigin(origin) }
     }
@@ -677,7 +672,7 @@ struct RecordingHUDView: View {
     var body: some View {
         // Only where the HUD can actually be dragged: an empty context menu is a
         // right-click that does nothing, which is worse than no menu at all.
-        if RecordingHUDController.isRepositionable {
+        if settings.allowHUDDrag || settings.hudPosition == .custom {
             row.contextMenu {
                 Button("Reset Position") { controller.resetPosition() }
             }

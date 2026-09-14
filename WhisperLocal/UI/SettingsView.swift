@@ -159,6 +159,16 @@ struct SettingsView: View {
                     "Gives every capsule in the HUD the same height.",
                     more: "Off, each capsule is sized by its own text: the language badge and the cancel button come out at 30pt, the microphone at 31, the status at 34. Centred in the row that leaves their top and bottom edges a couple of points apart, which the glass rims make easy to see."
                 )
+                Picker("Position", selection: $settings.hudPosition) {
+                    ForEach(HUDPosition.allCases) { spot in
+                        Text(spot.label).tag(spot)
+                    }
+                }
+                Toggle("Let me drag it", isOn: $settings.allowHUDDrag)
+                helpText(
+                    "Drag the HUD while it is on screen to put it anywhere.",
+                    more: "Dragging sets Position to \"Where I drag it\" and the HUD opens there from then on; right-click it for Reset Position. Off, the HUD ignores drags and stays where Position says — worth leaving off if you would rather not nudge it by accident while reaching for the microphone."
+                )
                 Toggle("Hold the status capsule at one width", isOn: $settings.fixedHUDStatusWidth)
                 helpText(
                     "Stops the middle capsule resizing as a take moves from listening to done.",

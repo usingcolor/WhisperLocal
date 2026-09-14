@@ -46,3 +46,81 @@ enum HUDPlacement {
     /// `visibleFrame` has already taken out.
     static let defaultBottomInset: CGFloat = 48
 }
+
+/// Where the HUD sits. Presets for people who want it in one place, and `custom`
+/// for the position they dragged it to.
+enum HUDPosition: String, CaseIterable, Identifiable, Sendable {
+    case bottomCentre
+    case topCentre
+    case bottomLeft
+    case bottomRight
+    case custom
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .bottomCentre: return "Bottom centre"
+        case .topCentre: return "Top centre"
+        case .bottomLeft: return "Bottom left"
+        case .bottomRight: return "Bottom right"
+        case .custom: return "Where I drag it"
+        }
+    }
+}
+
+extension HUDPlacement {
+    /// Clear of the Dock at the bottom and the menu bar at the top — `visibleFrame`
+    /// has already taken both out, so this is breathing room rather than clearance.
+    static let verticalInset: CGFloat = 48
+    /// Nearer the edge than the vertical inset, because a HUD pinned to a corner
+    /// reads as pinned; 48 there would look like it had missed.
+    static let horizontalInset: CGFloat = 24
+
+    static func origin(
+        for position: HUDPosition,
+        panelSize: CGSize,
+        reservedWidth: CGFloat,
+        custom: CGPoint?,
+        in visibleFrame: CGRect
+    ) -> CGPoint {
+        switch position {
+        case .custom:
+            // Selected before anything was ever dragged: the default is a better
+            // answer than the top-left corner an absent anchor would give.
+            guard let custom else {
+                return origin(
+                    for: .bottomCentre, panelSize: panelSize,
+                    reservedWidth: reservedWidth, custom: nil, in: visibleFrame
+                )
+            }
+            return origin(forAnchor: custom, panelSize: panelSize, in: visibleFrame)
+
+        case .bottomCentre, .topCentre:
+            // Centre the reserved width, not this phase's: the row still loses the
+            // cancel capsule at insert, and centring the live width would shift the
+            // HUD at that moment.
+            let reserved = max(reservedWidth, panelSize.width)
+            let x = visibleFrame.midX - reserved / 2
+            let y = position == .topCentre
+                ? visibleFrame.maxY - panelSize.height - verticalInset
+                : visibleFrame.minY + verticalInset
+            return clamp(CGPoint(x: x, y: y), panelSize: panelSize, in: visibleFrame)
+
+        case .bottomLeft:
+            return clamp(
+                CGPoint(x: visibleFrame.minX + horizontalInset, y: visibleFrame.minY + verticalInset),
+                panelSize: panelSize, in: visibleFrame
+            )
+
+        case .bottomRight:
+            return clamp(
+                CGPoint(
+                    x: visibleFrame.maxX - panelSize.width - horizontalInset,
+                    y: visibleFrame.minY + verticalInset
+                ),
+                panelSize: panelSize, in: visibleFrame
+            )
+        }
+    }
+}

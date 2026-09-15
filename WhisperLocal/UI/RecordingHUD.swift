@@ -1,10 +1,5 @@
 import AppKit
-import os
 import SwiftUI
-
-/// Tracing for the HUD's position. Stays until the drag is settled for good —
-/// pulling it after one good report is how the last round went wrong.
-let hudPosLog = Logger(subsystem: "com.usingcolor.WhisperLocal", category: "hudpos")
 
 @MainActor
 final class RecordingHUDController: ObservableObject {
@@ -140,21 +135,6 @@ final class RecordingHUDController: ObservableObject {
     private var hideTask: Task<Void, Never>?
     private var levelTimer: Timer?
     private var screenObserver: NSObjectProtocol?
-    private var moveObserver: NSObjectProtocol?
-    /// True while we are moving or resizing the panel ourselves.
-    ///
-    /// `NSWindow.didMoveNotification` fires for our own `setFrameOrigin`, and for
-    /// `setContentSize` too — that moves the origin, because AppKit holds the
-    /// top-left corner still and the origin is the bottom-left — exactly as it does
-    /// for a drag, and carries nothing to tell them apart. Comparing coordinates
-    /// was the first attempt and it was wrong: see `rememberIfUserMoved`.
-    private var isRepositioning = false
-
-    private func programmatically(_ change: () -> Void) {
-        isRepositioning = true
-        change()
-        isRepositioning = false
-    }
 
     init() {
         // Position is otherwise only computed when the HUD is shown or updated, so
@@ -166,6 +146,11 @@ final class RecordingHUDController: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                // Display scaling changes the metrics the status capsule's width
+                // was measured with, and that measurement is cached for the life of
+                // the process. Left alone it would start truncating ordinary labels
+                // on a screen it was never measured for.
+                RecordingHUDView.invalidateContentSlots()
                 guard let self, self.panel?.isVisible == true else { return }
                 self.positionOnActiveScreen()
             }
@@ -175,9 +160,6 @@ final class RecordingHUDController: ObservableObject {
     deinit {
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
-        }
-        if let moveObserver {
-            NotificationCenter.default.removeObserver(moveObserver)
         }
     }
 
@@ -295,11 +277,7 @@ final class RecordingHUDController: ObservableObject {
         let wanted = NSSize(width: ceil(size.width), height: ceil(size.height))
         let current = panel.frame.size
         guard abs(current.width - wanted.width) > 0.5 || abs(current.height - wanted.height) > 0.5 else { return }
-        // Also a move: AppKit keeps the top-left corner still, so a height change
-        // slides the origin and posts `didMove`. Unflagged, the resize at the start
-        // of every phase read as a drag and saved a position nobody chose.
-        hudPosLog.info("resize \(current.debugDescription, privacy: .public) -> \(wanted.debugDescription, privacy: .public)")
-        programmatically { panel.setContentSize(wanted) }
+        panel.setContentSize(wanted)
         // Only ever grows. A phase wider than anything seen before moves the left
         // edge once, by half the growth, and then it is settled for good.
         if phaseSetsReservedWidth, wanted.width > reservedWidth {
@@ -350,19 +328,11 @@ final class RecordingHUDController: ObservableObject {
             panel.appearance = NSAppearance(named: .darkAqua)
         }
         panel.isDragEnabled = Self.isRepositionable
-        do {
-            // `queue: nil` on purpose: the block then runs synchronously on the
-            // thread that posted, which is the main thread. Handing it a queue
-            // instead defers it, and a deferred save loses the drag — the whole
-            // bug this replaces.
-            moveObserver = NotificationCenter.default.addObserver(
-                forName: NSWindow.didMoveNotification,
-                object: panel,
-                queue: nil
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.rememberIfUserMoved() }
-            }
-        }
+        // Told once, when the drag ends. Watching `didMoveNotification` instead
+        // meant hearing about our own moves too, with nothing on the notification
+        // to tell whose a move was — and every frame of a drag arrived as its own
+        // save.
+        panel.onDragFinished = { [weak self] in self?.saveDraggedPosition() }
         self.panel = panel
         positionOnActiveScreen()
     }
@@ -402,25 +372,16 @@ final class RecordingHUDController: ObservableObject {
         positionOnActiveScreen()
     }
 
-    /// Saves the position the moment a drag moves the panel.
+    /// Records where a drag left the panel. Called once, when the button comes up.
     ///
-    /// This used to tell our moves from the user's by comparing where the panel
-    /// landed against where we last aimed, from a handler deferred onto the main
-    /// queue and then onto a `Task`. Both halves were wrong. The panel would be
-    /// dragged, and before the save ran, a phase change called
-    /// `positionOnActiveScreen`, which found no anchor saved yet, centred the
-    /// panel, and recorded that centre as where we had aimed. The save then woke
-    /// up, found the panel exactly where we aimed, concluded the move was ours and
-    /// discarded it — so the drag was thrown away and the HUD snapped back to the
-    /// middle of the screen, over and over. Synchronous, and keyed on a flag rather
-    /// than on coordinates that two code paths were both writing.
-    private func rememberIfUserMoved() {
-        hudPosLog.info("didMove origin=\(self.panel.map { "\($0.frame.origin)" } ?? "nil", privacy: .public) size=\(self.panel.map { "\($0.frame.size)" } ?? "nil", privacy: .public) repositioning=\(self.isRepositioning, privacy: .public) dragging=\(HUDPanel.isDragging, privacy: .public) visible=\(self.panel?.isVisible == true, privacy: .public)")
-        // Only a drag of ours counts. Anything else that moves this window — and on
-        // macOS 26 that means the window manager snapping it to a screen edge — is
-        // not a position the user chose, and saving it was what pinned the HUD to
-        // the left of the screen for good.
-        guard Self.isRepositionable, HUDPanel.isDragging, !isRepositioning, let panel else { return }
+    /// Earlier versions of this ran on every `didMoveNotification` and tried to
+    /// work out whose move it was by comparing coordinates. That was wrong twice
+    /// over — it saved our own repositioning and the window manager's edge snapping
+    /// as though the user had chosen them, and while an actual drag was running it
+    /// wrote three preference keys and republished the settings store on every
+    /// frame. A drag has an end; that is the moment to write.
+    private func saveDraggedPosition() {
+        guard Self.isRepositionable, let panel else { return }
         // The screen the panel is on, not the one the pointer is on: a drag can
         // finish with the pointer past the edge of the display it started from.
         guard let screen = panel.screen ?? Self.activeScreen(),
@@ -430,8 +391,12 @@ final class RecordingHUDController: ObservableObject {
         UserDefaults.standard.set(Double(anchor.y), forKey: Self.anchorYKey)
         // Dragging it somewhere is how the custom position gets chosen — leaving
         // the picker on a preset while the HUD sat elsewhere would make the two
-        // disagree, and the picker would be the one lying.
-        SettingsStore.shared.hudPosition = .custom
+        // disagree, and the picker would be the one lying. Assigned only when it
+        // differs: `didSet` persists and republishes on every assignment, changed
+        // or not.
+        if SettingsStore.shared.hudPosition != .custom {
+            SettingsStore.shared.hudPosition = .custom
+        }
     }
 
     /// The widest the row has ever needed, which is what the HUD reserves space
@@ -476,8 +441,7 @@ final class RecordingHUDController: ObservableObject {
             custom: customAnchor,
             in: frame
         )
-        hudPosLog.info("place branch=\(self.customAnchor == nil ? "CENTRE" : "anchor", privacy: .public) anchor=\(self.customAnchor.map { "\($0)" } ?? "nil", privacy: .public) size=\(size.debugDescription, privacy: .public) visible=\(frame.debugDescription, privacy: .public) -> \(origin.debugDescription, privacy: .public)")
-        programmatically { panel.setFrameOrigin(origin) }
+        panel.setFrameOrigin(origin)
     }
 }
 
@@ -610,9 +574,9 @@ private final class HUDPanel: NSPanel {
     /// its edge snapping off.
     var isDragEnabled = false
 
-    /// True only while the drag loop below is running. The position is worth
-    /// saving then and at no other moment.
-    @MainActor static var isDragging = false
+    /// Told when a drag finishes, so the position is written once rather than on
+    /// every frame of it.
+    var onDragFinished: (() -> Void)?
 
     /// Drags the panel by hand rather than letting AppKit do it.
     ///
@@ -634,8 +598,7 @@ private final class HUDPanel: NSPanel {
         }
         let startMouse = NSEvent.mouseLocation
         let startOrigin = frame.origin
-        MainActor.assumeIsolated { HUDPanel.isDragging = true }
-        defer { MainActor.assumeIsolated { HUDPanel.isDragging = false } }
+        var moved = false
 
         while let next = NSApp.nextEvent(
             matching: [.leftMouseDragged, .leftMouseUp],
@@ -645,11 +608,26 @@ private final class HUDPanel: NSPanel {
         ) {
             if next.type == .leftMouseUp { break }
             let now = NSEvent.mouseLocation
-            setFrameOrigin(NSPoint(
+            let wanted = NSPoint(
                 x: startOrigin.x + (now.x - startMouse.x),
                 y: startOrigin.y + (now.y - startMouse.y)
-            ))
+            )
+            // Clamped to whichever display the pointer is over, so the panel can
+            // still be carried between screens but cannot be pushed off the far
+            // side of one and left there with no visible edge to grab.
+            let screen = NSScreen.screens.first { NSMouseInRect(now, $0.frame, false) }
+                ?? self.screen ?? NSScreen.main
+            if let visible = screen?.visibleFrame {
+                setFrameOrigin(HUDPlacement.clamp(wanted, panelSize: frame.size, in: visible))
+            } else {
+                setFrameOrigin(wanted)
+            }
+            moved = true
         }
+
+        // A click that never moved is not a reposition, and must not rewrite the
+        // stored anchor or switch the position picker to Custom.
+        if moved { onDragFinished?() }
     }
 }
 
@@ -912,6 +890,12 @@ struct RecordingHUDView: View {
     }
 
     @MainActor private static var contentSlotCache: [Bool: CGFloat] = [:]
+
+    /// Dropped when the display arrangement changes, so the next take measures
+    /// against the metrics actually in use.
+    @MainActor static func invalidateContentSlots() {
+        contentSlotCache.removeAll()
+    }
 
     @ViewBuilder
     private var statusIcon: some View {

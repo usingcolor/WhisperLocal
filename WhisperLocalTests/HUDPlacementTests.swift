@@ -136,3 +136,21 @@ final class HUDPositionTests: XCTestCase {
         }
     }
 }
+
+extension HUDPositionTests {
+    /// The corner positions have to hold the left edge still for the same reason
+    /// the centred ones do: the row loses its cancel capsule at insert, and pinning
+    /// the right edge would throw the left one sideways at that moment.
+    func testBottomRightReservesWidthSoTheLeftEdgeHolds() {
+        let reserved: CGFloat = 900
+        let wide = HUDPlacement.origin(
+            for: .bottomRight, panelSize: CGSize(width: 900, height: 54),
+            reservedWidth: reserved, custom: nil, in: screen
+        )
+        let narrow = HUDPlacement.origin(
+            for: .bottomRight, panelSize: CGSize(width: 854, height: 54),
+            reservedWidth: reserved, custom: nil, in: screen
+        )
+        XCTAssertEqual(wide.x, narrow.x, accuracy: 0.001)
+    }
+}

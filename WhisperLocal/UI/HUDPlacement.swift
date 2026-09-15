@@ -114,9 +114,15 @@ extension HUDPlacement {
             )
 
         case .bottomRight:
+            // The reserved width again, for the same reason the centred positions
+            // use it: the row loses its cancel capsule at insert, and measuring
+            // from the live width would pin the right edge and throw the left one
+            // 46pt sideways at that moment. Reserving holds the left edge still and
+            // lets the row shrink away from the screen edge instead.
+            let reserved = max(reservedWidth, panelSize.width)
             return clamp(
                 CGPoint(
-                    x: visibleFrame.maxX - panelSize.width - horizontalInset,
+                    x: visibleFrame.maxX - reserved - horizontalInset,
                     y: visibleFrame.minY + verticalInset
                 ),
                 panelSize: panelSize, in: visibleFrame

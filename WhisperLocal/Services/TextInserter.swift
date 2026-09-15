@@ -275,21 +275,24 @@ final class TextInserter {
     /// to press ⌘V into a field that already had their text — advice that would
     /// have pasted it twice.
     ///
-    /// Once per process, and only for the apps that need it. The tree is built
-    /// asynchronously, so the first take right after enabling can still come back
-    /// unconfirmed; the paste poll is what covers that.
+    /// Asked every time rather than remembered. A cache of pids looked like the
+    /// thrifty choice and was a bug: pids are recycled, so a Chromium app that
+    /// happened to inherit the number of one already asked would be skipped and
+    /// never build its tree, and every paste into it would report unverified for
+    /// as long as the app ran. Setting an attribute that is already set costs one
+    /// cheap call, twice a take.
+    ///
+    /// The tree is built asynchronously, so the first take right after enabling can
+    /// still come back unconfirmed; asking at the start of the take, rather than at
+    /// the paste, is what covers that.
     private func enableChromiumAccessibility(for app: NSRunningApplication?) {
         guard let app, app.processIdentifier > 0 else { return }
-        let pid = app.processIdentifier
-        guard !Self.accessibilityEnabledPIDs.contains(pid) else { return }
-        Self.accessibilityEnabledPIDs.insert(pid)
-        let element = AXUIElementCreateApplication(pid)
-        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(
+            AXUIElementCreateApplication(app.processIdentifier),
+            "AXManualAccessibility" as CFString,
+            kCFBooleanTrue
+        )
     }
-
-    /// Keyed by pid, so an app that quits and comes back is asked again rather than
-    /// being remembered as already enabled under a pid somebody else now holds.
-    private static var accessibilityEnabledPIDs: Set<pid_t> = []
 
     /// Last resort: leave the text somewhere recoverable. A take that got this far
     /// is real user effort, and silently dropping it is the one outcome with no

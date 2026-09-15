@@ -26,20 +26,44 @@ enum GemmaMLXStatus: Equatable {
     }
 }
 
-/// On-device polish via Gemma 4 E2B IT (MLX, 4-bit, ~2.7 GB).
-/// Uses the community text-only checkpoint — vision and audio towers are not downloaded.
-/// First use downloads from Hugging Face; stays local after that.
+/// One MLX text model this polisher can drive: what to fetch, and where it stops.
+struct MLXTextModel: Sendable, Equatable {
+    /// Shown in Settings, and the stage name a polished take is labelled with.
+    let name: String
+    let huggingFaceID: String
+    /// Rounded download, for the line that warns before spending the bandwidth.
+    let sizeOnDisk: String
+    /// Tokens the tokenizer should treat as end of generation.
+    let extraEOSTokens: Set<String>
+    /// The same end-of-turn marker as text. Some conversions emit it as ordinary
+    /// output rather than stopping on it, so the stream watches for the string too.
+    let endOfTurn: String
+
+    /// What the app ships. Text-only extract (`model_type: gemma4_text`). Not
+    /// `mlx-community/gemma-4-e2b-it-4bit`, which is the multimodal VLM conversion.
+    static let gemma4E2B = MLXTextModel(
+        name: "Gemma 4 E2B",
+        huggingFaceID: "mlx-community/Gemma4-E2B-IT-Text-int4",
+        sizeOnDisk: "~2.7 GB",
+        extraEOSTokens: ["<end_of_turn>", "<eos>"],
+        endOfTurn: "<end_of_turn>"
+    )
+}
+
+/// On-device polish through an MLX text model, 4-bit, downloaded from Hugging Face
+/// on first use and local from then on. The app builds exactly one — `shared`,
+/// running Gemma 4 E2B IT. The polish benchmark builds one per open-weight model it
+/// measures, so every on-device engine goes through this same generate loop and
+/// their wait times can be compared.
 final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendable {
-    static let shared = GemmaMLXPolisher()
+    static let shared = GemmaMLXPolisher(model: .gemma4E2B)
 
-    /// Text-only extract (`model_type: gemma4_text`). Not `mlx-community/gemma-4-e2b-it-4bit`,
-    /// which is the multimodal VLM conversion.
-    static let huggingFaceID = "mlx-community/Gemma4-E2B-IT-Text-int4"
+    let model: MLXTextModel
 
-    let name = "Gemma 4 E2B"
+    var name: String { model.name }
 
     @Published private(set) var status: GemmaMLXStatus = .idle
-    @Published private(set) var statusMessage = GemmaMLXPolisher.idleMessage
+    @Published private(set) var statusMessage: String
 
     var isReady: Bool {
         if case .ready = status { return true }
@@ -49,10 +73,16 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
     private let loader = Loader()
     private let generateTimeout: TimeInterval = PolishTimeouts.gemma
 
-    private static let idleMessage =
-        "Gemma 4 E2B IT is not loaded. Select it to download ~2.7 GB (MLX, on-device, text-only)."
+    private var idleMessage: String { Self.idleMessage(for: model) }
 
-    private init() {}
+    private static func idleMessage(for model: MLXTextModel) -> String {
+        "\(model.name) is not loaded. Select it to download \(model.sizeOnDisk) (MLX, on-device, text-only)."
+    }
+
+    init(model: MLXTextModel) {
+        self.model = model
+        self.statusMessage = Self.idleMessage(for: model)
+    }
 
     func prewarm() {
         Task { _ = try? await ensureLoaded() }
@@ -61,7 +91,7 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
     func unload() {
         Task {
             await loader.reset()
-            await publish(status: .idle, message: Self.idleMessage)
+            await publish(status: .idle, message: idleMessage)
         }
     }
 
@@ -79,7 +109,7 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return PolishedText(text: trimmed) }
 
-        let model = try await ensureLoaded()
+        let container = try await ensureLoaded()
         let system = CleanupPrompt.system(
             for: task,
             dictionary: dictionary,
@@ -101,6 +131,7 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
             ? min(Self.tokenBudget(for: trimmed), 128)
             : Self.tokenBudget(for: trimmed)
         let timeout = generateTimeout
+        let endOfTurn = model.endOfTurn
 
         do {
             let raw = try await withTimeout(timeout) {
@@ -108,9 +139,9 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
                     .system(system),
                     .user(user)
                 ])
-                let lmInput = try await model.prepare(input: userInput)
+                let lmInput = try await container.prepare(input: userInput)
                 let parameters = GenerateParameters(maxTokens: maxTokens, temperature: 0)
-                let stream = try await model.generate(input: lmInput, parameters: parameters)
+                let stream = try await container.generate(input: lmInput, parameters: parameters)
                 let deadline = Date().addingTimeInterval(timeout)
                 let charCap = task == .sessionContext
                     ? SessionContext.maxCharacters + 40
@@ -125,7 +156,7 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
                     switch event {
                     case .chunk(let chunk):
                         output += chunk
-                        if output.contains("<end_of_turn>") {
+                        if output.contains(endOfTurn) {
                             sawEndOfTurn = true
                             return output
                         }
@@ -143,7 +174,7 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
                 }
                 return output
             }
-            let sanitized = PolishOutput.sanitize(raw)
+            let sanitized = Self.trimEndOfTurn(PolishOutput.sanitize(raw), marker: endOfTurn)
             guard !sanitized.isEmpty else { throw PolisherError.emptyResponse }
             return PolishedText(text: sanitized)
         } catch is CancellationError {
@@ -165,11 +196,11 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
     }
 
     private func loadModel() async throws -> ModelContainer {
-        await publish(status: .downloading(0), message: "Downloading Gemma 4 E2B IT (~2.7 GB)…")
+        await publish(status: .downloading(0), message: "Downloading \(model.name) (\(model.sizeOnDisk))…")
 
         let configuration = ModelConfiguration(
-            id: Self.huggingFaceID,
-            extraEOSTokens: ["<end_of_turn>", "<eos>"]
+            id: model.huggingFaceID,
+            extraEOSTokens: model.extraEOSTokens
         )
 
         do {
@@ -183,27 +214,27 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
                     guard let self else { return }
                     if fraction < 1 {
                         self.status = .downloading(fraction)
-                        self.statusMessage = "Downloading Gemma 4 E2B IT… \(Int(fraction * 100))% (~2.7 GB)"
+                        self.statusMessage = "Downloading \(self.model.name)… \(Int(fraction * 100))% (\(self.model.sizeOnDisk))"
                     } else {
                         self.status = .loading
-                        self.statusMessage = "Loading Gemma 4 E2B IT into memory…"
+                        self.statusMessage = "Loading \(self.model.name) into memory…"
                     }
                 }
             }
             try Task.checkCancellation()
-            await publish(status: .loading, message: "Compiling Gemma 4 E2B IT (once)…")
+            await publish(status: .loading, message: "Compiling \(model.name) (once)…")
             try? await Self.warmup(container)
             try Task.checkCancellation()
             await publish(
                 status: .ready,
-                message: "Gemma 4 E2B IT ready. Later dictations should take a few seconds."
+                message: "\(model.name) ready. Later dictations should take a few seconds."
             )
             return container
         } catch is CancellationError {
-            await publish(status: .idle, message: Self.idleMessage)
+            await publish(status: .idle, message: idleMessage)
             throw CancellationError()
         } catch {
-            let message = Self.friendlyLoadError(error)
+            let message = friendlyLoadError(error)
             await publish(status: .failed(message), message: message)
             throw PolisherError.notAvailable(message)
         }
@@ -231,18 +262,26 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
         for await _ in stream { break }
     }
 
-    private static func friendlyLoadError(_ error: Error) -> String {
+    /// Everything a model can stop on that the person at the Mac could act on.
+    private func friendlyLoadError(_ error: Error) -> String {
         let raw = error.localizedDescription
         let lower = raw.lowercased()
         if lower.contains("401") || lower.contains("403") || lower.contains("gated")
             || lower.contains("unauthorized") {
-            return "Gemma download was denied. Accept Google’s Gemma license at huggingface.co/google/gemma-4-E2B-it, then retry. If the Hub still blocks it, set HF_TOKEN."
+            return "\(model.name) was denied. Accept its licence at huggingface.co/\(model.huggingFaceID), then retry. If the Hub still blocks it, set HF_TOKEN."
         }
         if lower.contains("network") || lower.contains("offline") || lower.contains("internet")
             || lower.contains("timed out") || lower.contains("not connected") {
-            return "Couldn’t download Gemma 4 E2B IT. Check the network and retry (~2.7 GB)."
+            return "Couldn’t download \(model.name). Check the network and retry (\(model.sizeOnDisk))."
         }
-        return "Gemma 4 E2B IT failed to load: \(raw)"
+        return "\(model.name) failed to load: \(raw)"
+    }
+
+    /// A conversion whose end-of-turn token is not registered as EOS emits it as
+    /// text. `PolishOutput.sanitize` knows Gemma's; this cuts whatever this model's is.
+    private static func trimEndOfTurn(_ text: String, marker: String) -> String {
+        guard let range = text.range(of: marker) else { return text }
+        return String(text[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func withTimeout<T: Sendable>(

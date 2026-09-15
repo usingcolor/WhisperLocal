@@ -36,22 +36,6 @@ final class AudioRecorder: ObservableObject {
     /// The device and rate the live graph was built on, so a configuration change
     /// can be asked whether anything it cares about actually moved.
     private var liveGraphSignature: InputGraphSignature?
-    /// A voice-processing engine kept between takes.
-    ///
-    /// `setVoiceProcessingEnabled(true)` rebuilds the underlying audio unit, and it
-    /// was costing 980ms of every take's three seconds because the engine was built
-    /// fresh each time and thrown away two seconds later. Keeping the object pays
-    /// that once per launch instead.
-    ///
-    /// Stopped, not paused. Pausing would hold the microphone open, keep the
-    /// recording indicator lit and leave voice processing ducking other audio
-    /// between takes — for a setting whose whole purpose is to leave playback
-    /// alone, that would be a poor thing to trade for latency.
-    private var parkedVoiceEngine: AVAudioEngine?
-    /// Only ever true for an engine whose `setVoiceProcessingEnabled` actually
-    /// succeeded. `engineUsesVoiceProcessing` deliberately reports what was *asked*
-    /// for, so it cannot answer this question.
-    private var parkedEngineHasVoiceProcessing = false
 
     private struct InputGraphSignature: Equatable {
         let deviceID: AudioDeviceID
@@ -159,13 +143,6 @@ final class AudioRecorder: ObservableObject {
         if isEngineLive, engineUsesVoiceProcessing != wantsVoiceProcessing {
             logger.info("Rebuilding the input graph for a voice-processing change")
             stopEngineHardware()
-        }
-        if !wantsVoiceProcessing {
-            // Turned off: nothing is going to want it back this take, and holding a
-            // voice-processing engine for a setting that is off is just a unit
-            // sitting on memory.
-            parkedVoiceEngine = nil
-            parkedEngineHasVoiceProcessing = false
         }
 
         if isEngineLive {
@@ -319,42 +296,12 @@ final class AudioRecorder: ObservableObject {
     /// setting for someone listening on speakers, where there is no headset to
     /// disturb.
     private func startVoiceProcessingEngine(on target: InputTarget) throws {
-        let hadParked = parkedVoiceEngine != nil && parkedEngineHasVoiceProcessing
-        do {
-            try buildVoiceProcessingEngine(on: target)
-        } catch {
-            // A kept engine that will not start is worse than keeping none: it
-            // would be handed to every take from here on, so one moment of a busy
-            // device becomes a microphone that never works again until the app is
-            // quit. That is exactly what happened. Throw it away and build once
-            // more from scratch.
-            guard hadParked else { throw error }
-            logger.info("Kept voice-processing engine would not start; building a new one")
-            parkedVoiceEngine = nil
-            parkedEngineHasVoiceProcessing = false
-            try buildVoiceProcessingEngine(on: target)
-        }
-    }
-
-    private func buildVoiceProcessingEngine(on target: InputTarget) throws {
-        let began = Date()
-        let engine: AVAudioEngine
-        let reused: Bool
-        if let parked = parkedVoiceEngine, parkedEngineHasVoiceProcessing {
-            engine = parked
-            parkedVoiceEngine = nil
-            reused = true
-        } else {
-            engine = AVAudioEngine()
-            reused = false
-        }
+        let engine = AVAudioEngine()
         let input = engine.inputNode
         do {
             // Turning this on rebuilds the underlying unit, so it must happen
-            // before the device is pinned or the format is read — and so it is
-            // skipped entirely for an engine that already has it, which is the
-            // whole point of keeping one.
-            if !reused { try input.setVoiceProcessingEnabled(true) }
+            // before the device is pinned or the format is read.
+            try input.setVoiceProcessingEnabled(true)
             // Cancellation alone cannot cope with double-talk — two voices at once
             // is where the adaptive filter stops adapting and residual speech leaks
             // into the transcript. Dipping the far end is the direct remedy.
@@ -365,12 +312,8 @@ final class AudioRecorder: ObservableObject {
             // AGC rides gain up through quiet passages, which pumps whatever
             // residual survived cancellation. Steady levels suit the model better.
             input.isVoiceProcessingAGCEnabled = false
-            parkedEngineHasVoiceProcessing = true
-            logger.info(
-                "Voice processing \(reused ? "reused" : "ON", privacy: .public) in \(Int(Date().timeIntervalSince(began) * 1000), privacy: .public) ms"
-            )
+            logger.info("Voice processing ON (echo cancellation, ducking, AGC off)")
         } catch {
-            parkedEngineHasVoiceProcessing = false
             // `engineUsesVoiceProcessing` deliberately keeps saying what this
             // engine was *asked* for. Recording the failure instead left the flag
             // disagreeing with the setting forever, and `start()` then tore the
@@ -404,20 +347,12 @@ final class AudioRecorder: ObservableObject {
         }
         tapInstalled = true
 
-        let beforeStart = Date()
         do {
             try engine.start()
         } catch {
-            // Cleared before the teardown, because the teardown is what parks the
-            // engine and this one has just proved it is not worth parking.
-            parkedEngineHasVoiceProcessing = false
-            parkedVoiceEngine = nil
             stopEngineHardware()
             throw AudioRecorderError.engineStartFailed(error as NSError)
         }
-        logger.info(
-            "Engine start \(Int(Date().timeIntervalSince(beforeStart) * 1000), privacy: .public) ms, graph up in \(Int(Date().timeIntervalSince(began) * 1000), privacy: .public) ms"
-        )
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
@@ -645,10 +580,6 @@ final class AudioRecorder: ObservableObject {
         if let engine {
             if tapInstalled { engine.inputNode.removeTap(onBus: 0) }
             if engine.isRunning { engine.stop() }
-            // Kept for the next take, stopped so the microphone is released and
-            // nothing goes on ducking. Only an engine that really has voice
-            // processing is worth keeping — a plain one saves nothing.
-            if parkedEngineHasVoiceProcessing { parkedVoiceEngine = engine }
         }
         tapInstalled = false
         engine = nil

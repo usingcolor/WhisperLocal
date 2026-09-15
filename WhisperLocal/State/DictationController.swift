@@ -308,13 +308,34 @@ final class DictationController: ObservableObject {
 
         do {
             sessionGeneration += 1
+            // Before the HUD: reading the frontmost app is cheap, and it has to be
+            // the app the user was in rather than anything a panel appearing might
+            // disturb.
             dictationTargetApp = TargetAppContext.captureFrontmost()
+            takeLanguage = LanguageCoordinator.shared.languageForTake(transcription: transcription)
+
+            // The HUD goes up before the microphone is opened, not after it.
+            // Opening the graph costs about 40ms on the plain path and nobody ever
+            // noticed it there; with voice processing on it is nearer three
+            // seconds — `setVoiceProcessingEnabled` alone took 980ms and
+            // `engine.start()` another 1.4s on a MacBook Air. All of that used to
+            // sit between the key going down and anything appearing on screen, so
+            // the app looked like it had missed the press. `waitingForMic` is
+            // exactly this state, and the `isInputReady` subscription promotes it
+            // to `.recording` on its own the moment audio arrives.
+            phase = .waitingForMic
+            hud.show(
+                phase: .waitingForMic,
+                levelPublisher: recorder,
+                contextCapture: isIntentTake,
+                language: LanguageCoordinator.isEnabled ? takeLanguage : nil
+            )
+
             // A Chromium app has to be asked to build its accessibility tree, and
             // it builds it asynchronously. Asking now, rather than when the text
             // goes in, is the difference between it being ready and the first take
             // into a freshly launched app coming back unconfirmed.
             TextInserter.shared.prepareForInsertion(into: dictationTargetApp)
-            takeLanguage = LanguageCoordinator.shared.languageForTake(transcription: transcription)
             try recorder.start()
             recordingBeganAt = Date()
             hotKey.markSessionActive(true)
@@ -322,10 +343,7 @@ final class DictationController: ObservableObject {
             startStreaming()
             if recorder.isInputReady {
                 phase = .recording
-                hud.show(phase: .recording, levelPublisher: recorder, contextCapture: isIntentTake, language: LanguageCoordinator.isEnabled ? takeLanguage : nil)
-            } else {
-                phase = .waitingForMic
-                hud.show(phase: .waitingForMic, levelPublisher: recorder, contextCapture: isIntentTake, language: LanguageCoordinator.isEnabled ? takeLanguage : nil)
+                hud.update(phase: .recording)
             }
         } catch {
             isIntentTake = false

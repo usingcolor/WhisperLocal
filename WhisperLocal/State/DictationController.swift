@@ -592,10 +592,7 @@ final class DictationController: ObservableObject {
                 hud.update(phase: .polishing)
             }
             let result = await makePipeline().runChunked(raw, targetApp: targetApp)
-            var output = result.text
-            if settings.insertTrailingSpace, !output.hasSuffix(" ") {
-                output += " "
-            }
+            let output = result.text
             lastPolished = output
             lastStages = result.stages
             lastCleanupNote = result.cleanupNote

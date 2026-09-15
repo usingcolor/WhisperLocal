@@ -255,10 +255,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Inserted text") {
-                Toggle("Insert trailing space", isOn: $settings.insertTrailingSpace)
-            }
-
             Section("Last dictation") {
                 LabeledContent("Raw") {
                     Text(controller.lastTranscript.isEmpty ? "—" : controller.lastTranscript)

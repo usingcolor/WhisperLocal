@@ -129,7 +129,6 @@ final class SettingsStore: ObservableObject {
     @Published var systemPromptLayersMigrated: Bool { didSet { persist(systemPromptLayersMigrated, key: "systemPromptLayersMigrated") } }
     @Published var openAIModel: String { didSet { persist(openAIModel, key: "openAIModel") } }
     @Published var anthropicModel: String { didSet { persist(anthropicModel, key: "anthropicModel") } }
-    @Published var insertTrailingSpace: Bool { didSet { persist(insertTrailingSpace, key: "insertTrailingSpace") } }
     /// UID of the microphone the user picked, or empty to follow System Settings.
     /// Stored by UID rather than by the numeric device id, which is reassigned on
     /// reconnect, and by UID rather than by name, because two devices can share one.
@@ -351,7 +350,6 @@ final class SettingsStore: ObservableObject {
         systemPromptLayersMigrated = defaults.bool(forKey: "systemPromptLayersMigrated")
         openAIModel = defaults.string(forKey: "openAIModel") ?? CloudModelCatalog.openAIDefault
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
-        insertTrailingSpace = defaults.object(forKey: "insertTrailingSpace") as? Bool ?? true
         preferredInputDeviceUIDRaw = defaults.string(forKey: "preferredInputDevice") ?? ""
         enableEchoCancellation = defaults.object(forKey: "enableEchoCancellation") as? Bool ?? false
         preferredLanguageCode = defaults.string(forKey: "preferredLanguage") ?? "en"

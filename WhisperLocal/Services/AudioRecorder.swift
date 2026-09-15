@@ -33,6 +33,14 @@ final class AudioRecorder: ObservableObject {
     /// Device notifications arrive in bursts — format, rate and liveness all at
     /// once — so the rebuild is coalesced instead of running three times.
     private var configChangeTask: Task<Void, Never>?
+    /// The device and rate the live graph was built on, so a configuration change
+    /// can be asked whether anything it cares about actually moved.
+    private var liveGraphSignature: InputGraphSignature?
+
+    private struct InputGraphSignature: Equatable {
+        let deviceID: AudioDeviceID
+        let sampleRate: Double
+    }
     private var engineStartedAt: Date?
     /// Snapshot for idle-hold length. Refreshed when the engine starts or the
     /// graph reconfigures — not on every take, so `stop()` stays off coreaudiod.
@@ -253,6 +261,7 @@ final class AudioRecorder: ObservableObject {
             "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch on \(target.name, privacy: .public)"
         )
         let (outputFormat, converter) = try makeConversion(from: hardwareFormat)
+        liveGraphSignature = InputGraphSignature(deviceID: target.id, sampleRate: hardwareFormat.sampleRate)
         self.inputUnit = unit
 
         unit.onBuffer = { [weak self] buffer in
@@ -325,6 +334,7 @@ final class AudioRecorder: ObservableObject {
             "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch on \(target.name, privacy: .public)"
         )
         let (outputFormat, converter) = try makeConversion(from: hardwareFormat)
+        liveGraphSignature = InputGraphSignature(deviceID: target.id, sampleRate: hardwareFormat.sampleRate)
         self.engine = engine
 
         input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
@@ -477,8 +487,35 @@ final class AudioRecorder: ObservableObject {
         configChangeTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled, self.isEngineLive || self.inputUnit != nil else { return }
+            guard self.configurationActuallyChanged() else {
+                self.logger.info("Configuration change on the same device and rate — ignored")
+                return
+            }
             self.rebuildAfterConfigurationChange()
         }
+    }
+
+    /// Whether a configuration change is the world moving or the unit settling.
+    ///
+    /// Voice processing re-reports its channel count as it settles — 5 then 7 on a
+    /// MacBook Air's mic array — and rebuilding starts that settling over, which
+    /// posts another change, which rebuilds again. That loop never converged: the
+    /// graph was torn down and rebuilt for as long as the app was asked to record,
+    /// `start()` never returned, and because the HUD is shown on the line after it,
+    /// no HUD ever appeared. Turning echo cancellation off was the only way out,
+    /// because the AUHAL path has a guard of its own and this one had none.
+    ///
+    /// The channel count is not a reason to rebuild. The tap is installed with
+    /// `format: nil` and takes whatever the node hands it, and `ingest` checks each
+    /// buffer's own format and downmixes anything multi-channel explicitly. What is
+    /// worth rebuilding for is the device being replaced or going away, or its rate
+    /// moving under a converter built for the old one.
+    private func configurationActuallyChanged() -> Bool {
+        guard let was = liveGraphSignature else { return true }
+        guard let now = deviceForThisTake() else { return true }
+        if now.id != was.deviceID { return true }
+        let rate = engine?.inputNode.outputFormat(forBus: 0).sampleRate ?? was.sampleRate
+        return rate > 0 && abs(rate - was.sampleRate) > 1
     }
 
     private func rebuildAfterConfigurationChange() {
@@ -530,6 +567,10 @@ final class AudioRecorder: ObservableObject {
         idleStopTask = nil
         configChangeTask?.cancel()
         configChangeTask = nil
+        // Torn down with the graph it described. A signature outliving its own
+        // engine would answer for the next one and could wave a real device change
+        // through as settling.
+        liveGraphSignature = nil
         if let configObserver {
             NotificationCenter.default.removeObserver(configObserver)
             self.configObserver = nil

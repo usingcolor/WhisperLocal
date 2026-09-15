@@ -146,12 +146,6 @@ final class SettingsStore: ObservableObject {
     /// the preferred language. People install keyboards they never dictate in.
     @Published var followedKeyboardLanguages: [String] { didSet { persist(followedKeyboardLanguages, key: "followedKeyboardLanguages") } }
     @Published var enableDictationLog: Bool { didSet { persist(enableDictationLog, key: "enableDictationLog") } }
-    /// Give every HUD capsule the same height instead of letting each one be sized
-    /// by its own text. The capsules carry four different font sizes behind the
-    /// same vertical padding, which leaves their heights a few points apart — a
-    /// difference the glass rims make plain. On by default; the toggle is here to
-    /// be looked at rather than because both are worth keeping.
-    @Published var levelHUDCapsules: Bool { didSet { persist(levelHUDCapsules, key: "levelHUDCapsules") } }
     /// Where the HUD sits. `custom` is set by dragging it there.
     @Published var hudPosition: HUDPosition { didSet { persist(hudPosition.rawValue, key: "hudPosition") } }
     /// Whether the HUD can be dragged at all. Off by default: the HUD is in front
@@ -373,7 +367,6 @@ final class SettingsStore: ObservableObject {
                 : []
         }
         enableDictationLog = defaults.object(forKey: "enableDictationLog") as? Bool ?? true
-        levelHUDCapsules = defaults.object(forKey: "levelHUDCapsules") as? Bool ?? true
         hudPosition = (defaults.string(forKey: "hudPosition").flatMap(HUDPosition.init(rawValue:))) ?? .bottomCentre
         allowHUDDrag = defaults.object(forKey: "allowHUDDrag") as? Bool ?? false
         includeRecentPolishLogs = defaults.object(forKey: "includeRecentPolishLogs") as? Bool ?? false

@@ -837,7 +837,7 @@ struct RecordingHUDView: View {
             // the same again at the bottom — invisible on plain text, plain to see
             // on four glass rims sitting side by side.
             .padding(.vertical, 9)
-            .frame(height: settings.levelHUDCapsules ? Self.levelledPillHeight : nil)
+            .frame(height: Self.levelledPillHeight)
             .modifier(HUDPill())
     }
 

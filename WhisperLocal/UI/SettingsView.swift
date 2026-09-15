@@ -154,11 +154,6 @@ struct SettingsView: View {
             }
 
             Section("Recording HUD") {
-                Toggle("Line up the capsule heights", isOn: $settings.levelHUDCapsules)
-                helpText(
-                    "Gives every capsule in the HUD the same height.",
-                    more: "Off, each capsule is sized by its own text: the language badge and the cancel button come out at 30pt, the microphone at 31, the status at 34. Centred in the row that leaves their top and bottom edges a couple of points apart, which the glass rims make easy to see."
-                )
                 Picker("Position", selection: $settings.hudPosition) {
                     ForEach(HUDPosition.allCases) { spot in
                         Text(spot.label).tag(spot)

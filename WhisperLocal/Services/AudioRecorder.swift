@@ -319,6 +319,24 @@ final class AudioRecorder: ObservableObject {
     /// setting for someone listening on speakers, where there is no headset to
     /// disturb.
     private func startVoiceProcessingEngine(on target: InputTarget) throws {
+        let hadParked = parkedVoiceEngine != nil && parkedEngineHasVoiceProcessing
+        do {
+            try buildVoiceProcessingEngine(on: target)
+        } catch {
+            // A kept engine that will not start is worse than keeping none: it
+            // would be handed to every take from here on, so one moment of a busy
+            // device becomes a microphone that never works again until the app is
+            // quit. That is exactly what happened. Throw it away and build once
+            // more from scratch.
+            guard hadParked else { throw error }
+            logger.info("Kept voice-processing engine would not start; building a new one")
+            parkedVoiceEngine = nil
+            parkedEngineHasVoiceProcessing = false
+            try buildVoiceProcessingEngine(on: target)
+        }
+    }
+
+    private func buildVoiceProcessingEngine(on target: InputTarget) throws {
         let began = Date()
         let engine: AVAudioEngine
         let reused: Bool
@@ -390,6 +408,10 @@ final class AudioRecorder: ObservableObject {
         do {
             try engine.start()
         } catch {
+            // Cleared before the teardown, because the teardown is what parks the
+            // engine and this one has just proved it is not worth parking.
+            parkedEngineHasVoiceProcessing = false
+            parkedVoiceEngine = nil
             stopEngineHardware()
             throw AudioRecorderError.engineStartFailed(error as NSError)
         }

@@ -21,11 +21,6 @@ final class AudioRecorder: ObservableObject {
     private(set) var inputTrail: [String] = []
 
     private var inputUnit: AudioInputUnit?
-    /// Only for echo cancellation, which the voice-processing unit will not do on a
-    /// device we name. Every other take runs on `inputUnit`.
-    private var engine: AVAudioEngine?
-    private var tapInstalled = false
-    private var configObserver: NSObjectProtocol?
     private var outputFormat: AVAudioFormat?
     private var converter: AVAudioConverter?
     private var sleepObserver: NSObjectProtocol?
@@ -45,9 +40,6 @@ final class AudioRecorder: ObservableObject {
     /// Snapshot for idle-hold length. Refreshed when the engine starts or the
     /// graph reconfigures — not on every take, so `stop()` stays off coreaudiod.
     private var cachedInputRoute: AudioInputRoute?
-    /// What the live engine was actually built with, so a settings change forces a
-    /// rebuild instead of appearing to do nothing until the idle hold expires.
-    private var engineUsesVoiceProcessing = false
 
     private let lock = NSLock()
     /// Filled on the audio tap thread; `stop()` reads it after capturing ends.
@@ -87,9 +79,6 @@ final class AudioRecorder: ObservableObject {
     deinit {
         if let sleepObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver)
-        }
-        if let configObserver {
-            NotificationCenter.default.removeObserver(configObserver)
         }
     }
 
@@ -138,12 +127,6 @@ final class AudioRecorder: ObservableObject {
         }
 
         inputTrail = []
-
-        let wantsVoiceProcessing = SettingsStore.shared.enableEchoCancellation
-        if isEngineLive, engineUsesVoiceProcessing != wantsVoiceProcessing {
-            logger.info("Rebuilding the input graph for a voice-processing change")
-            stopEngineHardware()
-        }
 
         if isEngineLive {
             inputTrail = currentInputName.map { [$0] } ?? []
@@ -206,7 +189,7 @@ final class AudioRecorder: ObservableObject {
     }
 
     private var isEngineLive: Bool {
-        inputUnit?.isRunning == true || (tapInstalled && engine?.isRunning == true)
+        inputUnit?.isRunning == true
     }
 
     private func startEngine() throws {
@@ -237,12 +220,7 @@ final class AudioRecorder: ObservableObject {
         let outputBefore = AudioOutputSnapshot.current()
         engineStartedAt = Date()
 
-        engineUsesVoiceProcessing = SettingsStore.shared.enableEchoCancellation
-        if engineUsesVoiceProcessing {
-            try startVoiceProcessingEngine(on: target)
-        } else {
-            try startInputUnit(on: target)
-        }
+        try startInputUnit(on: target)
 
         refreshCachedInputRoute()
         logOutputChange(from: outputBefore)
@@ -285,83 +263,6 @@ final class AudioRecorder: ObservableObject {
         unit.watchForChanges(followingSystemDefault: target.followsSystemDefault)
     }
 
-    /// Echo cancellation only.
-    ///
-    /// The voice-processing unit rejects a device chosen the way `AudioInputUnit`
-    /// chooses one — it needs the speaker signal as well as the microphone, and
-    /// takes only the aggregate the engine builds for it. So this path keeps
-    /// AVAudioEngine, and with it the old cost: the default input is opened for a
-    /// moment before the device we want is pinned, which on a Bluetooth headset is
-    /// audible. That is the trade this setting already carries, and it is the
-    /// setting for someone listening on speakers, where there is no headset to
-    /// disturb.
-    private func startVoiceProcessingEngine(on target: InputTarget) throws {
-        let engine = AVAudioEngine()
-        let input = engine.inputNode
-        do {
-            // Turning this on rebuilds the underlying unit, so it must happen
-            // before the device is pinned or the format is read.
-            try input.setVoiceProcessingEnabled(true)
-            // Cancellation alone cannot cope with double-talk — two voices at once
-            // is where the adaptive filter stops adapting and residual speech leaks
-            // into the transcript. Dipping the far end is the direct remedy.
-            var ducking = AVAudioVoiceProcessingOtherAudioDuckingConfiguration()
-            ducking.enableAdvancedDucking = true
-            ducking.duckingLevel = .default
-            input.voiceProcessingOtherAudioDuckingConfiguration = ducking
-            // AGC rides gain up through quiet passages, which pumps whatever
-            // residual survived cancellation. Steady levels suit the model better.
-            input.isVoiceProcessingAGCEnabled = false
-            logger.info("Voice processing ON (echo cancellation, ducking, AGC off)")
-        } catch {
-            // `engineUsesVoiceProcessing` deliberately keeps saying what this
-            // engine was *asked* for. Recording the failure instead left the flag
-            // disagreeing with the setting forever, and `start()` then tore the
-            // graph down and rebuilt it on every single take — a mic restart each
-            // time, and a Bluetooth profile switch with it.
-            logger.error("Voice processing failed, using raw input: \(error.localizedDescription, privacy: .public)")
-        }
-        pin(target.id, to: input)
-
-        // A `format: nil` tap delivers the node's *output* format, so read that.
-        // (Under voice processing both sides report the same 7-channel discrete
-        // layout; the downmix that handles it lives in `ingest`.)
-        var hardwareFormat = input.outputFormat(forBus: 0)
-        if hardwareFormat.sampleRate <= 0 || hardwareFormat.channelCount == 0 {
-            hardwareFormat = input.inputFormat(forBus: 0)
-        }
-        logger.info(
-            "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch on \(target.name, privacy: .public)"
-        )
-        let (outputFormat, converter) = try makeConversion(from: hardwareFormat)
-        liveGraphSignature = InputGraphSignature(deviceID: target.id, sampleRate: hardwareFormat.sampleRate)
-        self.engine = engine
-
-        input.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-            self?.ingest(
-                buffer,
-                outputFormat: outputFormat,
-                converter: converter,
-                converterSourceFormat: hardwareFormat
-            )
-        }
-        tapInstalled = true
-
-        do {
-            try engine.start()
-        } catch {
-            stopEngineHardware()
-            throw AudioRecorderError.engineStartFailed(error as NSError)
-        }
-        configObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.scheduleConfigurationRebuild() }
-        }
-    }
-
     private func makeConversion(from hardwareFormat: AVAudioFormat) throws -> (AVAudioFormat, AVAudioConverter?) {
         guard let outputFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -378,25 +279,6 @@ final class AudioRecorder: ObservableObject {
         self.outputFormat = outputFormat
         self.converter = converter
         return (outputFormat, converter)
-    }
-
-    @discardableResult
-    private func pin(_ device: AudioDeviceID, to input: AVAudioInputNode) -> Bool {
-        guard let unit = input.audioUnit else { return false }
-        var deviceID = device
-        let status = AudioUnitSetProperty(
-            unit,
-            kAudioOutputUnitProperty_CurrentDevice,
-            kAudioUnitScope_Global,
-            0,
-            &deviceID,
-            UInt32(MemoryLayout<AudioDeviceID>.size)
-        )
-        guard status == noErr else {
-            logger.error("Could not select input device \(device, privacy: .public) (\(status, privacy: .public))")
-            return false
-        }
-        return true
     }
 
     /// One microphone, named before anything is opened.
@@ -495,26 +377,23 @@ final class AudioRecorder: ObservableObject {
         }
     }
 
-    /// Whether a configuration change is the world moving or the unit settling.
+    /// Whether a configuration change is the world moving or the device settling.
     ///
-    /// Voice processing re-reports its channel count as it settles — 5 then 7 on a
-    /// MacBook Air's mic array — and rebuilding starts that settling over, which
-    /// posts another change, which rebuilds again. That loop never converged: the
-    /// graph was torn down and rebuilt for as long as the app was asked to record,
-    /// `start()` never returned, and because the HUD is shown on the line after it,
-    /// no HUD ever appeared. Turning echo cancellation off was the only way out,
-    /// because the AUHAL path has a guard of its own and this one had none.
+    /// A microphone array can re-report its channel count a moment after it opens —
+    /// 5 then 7 on a MacBook Air — and rebuilding the graph starts that settling
+    /// over, which posts another change, which rebuilds again. That cost the app
+    /// its microphone entirely once, on a path since removed, and the same shape of
+    /// loop is available to any device that does the same thing.
     ///
-    /// The channel count is not a reason to rebuild. The tap is installed with
-    /// `format: nil` and takes whatever the node hands it, and `ingest` checks each
-    /// buffer's own format and downmixes anything multi-channel explicitly. What is
-    /// worth rebuilding for is the device being replaced or going away, or its rate
-    /// moving under a converter built for the old one.
+    /// The channel count is not a reason to rebuild: `ingest` reads each buffer's
+    /// own format and downmixes anything multi-channel explicitly. What is worth
+    /// rebuilding for is the device being replaced or going away, or its rate moving
+    /// under a converter built for the old one.
     private func configurationActuallyChanged() -> Bool {
         guard let was = liveGraphSignature else { return true }
         guard let now = deviceForThisTake() else { return true }
         if now.id != was.deviceID { return true }
-        let rate = engine?.inputNode.outputFormat(forBus: 0).sampleRate ?? was.sampleRate
+        let rate = inputUnit?.format.sampleRate ?? was.sampleRate
         return rate > 0 && abs(rate - was.sampleRate) > 1
     }
 
@@ -571,18 +450,8 @@ final class AudioRecorder: ObservableObject {
         // engine would answer for the next one and could wave a real device change
         // through as settling.
         liveGraphSignature = nil
-        if let configObserver {
-            NotificationCenter.default.removeObserver(configObserver)
-            self.configObserver = nil
-        }
         inputUnit?.dispose()
         inputUnit = nil
-        if let engine {
-            if tapInstalled { engine.inputNode.removeTap(onBus: 0) }
-            if engine.isRunning { engine.stop() }
-        }
-        tapInstalled = false
-        engine = nil
         converter = nil
         outputFormat = nil
         engineStartedAt = nil
@@ -643,9 +512,9 @@ final class AudioRecorder: ObservableObject {
         var peak: Float = 0
         var live = false
         // Mono only. AVAudioConverter has no mixing rules for a DiscreteInOrder
-        // layout — voice processing hands us 7 such channels — and rather than
-        // failing it returns frames of zeros, which `appended > 0` then treats as
-        // real audio and hides the manual path that would have worked. Anything
+        // layout — a MacBook's mic array reports seven such channels — and rather
+        // than failing it returns frames of zeros, which `appended > 0` then treats
+        // as real audio and hides the manual path that would have worked. Anything
         // multi-channel is downmixed explicitly below instead.
         let converterUsable = converter != nil
             && abs(buffer.format.sampleRate - converterSourceFormat.sampleRate) < 1

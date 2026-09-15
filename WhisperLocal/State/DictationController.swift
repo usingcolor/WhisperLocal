@@ -315,12 +315,10 @@ final class DictationController: ObservableObject {
             takeLanguage = LanguageCoordinator.shared.languageForTake(transcription: transcription)
 
             // The HUD goes up before the microphone is opened, not after it.
-            // Opening the graph costs about 40ms on the plain path and nobody ever
-            // noticed it there; with voice processing on it is nearer three
-            // seconds — `setVoiceProcessingEnabled` alone took 980ms and
-            // `engine.start()` another 1.4s on a MacBook Air. All of that used to
-            // sit between the key going down and anything appearing on screen, so
-            // the app looked like it had missed the press. `waitingForMic` is
+            // Opening the graph is about 40ms today, which is why the old ordering
+            // went unnoticed for so long — but a take that waits on the hardware
+            // before it shows anything looks like a missed keypress, and a slow
+            // device is not a reason to leave the screen blank. `waitingForMic` is
             // exactly this state, and the `isInputReady` subscription promotes it
             // to `.recording` on its own the moment audio arrives.
             phase = .waitingForMic

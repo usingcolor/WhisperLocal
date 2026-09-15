@@ -305,11 +305,6 @@ struct SettingsView: View {
             "Takes follow System Settings unless you pick one here.",
             more: "Picking a microphone here also switches the one in progress, so you can change it mid-take. One case is decided for you: when the default input is a Bluetooth headset that is also playing, takes use the built-in or a wired mic instead — opening the headset's mic would drop the music to narrowband and change its volume. Choosing that headset here overrides the rule."
         )
-        Toggle("Ignore playback", isOn: $settings.enableEchoCancellation)
-        helpText(
-            "Music and video playing on this Mac stay out of your transcript. Their volume dips while you talk.",
-            more: "Echo cancellation and noise suppression, applied to the microphone. Off by default: it changes what the transcriber hears whether or not anything is playing, and it does nothing on headphones, where the mic never hears playback at all. Weakest when two voices overlap, so someone talking in a video can still get through while you are talking."
-        )
     }
 
     private var polishPane: some View {

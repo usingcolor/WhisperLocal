@@ -133,9 +133,6 @@ final class SettingsStore: ObservableObject {
     /// Stored by UID rather than by the numeric device id, which is reassigned on
     /// reconnect, and by UID rather than by name, because two devices can share one.
     @Published var preferredInputDeviceUIDRaw: String { didSet { persist(preferredInputDeviceUIDRaw, key: "preferredInputDevice") } }
-    /// Dev-only experiment: macOS voice processing (echo cancellation). Off until
-    /// its effect on transcript quality has actually been measured.
-    @Published var enableEchoCancellation: Bool { didSet { persist(enableEchoCancellation, key: "enableEchoCancellation") } }
     /// The language takes are dictated in unless a followed keyboard says
     /// otherwise. English — the default — sends exactly the prompts the app sent
     /// before language support existed; that is checked byte for byte in tests.
@@ -351,7 +348,6 @@ final class SettingsStore: ObservableObject {
         openAIModel = defaults.string(forKey: "openAIModel") ?? CloudModelCatalog.openAIDefault
         anthropicModel = defaults.string(forKey: "anthropicModel") ?? CloudModelCatalog.anthropicDefault
         preferredInputDeviceUIDRaw = defaults.string(forKey: "preferredInputDevice") ?? ""
-        enableEchoCancellation = defaults.object(forKey: "enableEchoCancellation") as? Bool ?? false
         preferredLanguageCode = defaults.string(forKey: "preferredLanguage") ?? "en"
         if let stored = defaults.array(forKey: "followedKeyboardLanguages") as? [String] {
             followedKeyboardLanguages = stored

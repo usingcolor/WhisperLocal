@@ -165,19 +165,6 @@ struct SettingsView: View {
                     more: "Dragging sets Position to \"Where I drag it\" and the HUD opens there from then on; right-click it for Reset Position. Off, the HUD ignores drags and stays where Position says — worth leaving off if you would rather not nudge it by accident while reaching for the microphone."
                 )
             }
-
-            Section("History") {
-                Toggle("Keep a dictation log", isOn: $settings.enableDictationLog)
-                helpText(
-                    "Saves recent takes as local JSON, text only.",
-                    more: "Turning this off skips new entries; the existing log is not deleted. Polish can reuse these takes to match your style, but that stays off until you enable it on the Polish page."
-                )
-                Button("Open dictation log…") {
-                    AppWindowFocus.present(title: "Dictation Log") {
-                        openWindow(id: "log")
-                    }
-                }
-            }
         }
     }
 
@@ -255,7 +242,11 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Last dictation") {
+            // One section, not two in two tabs. "Last dictation" was a view of the
+            // newest row of the very log whose switch lived on the General page,
+            // which left the record of what you said split across the app by
+            // nothing more than how much of it you wanted to see.
+            Section("History") {
                 LabeledContent("Raw") {
                     Text(controller.lastTranscript.isEmpty ? "—" : controller.lastTranscript)
                         .lineLimit(3)
@@ -274,6 +265,16 @@ struct SettingsView: View {
                     Text(note)
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+                Toggle("Keep a dictation log", isOn: $settings.enableDictationLog)
+                helpText(
+                    "Saves recent takes as local JSON, text only.",
+                    more: "Turning this off skips new entries; the existing log is not deleted. Polish can reuse these takes to match your style, but that stays off until you enable it on the Polish page."
+                )
+                Button("Open dictation log…") {
+                    AppWindowFocus.present(title: "Dictation Log") {
+                        openWindow(id: "log")
+                    }
                 }
             }
         }

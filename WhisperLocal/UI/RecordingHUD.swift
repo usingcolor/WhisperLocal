@@ -474,14 +474,18 @@ private struct HUDSpinner: View {
 /// edges — the lensing, the specular rim, and the content visible between
 /// elements — so the HUD is now a row of capsules that each hug their content.
 ///
-/// `.regular` rather than `.clear`: the clear variant has no adaptive behaviour
-/// and, tested over a page of text, frosted *harder* than regular did in a
-/// transparent panel. Regular keeps the content behind legible through the glass
-/// and flips light or dark with the material.
+/// `.clear`, being tried again. On macOS 26 it was rejected: tested over a page of
+/// text in a transparent panel it frosted *harder* than `.regular`, and it has no
+/// adaptive behaviour. On macOS 27 the HUD read as noticeably more opaque than
+/// Apple's own Liquid Glass, which uses the clear variant for exactly this kind of
+/// floating element, and the earlier finding was measured on a release whose glass
+/// rendering has since changed. The thing to judge is the HUD's own text over the
+/// document being dictated into, not a demo over wallpaper — if that stops being
+/// readable, `.regular` goes back.
 private struct HUDPill: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: Capsule())
+            content.glassEffect(.clear, in: Capsule())
         } else {
             content
                 .background {

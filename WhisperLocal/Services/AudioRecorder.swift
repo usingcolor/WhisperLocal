@@ -28,14 +28,6 @@ final class AudioRecorder: ObservableObject {
     /// Device notifications arrive in bursts — format, rate and liveness all at
     /// once — so the rebuild is coalesced instead of running three times.
     private var configChangeTask: Task<Void, Never>?
-    /// The device and rate the live graph was built on, so a configuration change
-    /// can be asked whether anything it cares about actually moved.
-    private var liveGraphSignature: InputGraphSignature?
-
-    private struct InputGraphSignature: Equatable {
-        let deviceID: AudioDeviceID
-        let sampleRate: Double
-    }
     private var engineStartedAt: Date?
     /// Snapshot for idle-hold length. Refreshed when the engine starts or the
     /// graph reconfigures — not on every take, so `stop()` stays off coreaudiod.
@@ -239,7 +231,6 @@ final class AudioRecorder: ObservableObject {
             "Mic format \(hardwareFormat.sampleRate, privacy: .public) Hz, \(hardwareFormat.channelCount, privacy: .public) ch on \(target.name, privacy: .public)"
         )
         let (outputFormat, converter) = try makeConversion(from: hardwareFormat)
-        liveGraphSignature = InputGraphSignature(deviceID: target.id, sampleRate: hardwareFormat.sampleRate)
         self.inputUnit = unit
 
         unit.onBuffer = { [weak self] buffer in
@@ -364,37 +355,20 @@ final class AudioRecorder: ObservableObject {
     /// The device changed its format, went away, or — when no microphone was asked
     /// for — was replaced as the system default. Rebuild on the device that is
     /// there now.
+    /// No second filter here: `AudioInputUnit` only reports a change when the
+    /// hardware rate or channel count really differs from the format it was built
+    /// with, the device can no longer be read, or the default it follows moved.
+    /// One briefly sat on top of that, written for the voice-processing path's
+    /// rebuild loop. With that path gone it only swallowed real changes — it
+    /// compared the unit's fixed `format` with a copy of itself, so a rate change
+    /// mid-take never rebuilt.
     private func scheduleConfigurationRebuild() {
         configChangeTask?.cancel()
         configChangeTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled, self.isEngineLive || self.inputUnit != nil else { return }
-            guard self.configurationActuallyChanged() else {
-                self.logger.info("Configuration change on the same device and rate — ignored")
-                return
-            }
             self.rebuildAfterConfigurationChange()
         }
-    }
-
-    /// Whether a configuration change is the world moving or the device settling.
-    ///
-    /// A microphone array can re-report its channel count a moment after it opens —
-    /// 5 then 7 on a MacBook Air — and rebuilding the graph starts that settling
-    /// over, which posts another change, which rebuilds again. That cost the app
-    /// its microphone entirely once, on a path since removed, and the same shape of
-    /// loop is available to any device that does the same thing.
-    ///
-    /// The channel count is not a reason to rebuild: `ingest` reads each buffer's
-    /// own format and downmixes anything multi-channel explicitly. What is worth
-    /// rebuilding for is the device being replaced or going away, or its rate moving
-    /// under a converter built for the old one.
-    private func configurationActuallyChanged() -> Bool {
-        guard let was = liveGraphSignature else { return true }
-        guard let now = deviceForThisTake() else { return true }
-        if now.id != was.deviceID { return true }
-        let rate = inputUnit?.format.sampleRate ?? was.sampleRate
-        return rate > 0 && abs(rate - was.sampleRate) > 1
     }
 
     private func rebuildAfterConfigurationChange() {
@@ -446,10 +420,6 @@ final class AudioRecorder: ObservableObject {
         idleStopTask = nil
         configChangeTask?.cancel()
         configChangeTask = nil
-        // Torn down with the graph it described. A signature outliving its own
-        // engine would answer for the next one and could wave a real device change
-        // through as settling.
-        liveGraphSignature = nil
         inputUnit?.dispose()
         inputUnit = nil
         converter = nil

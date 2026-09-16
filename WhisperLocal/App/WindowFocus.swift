@@ -9,6 +9,12 @@ enum AppWindowFocus {
     static var shouldRaiseRestoredWindows = false
     static func present(title: String, open: () -> Void) {
         shouldRaiseRestoredWindows = true
+        // Before activating, not after. Activating an app whose window is on
+        // another desktop takes you to that desktop — macOS's default — unless the
+        // window already carries `.moveToActiveSpace` at that moment. A Settings
+        // window that is already open elsewhere has to be marked first, or choosing
+        // Settings… from the menu bar sends you away instead of bringing it here.
+        windows(matching: title).forEach(moveHereTransiently)
         becomeRegular()
         activate()
         open()
@@ -25,24 +31,39 @@ enum AppWindowFocus {
 
     static func raise(_ window: NSWindow) {
         guard !(window is NSPanel) else { return }
+        moveHereTransiently(window)
         becomeRegular()
         activate()
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }
-        // Only for the moment of presenting. `.moveToActiveSpace` is what brings a
-        // window already open on another desktop to this one, which is what
-        // opening Settings from the menu bar should do. Left on, though, the
-        // window never belongs to the desktop it is on: switch away and back and
-        // macOS brings forward the front app it does track there — Notion,
-        // Notes — putting Settings behind them, even though WhisperLocal was in
-        // front when you left. So it goes back off once the window has arrived.
-        window.collectionBehavior.insert(.moveToActiveSpace)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+    }
+
+    /// `.moveToActiveSpace`, for the moment of presenting only.
+    ///
+    /// It is what brings a window already open on another desktop to this one,
+    /// which is what opening Settings from the menu bar should do — and it only
+    /// does that if it is set before the app activates. Left on, though, the window
+    /// never belongs to the desktop it is on: switch away and back and macOS brings
+    /// forward the front app it does track there — Notion, Notes — putting Settings
+    /// behind them, even though WhisperLocal was in front when you left. So it goes
+    /// back off once the window has arrived.
+    static func moveHereTransiently(_ window: NSWindow) {
+        guard !(window is NSPanel) else { return }
+        window.collectionBehavior.insert(.moveToActiveSpace)
         Task { @MainActor [weak window] in
             try? await Task.sleep(nanoseconds: 600_000_000)
             window?.collectionBehavior.remove(.moveToActiveSpace)
+        }
+    }
+
+    /// Windows for this title, the same way `focus` finds them.
+    private static func windows(matching title: String) -> [NSWindow] {
+        NSApp.windows.filter { window in
+            guard window.canBecomeKey, !(window is NSPanel) else { return false }
+            return window.title == title || window.identifier?.rawValue == title
         }
     }
 
@@ -68,12 +89,7 @@ enum AppWindowFocus {
     }
 
     static func focus(title: String) {
-        let matches = NSApp.windows.filter { window in
-            guard window.canBecomeKey, !(window is NSPanel) else { return false }
-            if window.title == title { return true }
-            if window.identifier?.rawValue == title { return true }
-            return false
-        }
+        let matches = windows(matching: title)
         if let window = matches.last ?? matches.first {
             raise(window)
             return

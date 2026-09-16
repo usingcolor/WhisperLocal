@@ -30,9 +30,20 @@ enum AppWindowFocus {
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }
+        // Only for the moment of presenting. `.moveToActiveSpace` is what brings a
+        // window already open on another desktop to this one, which is what
+        // opening Settings from the menu bar should do. Left on, though, the
+        // window never belongs to the desktop it is on: switch away and back and
+        // macOS brings forward the front app it does track there — Notion,
+        // Notes — putting Settings behind them, even though WhisperLocal was in
+        // front when you left. So it goes back off once the window has arrived.
         window.collectionBehavior.insert(.moveToActiveSpace)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+        Task { @MainActor [weak window] in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            window?.collectionBehavior.remove(.moveToActiveSpace)
+        }
     }
 
     static func restoreAccessoryPolicyIfIdle() {

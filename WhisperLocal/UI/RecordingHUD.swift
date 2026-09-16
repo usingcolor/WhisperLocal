@@ -405,10 +405,13 @@ final class RecordingHUDController: ObservableObject {
     /// reserved width instead of the panel re-centring around it.
     ///
     /// A remembered measurement, not a preference. The width depends on the phase,
-    /// the language badge, the length of the microphone's name and the display's
-    /// font, so a constant here would be wrong for somebody. This learns it once
-    /// and then stops moving, across relaunches too.
-    private static let reservedWidthKey = "hudReservedWidth"
+    /// the language and the display's font, so a constant here would be wrong for
+    /// somebody. This learns it once and then stops moving, across relaunches too.
+    ///
+    /// A new key for the toolbar layout. The measurement only ever grows, so a
+    /// figure learned from the old five-capsule row — wider, with the microphone's
+    /// name written out — would have held the narrower row left of centre for good.
+    private static let reservedWidthKey = "hudReservedWidth.toolbar"
 
     private var reservedWidth: CGFloat {
         CGFloat(UserDefaults.standard.double(forKey: Self.reservedWidthKey))
@@ -466,26 +469,32 @@ private struct HUDSpinner: View {
     }
 }
 
-/// One Liquid Glass capsule.
+/// One Liquid Glass capsule — one toolbar group.
 ///
 /// The HUD used to be a single 330×76 plate, and that is why it read as a frosted
 /// slab: a large glass element is mostly interior, and interior is the one place
 /// glass can only blur. What people recognise as Liquid Glass happens at the
 /// edges — the lensing, the specular rim, and the content visible between
-/// elements — so the HUD is now a row of capsules that each hug their content.
+/// elements — so the HUD is a row of capsules, laid out the way Apple lays out a
+/// toolbar: related items share one piece of glass, and there are at most three.
 ///
-/// `.clear`, being tried again. On macOS 26 it was rejected: tested over a page of
-/// text in a transparent panel it frosted *harder* than `.regular`, and it has no
-/// adaptive behaviour. On macOS 27 the HUD read as noticeably more opaque than
-/// Apple's own Liquid Glass, which uses the clear variant for exactly this kind of
-/// floating element, and the earlier finding was measured on a release whose glass
-/// rendering has since changed. The thing to judge is the HUD's own text over the
-/// document being dictated into, not a demo over wallpaper — if that stops being
-/// readable, `.regular` goes back.
+/// `.regular`, as Apple's guide prescribes for this case. Clear glass is reserved
+/// for "components that appear over visually rich backgrounds" like photos and
+/// video, and needs a dimming layer behind it; regular is for when "background
+/// content might create legibility issues" — which is the HUD, sitting over
+/// whatever document is being dictated into. Clear was tried again on macOS 27
+/// and did not bring the HUD any closer to Apple's own glass, which is regular.
+/// People who want more see-through glass get it from the Liquid Glass setting in
+/// System Settings, which both variants follow.
+///
+/// `interactive` for a capsule that is a control on its own, so it answers hover
+/// and press the way a system toolbar item does.
 private struct HUDPill: ViewModifier {
+    var interactive = false
+
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            content.glassEffect(.clear, in: Capsule())
+            content.glassEffect(.regular.interactive(interactive), in: Capsule())
         } else {
             content
                 .background {
@@ -668,21 +677,20 @@ struct RecordingHUDView: View {
             // 16pt apart, not 8: closer than that and the container tries to
             // bridge two capsules into one shape, which renders as a dark wedge
             // between them rather than the liquid merge it is going for.
+            // Laid out like a toolbar: what is happening on the leading edge, the
+            // input it is happening on in the center, and the one action on the
+            // trailing edge, where toolbars put Close. Three groups, which is
+            // Apple's ceiling. The CONTEXT and DEV badges are gone from the row:
+            // context capture already says so in its headline and colours its
+            // dot and meter orange, and the Dev build's version is on the status
+            // capsule's tooltip.
             HStack(spacing: 16) {
-                if let badge = controller.languageBadge {
-                    pill { Text(badge).font(.system(size: 10, weight: .bold)) }
-                }
                 statusPill
-                if controller.showsInputChip {
-                    micPill
+                if controller.languageBadge != nil || controller.showsInputChip {
+                    inputGroup
                 }
                 if controller.isCancellable {
                     cancelPill
-                }
-                if controller.isContextCapture {
-                    pill { Text("CONTEXT").font(.system(size: 10, weight: .bold)) }
-                } else if AppIdentity.isDevBuild {
-                    pill { Text("DEV \(AppIdentity.versionSummary)").font(.system(size: 10, weight: .bold)) }
                 }
             }
             .foregroundStyle(HUDInk.primary)
@@ -760,34 +768,65 @@ struct RecordingHUDView: View {
         }
         // The only way back to a message the width cut short. Hovering already
         // holds the HUD open, so there is time to read it — and it is a pointer,
-        // not a command in a terminal.
-        .help(headline)
+        // not a command in a terminal. In the Dev build it also says which build
+        // this is, which the row used to spend a whole capsule on.
+        .help(AppIdentity.isDevBuild
+              ? "\(headline)\n\(AppIdentity.productName) \(AppIdentity.versionSummary)"
+              : headline)
     }
 
-    /// Names the microphone this take is on, and opens the list of the others.
-    private var micPill: some View {
+    /// The language and the microphone, sharing one piece of glass the way a
+    /// toolbar groups related items.
+    ///
+    /// The language stays an endonym — a Korean speaker should see 한국어, not "KO"
+    /// — and stays a label rather than a control. The microphone is the only thing
+    /// in the group that answers a click, and it is a symbol, as Apple's toolbar
+    /// guidance prefers. Its hover highlight is what keeps the pair from reading as
+    /// one "English microphone" button, which is the confusion that guidance warns
+    /// about when text and symbols sit side by side.
+    private var inputGroup: some View {
+        pill(horizontal: 4, vertical: 4) {
+            HStack(spacing: 2) {
+                if let language = controller.languageBadge {
+                    Text(language)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(HUDInk.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .accessibilityLabel("Language: \(language)")
+                }
+                if controller.showsInputChip {
+                    micButton
+                }
+            }
+        }
+    }
+
+    /// Opens the list of microphones. The name of the one in use is on the tooltip
+    /// and at the top of the menu, rather than written out in the row.
+    private var micButton: some View {
         Button {
             controller.showInputMenu()
         } label: {
-            pill {
-                HStack(spacing: 5) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 9, weight: .bold))
-                    Text(controller.activeInputName ?? "Microphone")
-                        .font(.system(size: 11, weight: .medium))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: 150, alignment: .leading)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 7, weight: .black))
-                        .opacity(micHovering ? 0.9 : 0.6)
-                }
-                .foregroundStyle(HUDInk.primary)
+            HStack(spacing: 3) {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .black))
+                    .opacity(0.7)
             }
+            .foregroundStyle(HUDInk.primary)
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background {
+                Capsule().fill(.primary.opacity(micHovering ? 0.12 : 0))
+            }
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .onHover { micHovering = $0 }
-        .help("Choose the microphone")
+        .help(controller.activeInputName.map { "\($0) — click to choose a microphone" }
+              ?? "Choose a microphone")
         .accessibilityLabel("Microphone: \(controller.activeInputName ?? "system default"). Opens the list of microphones.")
     }
 
@@ -795,7 +834,7 @@ struct RecordingHUDView: View {
         Button {
             controller.onCancel?()
         } label: {
-            pill(horizontal: 10) {
+            pill(horizontal: 10, interactive: true) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(HUDInk.primary.opacity(cancelHovering ? 1 : 0.75))
@@ -809,6 +848,8 @@ struct RecordingHUDView: View {
 
     private func pill<Content: View>(
         horizontal: CGFloat = 13,
+        vertical: CGFloat = 9,
+        interactive: Bool = false,
         @ViewBuilder _ content: () -> Content
     ) -> some View {
         content()
@@ -817,10 +858,10 @@ struct RecordingHUDView: View {
             // lands at 30, 11pt medium at 31, 13pt semibold at 34. Centred in the
             // row, that splits into a couple of points of mismatch at the top and
             // the same again at the bottom — invisible on plain text, plain to see
-            // on four glass rims sitting side by side.
-            .padding(.vertical, 9)
+            // on glass rims sitting side by side.
+            .padding(.vertical, vertical)
             .frame(height: Self.levelledPillHeight)
-            .modifier(HUDPill())
+            .modifier(HUDPill(interactive: interactive))
     }
 
     private var headline: String {

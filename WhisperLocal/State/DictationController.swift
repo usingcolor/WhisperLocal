@@ -785,7 +785,12 @@ final class DictationController: ObservableObject {
         lastPolished = context.text
         lastStages = ["Session context"] + result.stages
         lastCleanupNote = result.cleanupNote
-        hud.flashSuccess(note: context.text)
+        // Labelled, because the sentence alone is ambiguous. The toolbar used to
+        // carry a CONTEXT badge through this moment; without it, a bare sentence
+        // beside the amber checkmark reads exactly like "Not confirmed — press ⌘V",
+        // and pressing ⌘V pastes whatever is on the clipboard. The label leads so it
+        // survives the width cut; the whole sentence is on the tooltip.
+        hud.flashSuccess(note: "Context saved: \(context.text)")
         try? await Task.sleep(nanoseconds: 1_600_000_000)
         guard generation == sessionGeneration else { return }
         phase = .idle

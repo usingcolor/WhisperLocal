@@ -153,7 +153,7 @@ struct SettingsView: View {
                 startupControls
             }
 
-            Section("Recording HUD") {
+            Section("Recording toolbar") {
                 Picker("Position", selection: $settings.hudPosition) {
                     ForEach(HUDPosition.allCases) { spot in
                         Text(spot.label).tag(spot)
@@ -161,8 +161,8 @@ struct SettingsView: View {
                 }
                 Toggle("Let me drag it", isOn: $settings.allowHUDDrag)
                 helpText(
-                    "Drag the HUD while it is on screen to put it anywhere.",
-                    more: "Dragging sets Position to \"Where I drag it\" and the HUD opens there from then on; right-click it for Reset Position. Off, the HUD ignores drags and stays where Position says — worth leaving off if you would rather not nudge it by accident while reaching for the microphone."
+                    "Drag the recording toolbar while it is on screen to put it anywhere.",
+                    more: "Dragging sets Position to \"Where I drag it\" and the toolbar opens there from then on; right-click it for Reset Position. Off, the toolbar ignores drags and stays where Position says — worth leaving off if you would rather not nudge it by accident while reaching for the microphone."
                 )
             }
         }

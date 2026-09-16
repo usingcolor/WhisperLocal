@@ -97,7 +97,7 @@ xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
 
 **Esc** cancels — while recording, and while a take is still being transcribed. Long dictations are transcribed as you speak, so letting go is quick however long you talked. In Settings you can switch to tap-to-toggle, or move the hotkey to Right Option, Left Option, or Right Command.
 
-**Shift** during a take stores a short session context instead of pasting — what you are working on, so later dictations resolve names and jargon. Press Shift again to switch back. The HUD shows an orange **CONTEXT** badge when a take will not be pasted. Not saved across launches.
+**Shift** during a take stores a short session context instead of pasting — what you are working on, so later dictations resolve names and jargon. Press Shift again to switch back. The recording toolbar says “context” and turns its recording dot orange when a take will not be pasted. Not saved across launches.
 
 ## What you get on your macOS version
 
@@ -110,9 +110,9 @@ The defaults assume macOS 26. Older versions still work, with more setup:
 
 Everything else is optional and switchable in Settings: other transcription models (WhisperKit `tiny.en` / `base.en` / Large v3 Turbo, NVIDIA Parakeet TDT 0.6B v2), cloud cleanup, custom instructions, per-app rules, a personal dictionary, a local dictation log with JSON / CSV export, and whether WhisperLocal opens at login.
 
-**Dictating in another language.** Set one in Settings › Language, or let it follow your keyboard: switch to a Korean or Japanese input source and the next take is transcribed and cleaned in that language, with the language shown on the recording HUD before you speak. The first take in a new language may download an on-device model; until that finishes the take falls back to your default language rather than making you wait.
+**Dictating in another language.** Set one in Settings › Language, or let it follow your keyboard: switch to a Korean or Japanese input source and the next take is transcribed and cleaned in that language, with the language shown on the recording toolbar before you speak. The first take in a new language may download an on-device model; until that finishes the take falls back to your default language rather than making you wait.
 
-**Choosing a microphone.** The recording HUD names the one in use and opens the list of the others; the same list is in the menu bar and in Settings › Dictation. Picking one mid-take switches it without ending the take. Left alone, takes follow System Settings — except when the default input is a Bluetooth headset that is also playing, where takes use the built-in or a wired mic instead, because opening a headset's microphone drops its playback to narrowband and changes its volume.
+**Choosing a microphone.** The microphone button on the recording toolbar opens the list — hover it to see which one is in use; the same list is in the menu bar and in Settings › Dictation. Picking one mid-take switches it without ending the take. Left alone, takes follow System Settings — except when the default input is a Bluetooth headset that is also playing, where takes use the built-in or a wired mic instead, because opening a headset's microphone drops its playback to narrowband and changes its volume.
 
 **Picking a cleanup engine.** Out of the box WhisperLocal cleans on your Mac with Apple Intelligence, and nothing leaves it. Cloud cleanup stays off until you add an API key, which lives in the Keychain. The numbers below come from the [polish benchmark](Benchmarks/README.md) in this repo: 125 hand-written dictations, each cleaned by every engine through the app's own polishing code, checked by script and then compared head to head by a judge model.
 

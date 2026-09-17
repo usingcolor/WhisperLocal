@@ -268,7 +268,10 @@ final class GemmaMLXPolisher: ObservableObject, TextPolisher, @unchecked Sendabl
         let lower = raw.lowercased()
         if lower.contains("401") || lower.contains("403") || lower.contains("gated")
             || lower.contains("unauthorized") {
-            return "\(model.name) was denied. Accept its licence at huggingface.co/\(model.huggingFaceID), then retry. If the Hub still blocks it, set HF_TOKEN."
+            // Not a licence to accept: the shipped model is an ungated Apache-2.0
+            // repo, where Hugging Face answers 401 for a repo that has moved or
+            // gone. Nor HF_TOKEN, which only reaches an app launched from Terminal.
+            return "Hugging Face refused the \(model.name) download. Retry later; if it keeps failing, the model may have moved."
         }
         if lower.contains("network") || lower.contains("offline") || lower.contains("internet")
             || lower.contains("timed out") || lower.contains("not connected") {

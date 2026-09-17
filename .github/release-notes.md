@@ -6,6 +6,18 @@ Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applic
 
 Then grant Microphone and Accessibility. Transcription runs on Apple Speech by default on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
 
+## 0.2.4
+
+- **The recording HUD is now a recording toolbar, and it holds still.** It is laid out like a macOS toolbar: status on the left, the language and microphone sharing one capsule, and ✕ on its own. The status capsule keeps one width and one height for the whole take instead of changing with every step. Every message the app writes fits in it, and a system error too long for it is cut short, with the whole line shown when you hover. The microphone shows as an icon: hover it to see which one is in use, and click it to choose another.
+- **Put the toolbar where you want it.** Settings › General › Recording toolbar offers bottom centre (where it has always been), top centre, bottom left and bottom right. Turn on “Let me drag it” to put it anywhere, and right-click the toolbar to reset it. Dragging is off by default, so nothing moves unless you ask.
+- **✕ cancels while you are still speaking**, the same as Esc. Before, it only appeared once you had let go.
+- **Claude and other Chromium and Electron apps — Slack, VS Code, Cursor, Discord, Chrome — no longer tell you to press ⌘V after a paste that worked.** WhisperLocal could not see inside these apps to confirm the text had landed, so it asked for ⌘V every time, and doing so pasted the text twice. It now asks each app to expose its text as a take starts.
+- **“Ignore playback” is gone.** With it on, a take took more than three seconds to start, and in testing four starts in seven never reached the microphone at all; without it the microphone opens in under a tenth of a second. It was off by default. If you had turned it on, sound from your speakers can reach the transcript again — headphones avoid that.
+- **Dictated text no longer ends with a space.** “Insert trailing space” was on by default and has been removed, so text ends where the sentence ends. Two takes in a row now run together; type the space between them yourself.
+- **Settings stays in front when you switch desktops and come back**, instead of dropping behind another app on that desktop.
+- **The dictation log records each take’s language and microphone**, including a switch mid-take (“MacBook Air Microphone → AirPods Pro”), in the log window and its exports. Its switch and the button that opens it moved to Settings › Dictation › History, next to the last dictation.
+- **The SHA-256 is printed at the bottom of these notes** instead of in a separate `SHA256SUMS` file, and from this version on the in-app updater checks downloads against it.
+
 ## 0.2.3
 
 - **Dictate in another language.** Set a dictation language in Settings › Language, or let it follow your keyboard: switch to a Korean or Japanese input source and the next take is transcribed and cleaned in that language, with the language shown on the recording HUD before you speak. Switching input source while the key is still held changes the take you are in. A language is only used if it can be served right now — the first take in a new language may download an on-device model, and until that finishes the take falls back to your default language rather than waiting. This ran behind a Dev-only flag while it was unproven; it is on for everyone now.

@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.3/WhisperLocal-0.2.3-arm64.dmg"><b>⬇&nbsp; Download 0.2.3 for Apple Silicon</b></a>
+  <a href="https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.4/WhisperLocal-0.2.4-arm64.dmg"><b>⬇&nbsp; Download 0.2.4 for Apple Silicon</b></a>
   &nbsp;·&nbsp;
   <a href="#usage">Usage</a>
   &nbsp;·&nbsp;
@@ -48,7 +48,7 @@ You get:   I need to rewrite the parser.
 
 Your audio never leaves the Mac. Transcription and cleanup both run on-device by default.
 
-> Early preview (`0.2.3`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
+> Early preview (`0.2.4`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
 
 ## Why not the dictation already built into macOS?
 
@@ -66,7 +66,7 @@ If you want Windows or Linux, streaming transcription, or a large model catalog,
 
 Apple Silicon only. No Xcode and no git clone required.
 
-**[Download WhisperLocal 0.2.3](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.3/WhisperLocal-0.2.3-arm64.dmg)** (`.dmg`) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
+**[Download WhisperLocal 0.2.4](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.4/WhisperLocal-0.2.4-arm64.dmg)** (`.dmg`) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
 
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
 2. Open it and grant **Microphone** and **Accessibility** when asked.
@@ -95,7 +95,7 @@ xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
 2. Hold **Globe / Fn**, speak, and release.
 3. Cleaned text appears at the cursor.
 
-**Esc** cancels — while recording, and while a take is still being transcribed. Long dictations are transcribed as you speak, so letting go is quick however long you talked. In Settings you can switch to tap-to-toggle, or move the hotkey to Right Option, Left Option, or Right Command.
+**Esc**, or the ✕ on the recording toolbar, cancels — while recording, and while a take is still being transcribed. Long dictations are transcribed as you speak, so letting go is quick however long you talked. In Settings you can switch to tap-to-toggle, or move the hotkey to Right Option, Left Option, or Right Command.
 
 **Shift** during a take stores a short session context instead of pasting — what you are working on, so later dictations resolve names and jargon. Press Shift again to switch back. The recording toolbar says “context” and turns its recording dot orange when a take will not be pasted. Not saved across launches.
 
@@ -113,6 +113,8 @@ Everything else is optional and switchable in Settings: other transcription mode
 **Dictating in another language.** Set one in Settings › Language, or let it follow your keyboard: switch to a Korean or Japanese input source and the next take is transcribed and cleaned in that language, with the language shown on the recording toolbar before you speak. The first take in a new language may download an on-device model; until that finishes the take falls back to your default language rather than making you wait.
 
 **Choosing a microphone.** The microphone button on the recording toolbar opens the list — hover it to see which one is in use; the same list is in the menu bar and in Settings › Dictation. Picking one mid-take switches it without ending the take. Left alone, takes follow System Settings — except when the default input is a Bluetooth headset that is also playing, where takes use the built-in or a wired mic instead, because opening a headset's microphone drops its playback to narrowband and changes its volume.
+
+**Moving the recording toolbar.** It opens at the bottom centre of the screen, which is where many chat apps keep the box you type into. Settings › General › Recording toolbar moves it to the top centre or a bottom corner. Turn on “Let me drag it” to put it anywhere; right-click the toolbar to reset it.
 
 **Picking a cleanup engine.** Out of the box WhisperLocal cleans on your Mac with Apple Intelligence, and nothing leaves it. Cloud cleanup stays off until you add an API key, which lives in the Keychain. The numbers below come from the [polish benchmark](Benchmarks/README.md) in this repo: 125 hand-written dictations, each cleaned by every engine through the app's own polishing code, checked by script and then compared head to head by a judge model.
 

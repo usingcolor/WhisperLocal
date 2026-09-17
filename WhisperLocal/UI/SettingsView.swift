@@ -271,7 +271,7 @@ struct SettingsView: View {
                     "Saves recent takes as local JSON, text only.",
                     more: "Turning this off skips new entries; the existing log is not deleted. Polish can reuse these takes to match your style, but that stays off until you enable it on the Polish page."
                 )
-                Button("Open dictation log…") {
+                Button("Open dictation log") {
                     AppWindowFocus.present(title: "Dictation Log") {
                         openWindow(id: "log")
                     }

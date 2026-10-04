@@ -21,11 +21,11 @@
   <a href="#contributing">Contributing</a>
 </p>
 
-<!-- The new context demo is held out of the release README until its exact
-     Joaquin / walking example is reproduced. Both Apple Intelligence and GPT-6
-     Luna retained the name but missed the correction in the 2026-10-02 replay.
-     Keep assets/demo.gif and assets/demo.mp4 for revision; see the separate
-     Benchmarks/ContextBench/cases/demo.json fixture and its README. -->
+<p align="center">
+  <img src="assets/demo.gif" alt="Illustrative demo of WhisperLocal automatic context" width="100%">
+  <br>
+  <sub>Illustrative animation of automatic context.</sub>
+</p>
 
 **Dictation for Apple Silicon Macs that cleans up how you actually talk — without sending your voice anywhere.**
 
@@ -42,7 +42,7 @@ You say:   uh i i need to rewrite the the parser period
 You get:   I need to rewrite the parser.
 ```
 
-Your audio never leaves the Mac. Transcription and cleanup both run on-device by default.
+Your audio stays on the Mac. Transcription and cleanup run on-device by default; initial model downloads may need an internet connection. Cloud cleanup is optional and sends text to your selected provider.
 
 > Early preview (`0.2.5`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
 
@@ -53,8 +53,8 @@ Built-in dictation types what you said. WhisperLocal types what you **meant**:
 - **Fillers and false starts come out.** "um", "uh", "so I think", "wait no — actually" are removed or resolved to your final wording.
 - **Spoken punctuation becomes punctuation.** "comma", "period", "new paragraph" turn into `,` `.` and line breaks — but "the Oxford comma" stays a phrase.
 - **It sounds like you.** Cleanup fixes grammar and punctuation without upgrading your register, adding hedges, or padding a short note into a paragraph.
-- **It works everywhere.** Text is inserted at the cursor in any app — editors, terminals, browsers, Electron apps.
-- **It's genuinely offline.** No account, no server round-trip, no audio upload.
+- **It works across apps.** Text is inserted at the cursor in editors, terminals, browsers and Electron apps, with a clipboard fallback when insertion cannot be confirmed.
+- **On-device dictation works offline.** After the required models are downloaded, no cloud account or audio upload is needed.
 
 If you want Windows or Linux, streaming transcription, or a large model catalog, see [Related projects](#related-projects) — some of those will suit you better.
 
@@ -65,12 +65,12 @@ Apple Silicon only. No Xcode and no git clone required.
 **[Download WhisperLocal 0.2.5](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.5/WhisperLocal-0.2.5-arm64.dmg)** (`.dmg`) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
 
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
-2. Open it and grant **Microphone** and **Accessibility** when asked.
+2. Open it and grant **Microphone**, **Accessibility**, and **Input Monitoring** when asked. The onboarding window and Settings → Permissions show what is missing.
 
 Releases are Developer ID signed, notarized, and stapled, so Gatekeeper lets them open. WhisperLocal lives in the menu bar — no Dock icon, no window to keep open. **Check for Updates** is in the menu, and verifies a SHA-256 checksum when a release publishes one.
 
 <details>
-<summary>Verifying a download, and opening older builds</summary>
+<summary>Verify your download</summary>
 
 Each release page prints the SHA-256 of its DMG at the bottom of the notes. Compare it with:
 
@@ -78,11 +78,6 @@ Each release page prints the SHA-256 of its DMG at the bottom of the notes. Comp
 shasum -a 256 ~/Downloads/WhisperLocal-*-arm64.dmg
 ```
 
-**0.1.8** and earlier were ad-hoc signed. If macOS blocks one, use **System Settings → Privacy & Security → Open Anyway**, or:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
-```
 </details>
 
 ## Usage
@@ -91,28 +86,30 @@ xattr -dr com.apple.quarantine /Applications/WhisperLocal.app
 2. Hold **Globe / Fn**, speak, and release.
 3. Cleaned text appears at the cursor.
 
-**Esc**, or the ✕ on the recording toolbar, cancels — while recording, and while a take is still being transcribed. Long dictations are transcribed as you speak, so letting go is quick however long you talked. In Settings you can switch to tap-to-toggle, or move the hotkey to Right Option, Left Option, or Right Command.
+**Esc**, or the ✕ on the recording toolbar, cancels while recording, transcribing, or cleaning up a take. Long dictations are transcribed in chunks as you speak, reducing the work left when you let go. Settings → Dictation → Hotkey lets you switch to tap-to-toggle, or choose Right Option, Left Option, or Right Command.
 
-**Shift** during a take stores a short session context instead of pasting — what you are working on, so later dictations resolve names and jargon. Press Shift again to switch back. The recording toolbar says “context” and turns its recording dot orange when a take will not be pasted. Not saved across launches.
+**Shift** during a take stores a short session context instead of pasting — what you are working on, so later dictations can resolve names and jargon. Press Shift again to switch back. The recording toolbar says “context” and turns its recording dot orange when a take will not be pasted. Shift context clears after 45 minutes without use; Apple Intelligence can also clear it after three consecutive unrelated takes when no typed or corrected topics are present. It is not restored across launches.
 
-**Context** brings Shift dictation, automatic topics, and typed notes into one readable, editable list. Open **Edit Context…** from the menu bar or press **Control + Shift + K** between takes; the shortcut can be changed under Settings → Hotkey. Save with **Command + Return**, or discard unsaved changes with **Escape**. Correcting an automatic topic protects your wording from later learning. Typed notes and corrected topics stay until removed or the app quits, including when automatic learning is turned off. Automatic topics retain their normal expiry rules, and the recording HUD shows a summary of active context.
+**Context** brings Shift dictation, automatic topics, and typed notes into one readable, editable list. Open **Edit Context…** from the menu bar or press **Control + Shift + K** between takes; the shortcut can be changed under Settings → Dictation → Hotkey → Open Context. Save with **Command + Return**, or discard unsaved changes with **Escape**. Correcting an automatic topic protects your wording from later learning. You can keep up to six typed or corrected topics; they stay until removed or the app quits, including when automatic learning is turned off. Shift context keeps its own expiry rules. The recording toolbar shows a summary of active context and a button to open the editor.
 
-**Automatic context** keeps up to three short topics, then uses them with later dictations. Learning runs after the paste, with Apple Intelligence or your selected cloud cleanup provider. Automatic topics fade after 15 unused takes or 45 minutes, and a fourth topic replaces the least recently used one. Turn learning off in Context or Settings → Polish. Context lives in memory and clears when the app quits.
+**Automatic context** keeps up to three short topics, then uses them with later dictations. Learning runs after the paste, with text cleanup enabled and Apple Intelligence or your selected cloud cleanup provider. Automatic topics fade after more than 15 unused takes or 45 minutes, and a fourth topic replaces the least recently used one. Learning is on by default; turn it off in Context or Settings → Polish. Active context clears when the app quits. The local dictation log can retain topic snapshots and update history; clearing Context does not erase those log entries.
 
 Apple Intelligence learns names containing capitals or digits. For names written only in Korean, Japanese or Chinese scripts, add or correct a note in Context. Gemma can use your notes but does not learn automatic topics. With cloud cleanup, the take, context and app name go to the selected provider; learning makes an additional request to that provider. Audio stays on your Mac.
 
 ## What you get on your macOS version
 
-The defaults assume macOS 26. Older versions still work, with more setup:
+The defaults prefer Apple's on-device models when they are available. Older macOS versions need downloaded models for transcription and LLM cleanup:
 
 | Your macOS | Transcription | Cleanup |
 |---|---|---|
-| **26 or later** | Apple Speech, built in — nothing to download | Apple Intelligence, on-device — nothing to download |
+| **26 or later** | Apple Speech when available; macOS may download its language models | Apple Intelligence when enabled and ready; otherwise filler stripping until a working cleanup engine is selected |
 | **14 – 15** | Whisper `small.en`, downloaded on first use | Fillers stripped; turn on Gemma 4 (~2.7 GB) or a cloud API key for LLM polish |
 
-Everything else is optional and switchable in Settings: other transcription models (WhisperKit `small.en` / Large v3 Turbo, NVIDIA Parakeet TDT 0.6B v2), cloud cleanup, custom instructions, per-app rules, a personal dictionary, a local dictation log with JSON / CSV export, and whether WhisperLocal opens at login.
+Apple Intelligence also needs its system model to be installed. If Apple Speech is unavailable, the default transcription model is Whisper `small.en`.
 
-**Dictating in another language.** Set one in Settings › Language, or let it follow your keyboard: switch to a Korean or Japanese input source and the next take is transcribed and cleaned in that language, with the language shown on the recording toolbar before you speak. The first take in a new language may download an on-device model; until that finishes the take falls back to your default language rather than making you wait.
+Settings offers Whisper `small.en`, Whisper Large v3 Turbo, and NVIDIA Parakeet TDT 0.6B v2 alongside Apple Speech. Tiny and Base remain available only for existing saved selections. Other choices include cloud cleanup, custom instructions, per-app dictionaries and rules, a local dictation log with JSON / CSV export, and opening WhisperLocal at login.
+
+**Dictating in another language.** Choose one under Settings → Language, or enable the keyboard languages you want the app to follow. New public installs start in English and do not follow keyboard languages until you select them. Apple Speech supports the locales available on your Mac; Whisper Large v3 Turbo is multilingual, while `small.en` and Parakeet v2 are English-only. The selected cleanup engine must also support the language. The toolbar shows the language before you speak. If a language is unavailable or its model is still downloading, the take falls back to your configured default language, then English if needed.
 
 **Choosing a microphone.** The microphone button on the recording toolbar opens the list — hover it to see which one is in use; the same list is in the menu bar and in Settings › Dictation. Picking one mid-take switches it without ending the take. Left alone, takes follow System Settings — except when the default input is a Bluetooth headset that is also playing, where takes use the built-in or a wired mic instead, because opening a headset's microphone drops its playback to narrowband and changes its volume.
 
@@ -120,7 +117,9 @@ Everything else is optional and switchable in Settings: other transcription mode
 
 **Toolbar transparency.** Settings › General › Recording toolbar has a Background opacity slider. It starts at 90%; 0% removes the glass background, and 100% restores full glass. Lower values show more of the desktop but can make toolbar content harder to read over busy backgrounds. macOS Reduce Transparency and Increase Contrast preferences keep the material at full strength.
 
-**Picking a cleanup engine.** Out of the box WhisperLocal cleans on your Mac with Apple Intelligence, and nothing leaves it. Cloud cleanup stays off until you add an API key, which lives in the Keychain. The numbers below come from the [polish benchmark](Benchmarks/README.md) in this repo: 125 hand-written dictations, each cleaned by every engine through the app's own polishing code, checked by script and then compared head to head by a judge model.
+**Picking a cleanup engine.** Apple Intelligence is the default on-device choice when it is available. Gemma 4 is an optional local download. To use cloud cleanup, choose Cloud under Settings → Polish, select OpenAI or Anthropic, and add an API key; keys are kept in the Keychain. New OpenAI selections default to GPT-6 Luna, and Anthropic selections to Claude Haiku 4.5. Existing saved model choices are kept.
+
+The table below is a September 2026 snapshot from the [polish benchmark](Benchmarks/README.md): 125 scripted transcripts, including 22 Korean cases, cleaned through the app's polishing code and compared head to head by a judge model. It measures text cleanup, not speech recognition or automatic context, and has not been rerun for every 0.2.5 change.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/polish-benchmark-dark.svg">
@@ -145,7 +144,7 @@ Everything else is optional and switchable in Settings: other transcription mode
 
 **Bold marks the best figure in each column.** The names in bold are what the app preselects: Apple Intelligence out of the box, and one model per cloud provider once you add a key. A **hard failure** is one a script can prove: answering a dictated question instead of cleaning it, switching language, dropping what you said, adding a preamble, or misspelling a word from your dictionary. **Judged** is the share of head-to-head comparisons a judge model preferred, with every pair shown in both orders — 50% is a tie with GPT-4o Mini. Prices are published list prices checked 12 September 2026, and GPT-6 Luna's on 26 September, when it was run on the same cases; the free engines are left out of that comparison.
 
-**What that means in practice.** Any current cloud model cleans well — the judge could not reliably tell them apart — so the columns worth reading are the failures and the price, and paying thirty times more for Opus 5 than for GPT-6 Luna buys two fewer failures in 125 takes and nothing you would notice in the other. On-device cleanup is free, private and needs no key, but it is a long way behind: Apple Intelligence is barely ahead of stripping fillers with no model at all, and it is the weakest of them on Korean. In everyday use here, 189 cloud requests came to 7 cents — a dollar would cover a couple of thousand. Most of that is output tokens, and over 60% of the input is served from the prompt cache, because the parts of the request that do not change from take to take are sent first.
+**Reading the results.** In this run, cloud engines had fewer hard failures than the on-device engines, while their judge scores were close. On-device cleanup keeps text local and has no API charge. Waits and costs depend on transcript length, hardware, caching and provider pricing. The cost column covers benchmark cleanup requests; the additional cloud request for automatic context is not included.
 
 One run per case, one judge, and the cases were written by the same person who wrote the app, so treat the table as a guide rather than a verdict. [How to run it yourself](Benchmarks/README.md), including on your own cases.
 
@@ -153,16 +152,16 @@ One run per case, one judge, and the cases were written by the same person who w
 
 ```
 hold hotkey → record 16 kHz audio
-           → Apple Speech            (default; or WhisperKit / Parakeet)
-           → filler strip            (um / uh / hmm)
-           → Apple Intelligence      (default; or Gemma 4 E2B IT; skipped when cloud cleanup is on)
-           → OpenAI / Anthropic      (optional; replaces the on-device model)
-           → insert at cursor
+           → transcribe: Apple Speech / WhisperKit / Parakeet
+           → strip fillers when cleanup is enabled
+           → clean text: Apple Intelligence / Gemma / selected cloud provider
+           → insert at cursor, with clipboard fallback
+after paste → learn automatic topics when enabled and supported
 ```
 
-The cleanup step is **not a chatbot**. If you dictate a question, you get the question as text — it is never answered.
+The cleanup step is instructed to preserve your words and keep dictated questions as text.
 
-**Nothing is ever lost to a failure.** If cleanup fails or times out, the previous stage is pasted anyway. If the cloud is unreachable, the on-device model takes over. If the text cannot be typed, it is left on the clipboard for ⌘V. Long takes are transcribed in pieces, so one bad piece costs its own span rather than the whole recording.
+**Cleanup failures preserve the transcript.** If cleanup fails or times out, the app uses the text from the previous stage. A cloud failure falls back to the on-device model when it is ready; otherwise the filler-stripped transcript is used. If insertion cannot be confirmed, the toolbar tells you when the text is on the clipboard for ⌘V. Long takes are transcribed in pieces so successful chunks can survive a failed chunk; transcription errors can still leave gaps.
 
 Native Swift and AppKit. Transcription uses Apple's `SpeechTranscriber`, [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift), or [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) via [FluidAudio](https://github.com/FluidInference/FluidAudio). On-device cleanup uses Apple's `SystemLanguageModel` or Gemma 4 E2B IT through MLX. Insertion goes through the Accessibility API, falling back to clipboard ⌘V for terminals and Electron apps. There is no sidecar LLM process to install or run.
 
@@ -170,13 +169,16 @@ Native Swift and AppKit. Transcription uses Apple's `SpeechTranscriber`, [Whispe
 
 | | What leaves your Mac |
 |---|---|
-| **Default setup** | **Nothing.** Transcription and on-device cleanup all stay local. |
-| Cloud cleanup, if you turn it on | Transcript **text** only, to OpenAI or Anthropic. Never audio. Recent dictations and session context go with the request if you enable them. |
+| **Default setup** | Audio and transcripts stay on your Mac. Model downloads and update checks use the network. |
+| Cloud cleanup, if you turn it on | Transcript text, the target app name/type, and your configured dictionary and instructions go to OpenAI or Anthropic. Active context is included; recent dictations are included only when enabled. Audio is not sent. |
+| Automatic context with cloud cleanup | An additional request sends the cleaned take, active topics and app name/type to the same provider. Turn learning off in Context or Settings → Polish to stop these updates. |
 | Audio | Never uploaded. Apple Speech writes a private temp `.caf` per take and deletes it right after; Whisper and Parakeet stay in memory. |
 | Microphone indicator | The input graph stays open briefly after a take so the next one starts faster — about 2 seconds, or up to 45 for a Bluetooth headset used only as input. Nothing is recorded during that idle hold. |
-| Keystrokes | The hotkey and Esc are observed through Accessibility. Never stored or logged. |
-| Clipboard | Clipboard-paste mode briefly uses the general pasteboard, marked so clipboard managers skip it. |
-| Dictation log | Optional and local only: `~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`, text with no audio. |
+| Keyboard events | Observed for dictation, Shift, Esc and the Context shortcut using the granted keyboard permissions. Typed text is not stored or logged. |
+| Clipboard | Paste mode uses the general pasteboard, marked concealed/transient for clipboard managers that honor those markers. Unconfirmed insertion can leave the dictation there for ⌘V. |
+| Dictation log | Local and enabled by default; keeps up to 100 entries, including transcripts, app/model/microphone details and context snapshots, with no audio. Stored at `~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`. Turn it off under Settings → Dictation → History; use the log window to clear existing entries. |
+
+Active context is not restored on launch, but its snapshots can remain in the local log. The public 0.2.5 app does not include volunteer log submissions or window-title capture.
 
 The app is **not sandboxed** — global hotkeys, Accessibility insertion, and synthetic paste all require that.
 
@@ -186,12 +188,14 @@ Security reports: see [SECURITY.md](SECURITY.md). Please don't file them as publ
 
 Contributions are genuinely welcome, and this project is easier to work on than most Mac apps.
 
-**The test suite is fast and needs nothing.** Unit tests run in about a quarter of a second — no microphone, no model download, no network, no API key:
+**Unit tests do not need a microphone, model weights, or API keys.** The first build resolves Swift dependencies. An optional volunteer-sharing integration test is skipped unless you provide a local test server:
 
 ```bash
 brew install xcodegen   # once
 xcodegen generate
-xcodebuild test -scheme PolishTests -destination 'platform=macOS,arch=arm64'
+xcodebuild test -scheme PolishTests -destination 'platform=macOS,arch=arm64' \
+  -skipPackagePluginValidation -skipMacroValidation \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 ```
 
 Most of the interesting logic — text cleanup, prompt assembly, audio chunking, dictionary handling, log export — is pure functions covered by that suite. You can fix a real bug and prove it without ever launching the app.
@@ -200,7 +204,7 @@ Most of the interesting logic — text cleanup, prompt assembly, audio chunking,
 
 - **"WhisperLocal pastes wrong in *my* app."** Insertion quirks are hand-maintained lists in [`TextInserter.swift`](WhisperLocal/Services/TextInserter.swift) — often a one-line change. Bug reports are as useful as patches: tell us the app and what happened.
 - **Cleanup that gets it wrong.** The prompt lives in [`CleanupPrompt.swift`](WhisperLocal/Services/Polishers/CleanupPrompt.swift). Paste what you said and what you expected.
-- **More dictation languages.** Any language Apple Speech has an on-device model for can be dictated in today, but only some are offered, and cleanup quality outside English is barely measured — the benchmark's 125 cases are English. Adding cases in another language is as useful as code.
+- **More dictation languages.** Language support depends on the selected transcription and cleanup engines. The benchmark has 103 English and 22 Korean cases; other languages need more coverage. Adding cases is as useful as code.
 - **Documentation.** If something here confused you, that's a bug in this file.
 
 Before a PR: run `xcodegen generate` and the `PolishTests` scheme, add a test when you fix a behavior, keep changes focused, and never commit API keys or signing identities.
@@ -218,14 +222,14 @@ WhisperLocalTests/
 project.yml    XcodeGen spec — regenerate after adding or moving files
 ```
 
-Cleanup pipeline: filler strip → `LocalLLMPolisher` (Apple Foundation Models) or `GemmaMLXPolisher` (MLX) → optional `OpenAIPolisher` / `AnthropicPolisher`. The shared prompt lives in `CleanupPrompt.swift`.
+Cleanup pipeline: filler strip → the selected on-device or cloud polisher. Cloud failures can use a ready on-device model as fallback. The shared prompt lives in `CleanupPrompt.swift`.
 </details>
 
 ## Build from source
 
-Building it yourself sidesteps Gatekeeper entirely — a locally compiled app never gets a quarantine flag. The trade is setup cost: Xcode is a large download and the first build resolves around fifteen Swift packages, including MLX. For most people the [DMG](#download) is faster.
+You can build and run WhisperLocal locally with Xcode. The first build resolves Swift dependencies, including MLX. For most people the [DMG](#download) is faster.
 
-You need an Apple Silicon Mac, **Xcode 26 or later**, and [XcodeGen](https://github.com/yonaskolb/XcodeGen). Xcode 26 is required because mlx-swift 0.31.6 needs Swift 6.3 tools.
+You need an Apple Silicon Mac, **Xcode 26.4 or later**, and [XcodeGen](https://github.com/yonaskolb/XcodeGen). mlx-swift 0.31.6 needs Swift 6.3, which is included starting with [Xcode 26.4](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_4-release-notes).
 
 ```bash
 brew install xcodegen   # if needed
@@ -251,7 +255,7 @@ xcodebuild -scheme WhisperLocal -configuration Release \
 
 `bash scripts/make-dmg.sh` packages a Release DMG and checks the app for embedded personal Mac account paths. Local builds containing those paths are blocked from packaging; use the manual Release workflow on GitHub Actions for a distribution DMG. The local app build above remains available. Re-run `xcodegen generate` after changing `project.yml` or moving files.
 
-CI runs the regression suite and compiles the complete Apple Silicon app and both benchmark tools on pull requests and pushes to `main` or `oss`. Public tagged releases also run the tests and require all six Apple signing and notarization secrets listed in `.github/workflows/release.yml`; missing credentials stop publication. Manual artifact builds can still use ad-hoc signing.
+CI runs the regression suite and compiles the complete Apple Silicon app and both benchmark tools on pull requests and pushes to `main` or `oss`. Tagged release builds also run the tests and require all six Apple signing and notarization secrets listed in `.github/workflows/release.yml`; they create a draft for maintainer publication. Manual Release workflow runs produce build artifacts, with signing and notarization when the secrets are available, and can use ad-hoc signing otherwise.
 
 **Public app and Dev app together.** Release installs as `/Applications/WhisperLocal.app` (`com.usingcolor.WhisperLocal`); Debug / `Dev` builds use `/Applications/WhisperLocal Dev.app` (`com.usingcolor.WhisperLocal.dev`), with separate settings, log, and TCC prompts. The Dev app skips Check for Updates and defaults its hotkey to Right Option.
 

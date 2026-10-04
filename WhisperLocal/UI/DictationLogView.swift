@@ -1,0 +1,563 @@
+import AppKit
+import SwiftUI
+
+struct DictationLogView: View {
+    @ObservedObject var log = DictationLogStore.shared
+    @ObservedObject var settings = SettingsStore.shared
+    @State private var selectedID: UUID?
+    @State private var query = ""
+    @State private var confirmingClear = false
+
+    var body: some View {
+        NavigationSplitView {
+            sidebar
+        } detail: {
+            Group {
+                if let entry = selectedEntry {
+                    DictationLogDetailView(
+                        entry: entry,
+                        related: log.entries(withIDs: entry.relatedTakeIDs ?? []),
+                        missingRelated: (entry.relatedTakeIDs?.count ?? 0)
+                            - log.entries(withIDs: entry.relatedTakeIDs ?? []).count,
+                        select: { id in
+                            query = ""
+                            selectedID = id
+                        }
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "No dictation selected",
+                        systemImage: "text.alignleft",
+                        description: Text("Pick a take from the list.")
+                    )
+                }
+            }
+            .navigationTitle("Dictation Log")
+            .toolbar { toolbar }
+        }
+        .safeAreaInset(edge: .top) {
+            if let message = log.recoveryMessage {
+                HStack {
+                    Text(message).font(.caption).foregroundStyle(.orange)
+                    if let url = log.preservedHistoryURL {
+                        Button("Show preserved file") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                    }
+                }
+                .padding(10)
+            }
+        }
+        .onChange(of: log.entries.first?.id) { _, newID in
+            // Don't yank the selection out of a filtered list: the newest entry
+            // usually isn't in it, and the detail pane would just go blank.
+            guard query.isEmpty else { return }
+            selectedID = newID
+        }
+        .onChange(of: query) { _, _ in
+            if let selectedID, !filtered.contains(where: { $0.id == selectedID }) {
+                self.selectedID = filtered.first?.id
+            } else if selectedID == nil {
+                selectedID = filtered.first?.id
+            }
+        }
+        .onAppear {
+            if selectedID == nil { selectedID = log.entries.first?.id }
+        }
+        .background(AppWindowChrome(hidesTitle: true))
+        .frame(minWidth: 760, minHeight: 460)
+    }
+
+    // MARK: - Sidebar
+
+    private var sidebar: some View {
+        List(selection: $selectedID) {
+            ForEach(sections) { section in
+                Section(section.title) {
+                    ForEach(section.entries) { entry in
+                        DictationLogRow(entry: entry).tag(entry.id)
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .searchable(text: $query, placement: .sidebar, prompt: "Search dictations")
+        .overlay { emptyState }
+        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
+        .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 400)
+        .confirmationDialog(
+            "Clear the dictation log?",
+            isPresented: $confirmingClear,
+            titleVisibility: .visible
+        ) {
+            Button("Clear \(log.entries.count) Entries", role: .destructive) {
+                log.clear()
+                selectedID = nil
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This cannot be undone. Export first if you want to keep a copy.")
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Section("All entries") {
+                    ForEach(DictationLogExport.Format.allCases) { format in
+                        Button(format.menuTitle) { export(entries: log.entries, format: format) }
+                    }
+                }
+                .disabled(log.entries.isEmpty)
+                if let entry = selectedEntry {
+                    Section("Selected") {
+                        ForEach(DictationLogExport.Format.allCases) { format in
+                            Button(format.menuTitle) {
+                                export(
+                                    entries: [entry],
+                                    format: format,
+                                    suggestedName: format.suggestedFilename(for: entry.date)
+                                )
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label("Export", systemImage: "square.and.arrow.up")
+            }
+            .disabled(log.entries.isEmpty)
+            .help("Export the log")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button { confirmingClear = true } label: {
+                Label("Clear", systemImage: "trash")
+            }
+            .disabled(log.entries.isEmpty)
+            .help("Delete every entry")
+        }
+    }
+
+    /// Entry count and total audio, so the window says something about itself
+    /// instead of being a bare list.
+    @ViewBuilder
+    private var footer: some View {
+        if !log.entries.isEmpty || !settings.enableDictationLog {
+            VStack(alignment: .leading, spacing: 4) {
+                Divider()
+                if !settings.enableDictationLog {
+                    Label(
+                        "Logging is off. New takes are not saved.",
+                        systemImage: "pause.circle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 6)
+                }
+                if !log.entries.isEmpty {
+                    Text(summaryLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .padding(.horizontal, 12)
+                        .padding(.top, settings.enableDictationLog ? 6 : 0)
+                }
+            }
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if log.entries.isEmpty {
+            ContentUnavailableView {
+                Label("No dictations yet", systemImage: "waveform")
+            } description: {
+                Text("Takes show up here after you dictate. They are stored on this Mac.")
+            }
+        } else if filtered.isEmpty {
+            ContentUnavailableView.search(text: query)
+        }
+    }
+
+    // MARK: - Data
+
+    private var selectedEntry: DictationLogEntry? {
+        guard let selectedID else { return nil }
+        return log.entries.first { $0.id == selectedID }
+    }
+
+    private var filtered: [DictationLogEntry] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return log.entries }
+        return log.entries.filter { entry in
+            entry.polished.localizedCaseInsensitiveContains(needle)
+                || entry.raw.localizedCaseInsensitiveContains(needle)
+                || entry.appName?.localizedCaseInsensitiveContains(needle) == true
+        }
+    }
+
+    /// A hundred undifferentiated rows is a database dump. Day headings turn it
+    /// back into a history you can scan.
+    private var sections: [DaySection] {
+        let calendar = Calendar.current
+        var order: [Date] = []
+        var buckets: [Date: [DictationLogEntry]] = [:]
+        for entry in filtered {
+            let day = calendar.startOfDay(for: entry.date)
+            if buckets[day] == nil { order.append(day) }
+            buckets[day, default: []].append(entry)
+        }
+        return order.map { DaySection(id: $0, title: Self.dayTitle($0), entries: buckets[$0] ?? []) }
+    }
+
+    private var summaryLine: String {
+        let count = filtered.count
+        let noun = count == 1 ? "dictation" : "dictations"
+        let seconds = filtered.compactMap(\.audioSeconds).reduce(0, +)
+        guard seconds >= 1 else { return "\(count) \(noun)" }
+        return "\(count) \(noun) · \(Self.durationLabel(seconds)) of audio"
+    }
+
+    private static func dayTitle(_ day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInYesterday(day) { return "Yesterday" }
+        if let days = calendar.dateComponents([.day], from: day, to: Date()).day, days < 7 {
+            return day.formatted(.dateTime.weekday(.wide))
+        }
+        return day.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
+    private static func durationLabel(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded())
+        if total < 60 { return "\(total)s" }
+        let minutes = total / 60
+        if minutes < 60 { return "\(minutes)m \(total % 60)s" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    private struct DaySection: Identifiable {
+        let id: Date
+        let title: String
+        let entries: [DictationLogEntry]
+    }
+
+    // MARK: - Export
+
+    private func export(entries: [DictationLogEntry], format: DictationLogExport.Format, suggestedName: String? = nil) {
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.allowedContentTypes = [format.contentType]
+        panel.nameFieldStringValue = suggestedName ?? format.suggestedFilename
+        panel.message = entries.count == 1
+            ? "Export 1 dictation as \(format.filenameExtension.uppercased())"
+            : "Export \(entries.count) dictations as \(format.filenameExtension.uppercased())"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try DictationLogExport.data(entries: entries, format: format).write(to: url, options: [.atomic])
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Could not export the dictation log"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
+    }
+}
+
+// MARK: - Row
+
+private struct DictationLogRow: View {
+    let entry: DictationLogEntry
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: entry.outcomeSymbol)
+                .font(.system(size: 11))
+                .foregroundStyle(entry.outcomeTint)
+                .frame(width: 13)
+                .padding(.top, 2)
+                .help(entry.outcomeLabel)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preview)
+                    .font(.body)
+                    .lineLimit(2)
+                    .foregroundStyle(hasText ? .primary : .secondary)
+                HStack(spacing: 4) {
+                    Text(entry.date, format: .dateTime.hour().minute())
+                        .monospacedDigit()
+                    if let app = entry.appName, !app.isEmpty {
+                        Text("·")
+                        Text(app).lineLimit(1)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var hasText: Bool {
+        !(entry.polished.isEmpty && entry.raw.isEmpty)
+    }
+
+    private var preview: String {
+        let text = entry.polished.isEmpty ? entry.raw : entry.polished
+        if !text.isEmpty { return text }
+        return entry.errorMessage ?? entry.outcomeLabel
+    }
+}
+
+// MARK: - Detail
+
+private struct DictationLogDetailView: View {
+    let entry: DictationLogEntry
+    /// Earlier takes polish was shown for sharing words with this one. Dev only.
+    let related: [DictationLogEntry]
+    /// Related takes that have since aged out of the log.
+    let missingRelated: Int
+    let select: (UUID) -> Void
+    @State private var sharing = false
+
+    var body: some View {
+        AppGroupedForm {
+            Section {
+                header
+                if let error = entry.errorMessage, !error.isEmpty {
+                    notice(error, symbol: "exclamationmark.triangle.fill")
+                }
+                if let note = entry.cleanupNote, !note.isEmpty {
+                    notice(note, symbol: "info.circle.fill")
+                }
+            }
+            transcript(primaryTitle, primaryText, prominent: true)
+            if let raw = secondaryRaw {
+                transcript("Raw transcript", raw, prominent: false)
+            }
+            if let topics = entry.autoContext {
+                Section("Automatic context") {
+                    if topics.isEmpty {
+                        Text("Nothing noted yet").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(Array(topics.enumerated()), id: \.offset) { _, topic in
+                            Text(topic)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if let change = entry.autoContextChange, !change.isEmpty {
+                        LabeledContent("Update") {
+                            Text(change).textSelection(.enabled)
+                        }
+                    }
+                }
+            } else if let change = entry.autoContextChange, !change.isEmpty {
+                Section("Automatic context") {
+                    Text(change).textSelection(.enabled)
+                }
+            }
+            if !related.isEmpty || missingRelated > 0 {
+                relatedTakes
+            }
+            if !facts.isEmpty {
+                metadata
+            }
+        }
+        .sheet(isPresented: $sharing) {
+            ShareTakeSheet(entry: entry) { sharing = false }
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label(entry.outcomeLabel, systemImage: entry.outcomeSymbol)
+                .font(.headline)
+                .foregroundStyle(entry.outcomeTint)
+            Spacer(minLength: 12)
+            Text(entry.date, format: .dateTime.month(.abbreviated).day().hour().minute().second())
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            // Dev: shows what would leave the Mac before anything does.
+            if DataSharing.isEnabled, entry.outcome == .success {
+                Button("Send…") { sharing = true }
+                    .controlSize(.small)
+                    .help("Send this take to WhisperLocal's developer")
+            }
+        }
+    }
+
+    private var primaryTitle: String {
+        if entry.outcome == .insertFailed { return "Text to paste" }
+        return entry.outcome == .success ? "Inserted text" : "Transcript"
+    }
+
+    private var primaryText: String {
+        entry.polished.isEmpty ? entry.raw : entry.polished
+    }
+
+    /// Showing raw and polished side by side when they are identical just makes
+    /// the reader compare two strings to discover nothing happened.
+    private var secondaryRaw: String? {
+        guard !entry.polished.isEmpty, !entry.raw.isEmpty, entry.raw != entry.polished else { return nil }
+        return entry.raw
+    }
+
+    /// What the relevance trial chose, so a take that came out oddly can be read
+    /// against the examples that shaped it. Click one to open it.
+    private var relatedTakes: some View {
+        Section("Related takes used") {
+            ForEach(related) { take in
+                Button {
+                    select(take.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(take.polished)
+                            .lineLimit(2)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                        Text([take.appName, take.date.formatted(.dateTime.month(.abbreviated).day().hour().minute())]
+                            .compactMap { $0 }
+                            .joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            if missingRelated > 0 {
+                Text(missingRelated == 1 ? "1 more, no longer in the log" : "\(missingRelated) more, no longer in the log")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func notice(_ text: String, symbol: String) -> some View {
+        Label(text, systemImage: symbol)
+            .font(.callout)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func transcript(_ title: String, _ text: String, prominent: Bool) -> some View {
+        Section {
+            Text(text.isEmpty ? "—" : text)
+                .textSelection(.enabled)
+                .font(prominent ? .system(size: 16) : .body)
+                .foregroundStyle(prominent ? .primary : .secondary)
+                .lineSpacing(prominent ? 3 : 1)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
+        } header: {
+            HStack {
+                Text(title)
+                Spacer(minLength: 8)
+                if !text.isEmpty { CopyButton(text: text) }
+            }
+            .textCase(nil)
+        }
+    }
+
+    private var metadata: some View {
+        Section("Details") {
+            ForEach(facts) { fact in
+                LabeledContent(fact.id) {
+                    Text(fact.value)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+        }
+    }
+
+    private var facts: [Fact] {
+        var facts: [Fact] = []
+        if let app = entry.appName, !app.isEmpty { facts.append(Fact(id: "App", value: app)) }
+        if let window = entry.windowTitle, !window.isEmpty { facts.append(Fact(id: "Window", value: window)) }
+        if let method = entry.insertMethod, !method.isEmpty {
+            facts.append(Fact(id: "Insert", value: method))
+        }
+        if let seconds = entry.audioSeconds {
+            facts.append(Fact(id: "Audio", value: String(format: "%.1f s", seconds)))
+        }
+        // Absent on takes recorded before these were logged, which is why they are
+        // conditional rather than showing an empty row.
+        if let language = entry.language, !language.isEmpty {
+            facts.append(Fact(id: "Language", value: language))
+        }
+        if let microphone = entry.microphone, !microphone.isEmpty {
+            facts.append(Fact(id: "Microphone", value: microphone))
+        }
+        if !entry.stages.isEmpty {
+            facts.append(Fact(id: "Pipeline", value: entry.stages.joined(separator: " → ")))
+        }
+        // Looked for and none qualified. With the switch off there is no row at
+        // all, which is how the two are told apart when comparing.
+        if let related = entry.relatedTakeIDs, related.isEmpty {
+            facts.append(Fact(id: "Related takes", value: "None found"))
+        }
+        return facts
+    }
+
+    private struct Fact: Identifiable {
+        let id: String
+        let value: String
+    }
+}
+
+/// Copy with a confirmation in place. A button that gives no sign it fired makes
+/// you click it twice and check the clipboard.
+private struct CopyButton: View {
+    let text: String
+    @State private var copied = false
+    @State private var resetTask: Task<Void, Never>?
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            resetTask?.cancel()
+            withAnimation { copied = true }
+            resetTask = Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation { copied = false }
+            }
+        } label: {
+            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(copied ? Color.green : Color.accentColor)
+    }
+}
+
+private extension DictationLogEntry {
+    var outcomeSymbol: String {
+        switch outcome {
+        case .success: return "checkmark.circle.fill"
+        case .insertFailed: return "exclamationmark.triangle.fill"
+        case .heardNothing: return "waveform.slash"
+        case .error: return "xmark.octagon.fill"
+        }
+    }
+
+    var outcomeTint: Color {
+        switch outcome {
+        case .success: return .green
+        case .insertFailed: return .orange
+        case .heardNothing: return .secondary
+        case .error: return .red
+        }
+    }
+}

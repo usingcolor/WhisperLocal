@@ -1,0 +1,277 @@
+name: WhisperLocal
+configs:
+  Debug: debug
+  Release: release
+  Dev: release
+options:
+  bundleIdPrefix: com.usingcolor
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ONLY_ACTIVE_ARCH: YES
+    ARCHS: arm64
+    VALID_ARCHS: arm64
+    EXCLUDED_ARCHS: x86_64
+    # Sign locally in Xcode (Signing & Capabilities → Team). Do not commit a team ID.
+    # Hardened Runtime + ad-hoc signing often makes Accessibility stay "Missing".
+    ENABLE_HARDENED_RUNTIME: NO
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "Apple Development"
+    PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: YES
+      ARCHS: arm64
+      VALID_ARCHS: arm64
+      EXCLUDED_ARCHS: x86_64
+    Release:
+      ONLY_ACTIVE_ARCH: YES
+      ARCHS: arm64
+      VALID_ARCHS: arm64
+      EXCLUDED_ARCHS: x86_64
+    Dev:
+      ONLY_ACTIVE_ARCH: YES
+      ARCHS: arm64
+      VALID_ARCHS: arm64
+      EXCLUDED_ARCHS: x86_64
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/argmax-oss-swift.git
+    from: "0.9.0"
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    from: "0.15.6"
+  mlx-swift-lm:
+    url: https://github.com/ml-explore/mlx-swift-lm.git
+    from: "3.31.4"
+  swift-huggingface:
+    url: https://github.com/huggingface/swift-huggingface.git
+    from: "0.9.0"
+  # WhisperKit 0.18 needs 1.1.x; mlx-swift-lm 3.x docs suggest 1.3, but the
+  # tokenizer bridge compiles against 1.1.9. Do not bump to 1.3 without
+  # also moving WhisperKit to 1.x (which vendors transformers).
+  swift-transformers:
+    url: https://github.com/huggingface/swift-transformers.git
+    minorVersion: 1.1.6
+targets:
+  WhisperLocal:
+    type: application
+    platform: macOS
+    sources:
+      - path: WhisperLocal
+        excludes:
+          - "**/*.md"
+    resources:
+      - path: WhisperLocal/Resources/Assets.xcassets
+      # Icon Composer icon: macOS 26 and later draw it in the system squircle;
+      # Xcode renders an .icns from it for 14 and 15.
+      - path: WhisperLocal/Resources/AppIcon.icon
+    settings:
+      base:
+        INFOPLIST_FILE: WhisperLocal/App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: WhisperLocal/App/WhisperLocal.entitlements
+        PRODUCT_NAME: WhisperLocal
+        MARKETING_VERSION: "0.2.5"
+        CURRENT_PROJECT_VERSION: "24"
+        GENERATE_INFOPLIST_FILE: false
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+        COMBINE_HIDPI_IMAGES: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_APP_SANDBOX: NO
+        # Hardened Runtime + ad-hoc signing often makes Accessibility stay "Missing".
+        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_IDENTITY: "Apple Development"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        OTHER_LDFLAGS: "$(inherited) -weak_framework FoundationModels"
+        ARCHS: arm64
+        VALID_ARCHS: arm64
+        ONLY_ACTIVE_ARCH: YES
+        EXCLUDED_ARCHS: x86_64
+        "EXCLUDED_ARCHS[sdk=macosx*]": x86_64
+      configs:
+        Debug:
+          PRODUCT_NAME: "WhisperLocal Dev"
+          PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal.dev
+        Dev:
+          PRODUCT_NAME: "WhisperLocal Dev"
+          PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal.dev
+        Release:
+          PRODUCT_NAME: WhisperLocal
+          PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal
+    dependencies:
+      - package: WhisperKit
+        product: WhisperKit
+      - package: FluidAudio
+        product: FluidAudio
+      - package: mlx-swift-lm
+        product: MLXLLM
+      - package: mlx-swift-lm
+        product: MLXLMCommon
+      - package: mlx-swift-lm
+        product: MLXHuggingFace
+      - package: swift-huggingface
+        product: HuggingFace
+      - package: swift-transformers
+        product: Tokenizers
+      - sdk: Speech.framework
+      - sdk: ServiceManagement.framework
+    scheme:
+      testTargets:
+        - WhisperLocalTests
+  WhisperLocalTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: WhisperLocalTests
+      - path: WhisperLocal/Services/Polishers/TextPolisher.swift
+      - path: WhisperLocal/Services/Polishers/DeadlineExecutor.swift
+      - path: WhisperLocal/Services/StreamingTranscriber.swift
+      - path: WhisperLocal/Services/HotKeyManager.swift
+      - path: WhisperLocal/Services/Polishers/CleanupPrompt.swift
+      - path: WhisperLocal/Services/Polishers/DictionaryCSV.swift
+      - path: WhisperLocal/Services/Polishers/CloudModelCatalog.swift
+      - path: WhisperLocal/Services/Polishers/AnthropicPolisher.swift
+      - path: WhisperLocal/State/DictationLogStore.swift
+      - path: WhisperLocal/State/DictationLogExport.swift
+      - path: WhisperLocal/State/RelatedTakeScoring.swift
+      - path: WhisperLocal/State/TermCandidates.swift
+      - path: WhisperLocal/Services/FocusedWindowTitle.swift
+      - path: WhisperLocal/State/AutoContext.swift
+      - path: WhisperLocal/State/AutoContextUpdateQueue.swift
+      - path: WhisperLocal/State/ContextEditorDraft.swift
+      - path: WhisperLocal/State/DataSharingPayload.swift
+      - path: WhisperLocal/Services/TextInserter.swift
+      - path: WhisperLocal/Services/AppUpdateFeed.swift
+      - path: WhisperLocal/Services/UpdateInstallLog.swift
+      - path: WhisperLocal/Services/AudioInputRoute.swift
+      - path: WhisperLocal/State/SessionContext.swift
+      - path: WhisperLocal/Services/LongTake.swift
+      - path: WhisperLocal/Services/LaunchAtLogin.swift
+      - path: WhisperLocal/Services/AppInstallLocation.swift
+      - path: WhisperLocal/Services/SpokenLanguage.swift
+      - path: WhisperLocal/Services/Polishers/PolishChunker.swift
+      - path: WhisperLocal/App/AppIdentity.swift
+      - path: WhisperLocal/UI/HUDPlacement.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocalTests
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_VERSION: "5.10"
+        SWIFT_STRICT_CONCURRENCY: minimal
+  # Polish benchmark (Benchmarks/README.md). Compiles the app's own polish code
+  # rather than a copy, so it measures what ships.
+  PolishBench:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Benchmarks/PolishBench
+      - path: WhisperLocal/Services/Polishers/TextPolisher.swift
+      - path: WhisperLocal/Services/Polishers/CleanupPrompt.swift
+      - path: WhisperLocal/Services/Polishers/DictionaryCSV.swift
+      - path: WhisperLocal/Services/Polishers/CloudModelCatalog.swift
+      - path: WhisperLocal/Services/Polishers/OpenAIPolisher.swift
+      - path: WhisperLocal/Services/Polishers/AnthropicPolisher.swift
+      - path: WhisperLocal/Services/Polishers/LocalLLMPolisher.swift
+      - path: WhisperLocal/Services/Polishers/DeadlineExecutor.swift
+      - path: WhisperLocal/Services/Polishers/GemmaMLXPolisher.swift
+      - path: WhisperLocal/Services/Polishers/PolishChunker.swift
+      - path: WhisperLocal/Services/SpokenLanguage.swift
+      - path: WhisperLocal/Services/TextInserter.swift
+      - path: WhisperLocal/State/SessionContext.swift
+      - path: WhisperLocal/State/AutoContext.swift
+      - path: WhisperLocal/App/AppIdentity.swift
+    settings:
+      base:
+        PRODUCT_NAME: polish-bench
+        PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal.polish-bench
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_VERSION: "5.10"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        ENABLE_HARDENED_RUNTIME: NO
+        OTHER_LDFLAGS: "$(inherited) -weak_framework FoundationModels"
+    dependencies:
+      - package: mlx-swift-lm
+        product: MLXLLM
+      - package: mlx-swift-lm
+        product: MLXLMCommon
+      - package: mlx-swift-lm
+        product: MLXHuggingFace
+      - package: swift-huggingface
+        product: HuggingFace
+      - package: swift-transformers
+        product: Tokenizers
+  ContextBench:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Benchmarks/ContextBench/Sources
+      - path: WhisperLocal/Services/Polishers/TextPolisher.swift
+      - path: WhisperLocal/Services/Polishers/CleanupPrompt.swift
+      - path: WhisperLocal/Services/Polishers/DictionaryCSV.swift
+      - path: WhisperLocal/Services/Polishers/CloudModelCatalog.swift
+      - path: WhisperLocal/Services/Polishers/OpenAIPolisher.swift
+      - path: WhisperLocal/Services/Polishers/LocalLLMPolisher.swift
+      - path: WhisperLocal/Services/Polishers/DeadlineExecutor.swift
+      - path: WhisperLocal/Services/Polishers/AutoContextUpdater.swift
+      - path: WhisperLocal/Services/Polishers/PolishChunker.swift
+      - path: WhisperLocal/Services/SpokenLanguage.swift
+      - path: WhisperLocal/Services/TextInserter.swift
+      - path: WhisperLocal/State/SessionContext.swift
+      - path: WhisperLocal/State/AutoContext.swift
+      - path: WhisperLocal/State/RelatedTakeScoring.swift
+      - path: WhisperLocal/State/DictationLogStore.swift
+      - path: WhisperLocal/App/AppIdentity.swift
+    settings:
+      base:
+        PRODUCT_NAME: context-bench
+        PRODUCT_BUNDLE_IDENTIFIER: com.usingcolor.WhisperLocal.context-bench
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_VERSION: "5.10"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        ENABLE_HARDENED_RUNTIME: NO
+schemes:
+  PolishBench:
+    build:
+      targets:
+        PolishBench: all
+    run:
+      config: Release
+  ContextBench:
+    build:
+      targets:
+        ContextBench: all
+    run:
+      config: Release
+  PolishTests:
+    build:
+      targets:
+        WhisperLocalTests: all
+    test:
+      targets:
+        - WhisperLocalTests
+  WhisperLocalDev:
+    build:
+      targets:
+        WhisperLocal: all
+    run:
+      config: Dev
+    archive:
+      config: Dev
+    profile:
+      config: Dev

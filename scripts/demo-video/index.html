@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WhisperLocal 0.2.5 Demo</title>
+<!--
+  The 0.2.5 demo, drawn as a web page. Every frame is a pure function of time:
+  window.renderAt(seconds) sets the whole scene, and render.mjs steps headless
+  Chrome through it frame by frame into ffmpeg. Opened on its own, the page
+  plays in a loop with a scrubber: space pauses, the arrow keys step a frame.
+-->
+<style>
+:root {
+  --navy-950: #0A1230;
+  --navy-900: #0F1B45;
+  --navy-800: #182B63;
+  --blue-500: #2F7BF0;
+  --blue-400: #4D93FF;
+  --blue-300: #8CB8FF;
+  --mist: #AFC0E3;
+  --amber: #FFB547;
+  --ink: #1C1F26;
+  --ink-2: #8B909A;
+  --red: #FF453A;
+  --green: #30D158;
+  --sans: -apple-system, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--navy-950); }
+body.preview { height: 100vh; overflow: hidden; }
+#stage {
+  position: relative; width: 1920px; height: 1080px; overflow: hidden;
+  font-family: var(--sans); color: #fff; background: var(--navy-950);
+  transform-origin: 0 0; -webkit-font-smoothing: antialiased;
+}
+.a { position: absolute; }
+#cam { position: absolute; inset: 0; transform-origin: 50% 50%; }
+
+/* Background: the banner's navy, a slow blue glow, one soft diagonal light. */
+#bgBase { inset: 0; background: linear-gradient(155deg, #1B3170 0%, #132459 34%, #0D183F 70%, #0A1230 100%); }
+.glow { border-radius: 50%; filter: blur(40px); }
+#g1 { width: 1300px; height: 1300px; background: radial-gradient(circle, rgba(47,123,240,.42) 0%, rgba(47,123,240,0) 62%); }
+#g2 { width: 1000px; height: 1000px; background: radial-gradient(circle, rgba(77,147,255,.24) 0%, rgba(77,147,255,0) 60%); }
+#g3 { width: 1200px; height: 1200px; background: radial-gradient(circle, rgba(58,91,217,.22) 0%, rgba(58,91,217,0) 60%); }
+#sweep { inset: -200px; background: linear-gradient(118deg, rgba(255,255,255,0) 38%, rgba(255,255,255,.055) 47%, rgba(255,255,255,0) 58%); }
+#vignette { inset: 0; background: radial-gradient(ellipse 75% 70% at 50% 45%, rgba(0,0,0,0) 55%, rgba(2,6,22,.55) 100%); pointer-events: none; }
+#grain { inset: 0; mix-blend-mode: overlay; opacity: .09; pointer-events: none; }
+
+/* Type */
+.center { left: 0; width: 1920px; text-align: center; }
+.kicker { font: 650 26px/1 var(--sans); letter-spacing: .2em; text-transform: uppercase; color: var(--mist); }
+.kicker.blue { color: var(--blue-300); }
+.hero { font: 800 176px/1 var(--sans); letter-spacing: -.04em; white-space: nowrap; }
+.hero.mono { font-family: var(--mono); font-weight: 600; letter-spacing: -.05em; font-size: 158px; }
+.sub { font: 500 46px/1.3 var(--sans); color: var(--mist); letter-spacing: -.01em; }
+.headline { font: 800 100px/1.06 var(--sans); letter-spacing: -.035em; }
+.w { display: inline-block; white-space: pre; }
+.amber { color: var(--amber); }
+.miss { color: var(--amber); text-decoration: underline wavy rgba(255,181,71,.75); text-decoration-thickness: 3px; text-underline-offset: 14px; }
+
+/* The chat window the takes land in */
+.window {
+  left: 190px; top: 150px; width: 1110px; height: 560px; border-radius: 26px; overflow: hidden;
+  background: #fff; color: var(--ink);
+  box-shadow: 0 50px 100px rgba(2,6,24,.55), 0 0 0 1px rgba(255,255,255,.1);
+}
+.titlebar { position: absolute; left: 0; right: 0; top: 0; height: 58px; background: #F8F9FB; border-bottom: 1px solid #ECEEF2; }
+.tl { position: absolute; top: 21px; width: 16px; height: 16px; border-radius: 50%; }
+.tl.r { left: 22px; background: #FF5F57; } .tl.y { left: 48px; background: #FEBC2E; } .tl.g { left: 74px; background: #28C840; }
+.title { position: absolute; left: 0; right: 0; text-align: center; font: 600 19px/58px var(--sans); color: var(--ink-2); }
+.bubble {
+  position: absolute; right: 40px; top: 92px; max-width: 780px; padding: 18px 26px;
+  border-radius: 26px 26px 8px 26px; background: var(--blue-500); color: #fff;
+  font: 500 26px/1.38 var(--sans); letter-spacing: -.005em;
+}
+.bubble .nm { font-weight: 700; }
+.reply {
+  position: absolute; left: 40px; top: 196px; padding: 18px 26px; border-radius: 26px 26px 26px 8px;
+  background: #EEF0F4; color: var(--ink); font: 500 26px/1.38 var(--sans); letter-spacing: -.005em;
+}
+.composer {
+  position: absolute; left: 36px; right: 36px; bottom: 30px; height: 82px; border-radius: 24px;
+  border: 1.5px solid #E1E5EC; background: #fff; box-shadow: 0 3px 14px rgba(20,30,60,.06);
+}
+.ctext, .placeholder { position: absolute; left: 30px; top: 0; line-height: 82px; font: 500 27px/82px var(--sans); white-space: nowrap; }
+.placeholder { color: #A7ADB8; }
+.ctext { color: var(--ink); }
+.ctext .nm { position: relative; }
+.caret { position: absolute; top: 25px; width: 3px; height: 32px; border-radius: 2px; background: var(--blue-500); }
+
+/* The HUD, as the app draws it: status, then input, then cancel. Scaled up 1.6x. */
+.hud { top: 752px; display: flex; gap: 26px; align-items: center; transform-origin: 50% 50%; }
+.cap {
+  height: 60px; border-radius: 30px; display: flex; align-items: center; gap: 14px; padding: 0 22px;
+  background: linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,.07));
+  border: 1px solid rgba(255,255,255,.24);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.34), 0 14px 34px rgba(1,5,20,.35);
+  backdrop-filter: blur(24px) saturate(160%);
+  color: #fff; white-space: nowrap;
+}
+.status { width: 392px; }
+.slot { position: relative; width: 24px; height: 24px; flex: none; }
+.slot > * { position: absolute; left: 0; top: 0; }
+.dot { left: 4px !important; top: 4px !important; width: 16px; height: 16px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 7px rgba(255,69,58,.32); }
+.htext { font: 650 21px/1 var(--sans); letter-spacing: -.005em; width: 170px; }
+.meter { width: 130px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.2); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 3px; background: var(--blue-400); }
+.input { padding: 0 8px 0 18px; gap: 6px; }
+.lang { font: 600 18px/1 var(--sans); color: rgba(255,255,255,.72); padding-right: 8px; }
+.mic { display: flex; align-items: center; gap: 5px; height: 42px; padding: 0 12px; border-radius: 21px; }
+.cancel { width: 60px; justify-content: center; padding: 0; }
+
+.key {
+  left: 196px; top: 738px; width: 92px; height: 88px; border-radius: 18px;
+  background: linear-gradient(180deg, #34406A, #222B4D); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 7px 0 #141B36, 0 16px 28px rgba(0,0,0,.4);
+}
+.key .fn { position: absolute; left: 14px; top: 12px; font: 600 19px/1 var(--sans); color: rgba(255,255,255,.85); }
+.key svg { position: absolute; right: 13px; bottom: 13px; }
+
+.heard { left: 190px; width: 1110px; top: 872px; display: flex; justify-content: center; align-items: center; gap: 20px; }
+.heard .label {
+  flex: none; font: 750 14px/1 var(--sans); letter-spacing: .22em; text-transform: uppercase; color: var(--blue-300);
+  padding: 9px 12px 8px 14px; border-radius: 9px; border: 1px solid rgba(140,184,255,.4); background: rgba(140,184,255,.08);
+}
+.heard .t { font: 500 30px/1.3 var(--mono); color: var(--mist); white-space: nowrap; }
+.heard .miss { text-underline-offset: 8px; text-decoration-thickness: 2px; }
+.heard .w { margin: 0 .28em; }
+.swap { position: relative; display: inline-block; vertical-align: top; text-align: left; }
+.swap > span { position: absolute; left: 0; top: 0; white-space: pre; }
+.swap .to { color: #fff; font-weight: 700; }
+
+.caption { left: 190px; top: 982px; font: 750 50px/1 var(--sans); letter-spacing: -.02em; white-space: nowrap; }
+
+/* Auto context, drawn as a tray: what the menu bar lists as "Auto context". */
+.tray {
+  left: 1400px; top: 150px; width: 400px; border-radius: 26px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,.15), rgba(255,255,255,.06));
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 30px 70px rgba(1,5,20,.35);
+  backdrop-filter: blur(28px) saturate(150%);
+}
+.thead { position: absolute; left: 24px; top: 24px; display: flex; gap: 10px; align-items: center; font: 750 15px/1 var(--sans); letter-spacing: .22em; text-transform: uppercase; color: var(--blue-300); }
+.trow {
+  position: absolute; left: 16px; right: 16px; height: 60px; border-radius: 17px; display: flex; align-items: center; gap: 14px; padding: 0 18px;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.06);
+  font: 650 22px/1 var(--sans); letter-spacing: -.01em; white-space: nowrap;
+}
+.trow i { width: 10px; height: 10px; border-radius: 50%; background: var(--blue-400); box-shadow: 0 0 14px var(--blue-400); flex: none; }
+.chip {
+  left: 0; top: 0; padding: 13px 20px; border-radius: 16px; white-space: nowrap;
+  font: 700 23px/1 var(--sans); color: #fff; letter-spacing: -.01em;
+  background: rgba(77,147,255,.3); border: 1px solid rgba(140,184,255,.65);
+  box-shadow: 0 0 34px rgba(77,147,255,.5);
+}
+
+.card {
+  left: 0; top: 0; width: 520px; height: 118px; border-radius: 24px; padding: 20px 26px;
+  background: #fff; color: var(--ink); box-shadow: 0 26px 60px rgba(2,6,24,.5);
+  transform-origin: 50% 50%;
+}
+.card .app { display: flex; gap: 9px; align-items: center; font: 750 14px/1 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
+.card .app i { width: 11px; height: 11px; border-radius: 3px; }
+.card .txt { margin-top: 14px; font: 550 27px/1.2 var(--sans); white-space: nowrap; letter-spacing: -.01em; }
+.card .nm { font-weight: 750; }
+.pill {
+  left: 190px; top: 150px; padding: 15px 24px; border-radius: 40px; white-space: nowrap;
+  font: 700 24px/1 var(--sans); letter-spacing: -.01em;
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.22);
+  backdrop-filter: blur(20px);
+}
+
+#link { left: 0; top: 0; overflow: visible; pointer-events: none; }
+.burst { width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--blue-300); box-shadow: 0 0 30px var(--blue-400); }
+
+/* End card */
+/* The PNG is Apple's 1024 grid: the icon is the middle 824, so 373 px shows it at 300. */
+#icon { width: 373px; height: 373px; margin: -36px 0 0 -36px; }
+#iconGlow { width: 700px; height: 700px; border-radius: 50%; background: radial-gradient(circle, rgba(77,147,255,.55), rgba(77,147,255,0) 62%); }
+#ring { width: 300px; height: 300px; border-radius: 66px; border: 3px solid rgba(140,184,255,.9); }
+.wordmark {
+  font: 800 132px/1 var(--sans); letter-spacing: -.035em; white-space: nowrap;
+  background: linear-gradient(100deg, #fff 42%, #BFD6FF 50%, #fff 58%); background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.ver {
+  padding: 12px 22px; border-radius: 30px; font: 750 34px/1 var(--sans); color: #fff; letter-spacing: -.01em;
+  background: rgba(47,123,240,.35); border: 1px solid rgba(140,184,255,.6);
+}
+.tag { font: 500 44px/1 var(--sans); color: var(--mist); letter-spacing: -.01em; white-space: nowrap; }
+.foot { font: 600 26px/1 var(--sans); color: rgba(175,192,227,.8); letter-spacing: .01em; white-space: nowrap; }
+
+/* Preview controls, only when the page is opened directly. */
+#s1dots { display: flex; justify-content: center; gap: 28px; }
+#s1dots i { width: 24px; height: 24px; border-radius: 50%; background: var(--mist); }
+#controls { position: fixed; left: 16px; right: 16px; bottom: 12px; display: none; align-items: center; gap: 12px; font: 13px var(--sans); color: #c9d4ee; }
+body.preview #controls { display: flex; }
+#controls input { flex: 1; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg" class="a" style="inset:0">
+    <div id="bgBase" class="a"></div>
+    <div id="g1" class="a glow"></div>
+    <div id="g2" class="a glow"></div>
+    <div id="g3" class="a glow"></div>
+    <div id="sweep" class="a"></div>
+  </div>
+
+  <div id="cam">
+    <!-- The chat window takes land in -->
+    <div id="win" class="a window">
+      <div class="titlebar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><div class="title">Maya</div></div>
+      <div id="b1" class="bubble">Can we set up an interview with <span class="nm" id="b1n1">Joaquin</span> for Thursday?</div>
+      <div id="r1" class="reply">Sure. Thursday at 2?</div>
+      <div id="comp" class="composer">
+        <div id="ph" class="placeholder">Message</div>
+        <div id="c1" class="ctext">Can we set up an interview with Joaquin for Thursday?</div>
+        <div id="c2" class="ctext">I think <span class="nm" id="c2n">Joaquin</span> would be great for the team.</div>
+        <span id="caret" class="caret"></span>
+      </div>
+    </div>
+
+    <div id="key" class="a key">
+      <span class="fn">fn</span>
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7h14M5 17h14"/></svg>
+    </div>
+
+    <div id="hud" class="a hud">
+      <div class="cap status">
+        <div class="slot">
+          <span id="hDot" class="dot"></span>
+          <svg id="hSpin" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="40.7 56.5"/></svg>
+          <svg id="hCheck" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#30D158"/><path d="M7 12.4l3.2 3.2L17.2 8.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div id="hText" class="htext">Listening…</div>
+        <div id="hMeter" class="meter"><i id="hLevel"></i></div>
+      </div>
+      <div class="cap input">
+        <span class="lang">English</span>
+        <span class="mic">
+          <svg width="16" height="22" viewBox="0 0 16 22"><rect x="4" y="1" width="8" height="13" rx="4" fill="#fff"/><path d="M1.5 10.5a6.5 6.5 0 0 0 13 0M8 17v3.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg width="12" height="8" viewBox="0 0 12 8"><path d="M1.5 1.8L6 6.2l4.5-4.4" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </div>
+      <div id="hCancel" class="cap cancel"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="rgba(255,255,255,.8)" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+    </div>
+
+    <div id="heard1" class="a heard"><span class="label">Heard</span><span class="t" id="h1t"></span></div>
+    <div id="heard2" class="a heard"><span class="label">Heard</span><span class="t" id="h2t"></span></div>
+
+    <div id="tray" class="a tray">
+      <div class="thead"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 0l1.9 6.1L16 8l-6.1 1.9L8 16l-1.9-6.1L0 8l6.1-1.9z" fill="#8CB8FF"/></svg>Auto context</div>
+      <div id="tr1" class="trow"><i></i><span>Interview with Joaquin</span></div>
+      <div id="tr2" class="trow"><i></i><span>Mom's birthday at Luigi's</span></div>
+      <div id="tr3" class="trow"><i></i><span>Q3 budget review</span></div>
+    </div>
+
+    <div id="cards"></div>
+    <div id="counter" class="a pill"><span id="cnum">+1 take</span></div>
+    <div id="timeLabel" class="a pill">10 takes later, back in the chat</div>
+  </div>
+
+  <svg id="link" class="a" width="1920" height="1080">
+    <defs>
+      <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8CB8FF"/><stop offset="1" stop-color="#4D93FF"/></linearGradient>
+      <filter id="lglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <path id="linkPath" d="" fill="none" stroke="url(#lg)" stroke-width="4" stroke-linecap="round" filter="url(#lglow)"/>
+    <circle id="linkHead" r="7" fill="#fff" filter="url(#lglow)"/>
+  </svg>
+  <div id="burst" class="a burst"></div>
+  <div id="chips"></div>
+  <div id="cap1" class="a caption">It keeps track of what you're working on.</div>
+  <div id="cap2" class="a caption">Heard wrong. Written right.</div>
+
+  <!-- Scene 1: the problem -->
+  <div id="s1" class="a" style="inset:0">
+    <div id="s1say" class="a center kicker" style="top:318px">You say</div>
+    <div id="s1hear" class="a center kicker" style="top:318px">It hears</div>
+    <div id="s1a" class="a center hero" style="top:398px">Joaquin</div>
+    <div id="s1b" class="a center hero mono" style="top:408px"><span class="miss">walking</span></div>
+    <div id="s1glitch" class="a" style="inset:0"></div>
+    <div id="s1dots" class="a center" style="top:484px"><i></i><i></i><i></i></div>
+    <div id="s1sub" class="a center sub" style="top:690px">Names are where dictation slips.</div>
+  </div>
+
+  <!-- Scene 2: the promise -->
+  <div id="s2" class="a" style="inset:0">
+    <div id="s2k" class="a center kicker blue" style="top:372px">New in WhisperLocal 0.2.5</div>
+    <div id="s2h" class="a center headline" style="top:440px"><div id="s2l1">It remembers what</div><div id="s2l2">you're working on.</div></div>
+  </div>
+
+  <!-- Scene 6: where it runs -->
+  <div id="s6" class="a" style="inset:0">
+    <div id="s6a" class="a center headline" style="top:392px; font-size:92px">Your voice never leaves your Mac.</div>
+    <div id="s6b" class="a center sub" style="top:540px">Polished on-device by Apple Intelligence,<br>or by GPT-6 Luna with your own key.</div>
+  </div>
+
+  <!-- Scene 7: end card -->
+  <div id="s7" class="a" style="inset:0">
+    <div id="iconGlow" class="a" style="left:230px; top:190px"></div>
+    <div id="ring" class="a" style="left:430px; top:390px"></div>
+    <img id="icon" class="a" style="left:430px; top:390px" src="../../assets/WhisperLocal-icon-1024.png" alt="">
+    <div id="wm" class="a wordmark" style="left:800px; top:398px">WhisperLocal</div>
+    <div id="ver" class="a ver" style="left:1720px; top:398px">0.2.5</div>
+    <div id="tag" class="a tag" style="left:804px; top:560px">Local-first dictation for Apple Silicon</div>
+    <div id="foot" class="a foot" style="left:804px; top:640px">Free and open source · github.com/usingcolor/WhisperLocal</div>
+  </div>
+
+  <div id="vignette" class="a"></div>
+  <canvas id="grain" class="a" width="1920" height="1080"></canvas>
+</div>
+
+<div id="controls"><button id="play">Pause</button><input id="scrub" type="range" min="0" max="1000" value="0"><span id="clock">0.00 s</span></div>
+
+<script>
+"use strict";
+const DURATION = 36.2;
+// The README GIF: no grain, no drifting light, no slow camera push. Each changes
+// every pixel of every frame, which a GIF cannot compress; the rest is the same.
+const GIF = new URLSearchParams(location.search).has("gif");
+window.DURATION = DURATION;
+const $ = (id) => document.getElementById(id);
+
+// ---- Time helpers -----------------------------------------------------------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, p) => a + (b - a) * p;
+const E = {
+  linear: (p) => p,
+  outExpo: (p) => (p >= 1 ? 1 : 1 - Math.pow(2, -10 * p)),
+  outCubic: (p) => 1 - Math.pow(1 - p, 3),
+  inCubic: (p) => p * p * p,
+  inOutCubic: (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2),
+  outBack: (p) => { const c1 = 1.25, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); },
+};
+/** Eased progress of t through [t0, t1]. */
+const P = (t, t0, t1, ease = E.outExpo) => ease(clamp((t - t0) / (t1 - t0)));
+/** In over [a, a+din], out over [b-dout, b]; 0 outside. */
+const env = (t, a, b, din = 0.5, dout = 0.4) =>
+  t < a || t > b ? 0 : Math.min(P(t, a, a + din), 1 - P(t, b - dout, b, E.inCubic));
+
+function put(el, o, x = 0, y = 0, s = 1, blur = 0, extra = "") {
+  const st = el.style;
+  st.opacity = o.toFixed(4);
+  st.visibility = o <= 0.001 ? "hidden" : "visible";
+  st.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) scale(${s.toFixed(4)}) ${extra}`;
+  st.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "none";
+}
+
+/** A fixed stream of numbers, so every render of a frame is the same frame. */
+function rand(n) {
+  n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4);
+  n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15);
+  return (n >>> 0) / 4294967296;
+}
+
+/** Wraps each word of an element in a span, keeping named words marked. */
+function splitWords(el) {
+  const spans = [];
+  const walk = (node, named) => {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType === 3) {
+        const parts = child.textContent.split(/(\s+)/);
+        const frag = document.createDocumentFragment();
+        for (const part of parts) {
+          if (!part) continue;
+          if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); continue; }
+          const s = document.createElement("span");
+          s.className = "w"; s.textContent = part;
+          if (named) s.dataset.named = "1";
+          frag.appendChild(s); spans.push(s);
+        }
+        child.replaceWith(frag);
+      } else if (child.nodeType === 1) {
+        walk(child, named || child.classList.contains("nm"));
+      }
+    }
+  };
+  walk(el, false);
+  return spans;
+}
+
+/** Stage-space box of an element, whatever the preview scale. */
+let viewScale = 1;
+function box(el) {
+  const s = $("stage").getBoundingClientRect(), r = el.getBoundingClientRect();
+  return { x: (r.left - s.left) / viewScale, y: (r.top - s.top) / viewScale, w: r.width / viewScale, h: r.height / viewScale };
+}
+
+// ---- Build ------------------------------------------------------------------
+const heardA = "um can we set up an interview with joaquin for thursday";
+const heardB = ["um", "I", "think", "\u0000", "would", "be", "great", "for", "the", "team"];
+const cardData = [
+  ["Messages", "#34C759", 'Booked <span class="nm" data-chip="2">Luigi\'s</span> for Mom\'s birthday.'],
+  ["Mail", "#2F7BF0", 'The <span class="nm" data-chip="3">Q3 budget</span> is due Friday, right?'],
+  ["Notes", "#FEBC2E", "Buy printer paper."],
+  ["Messages", "#34C759", "Running ten minutes late."],
+  ["Mail", "#2F7BF0", "Attached the signed form."],
+  ["Calendar", "#FF453A", "Move the team call to ten."],
+  ["Notes", "#FEBC2E", "Call the dentist back."],
+  ["Messages", "#34C759", "Great, let's do Friday then."],
+  ["Slack", "#E01E5A", "Nice work on the launch."],
+  ["Mail", "#2F7BF0", "Thanks, see you Thursday."],
+];
+const els = {};
+const built = { h1: [], h2: [], c1: [], c2: [], cards: [], chips: [], slices: [] };
+
+function build() {
+  for (const id of ["s1dots", "s1", "s1say", "s1hear", "s1a", "s1b", "s1glitch", "s1sub", "s2", "s2k", "s2l1", "s2l2", "win", "b1", "r1",
+    "ph", "c1", "c2", "caret", "key", "hud", "hDot", "hSpin", "hCheck", "hText", "hMeter", "hLevel", "hCancel", "heard1", "heard2",
+    "tray", "tr1", "tr2", "tr3", "counter", "cnum", "timeLabel", "linkPath", "linkHead", "burst", "cap1", "cap2", "s6", "s6a", "s6b",
+    "s7", "icon", "iconGlow", "ring", "wm", "ver", "tag", "foot", "cam", "g1", "g2", "g3", "sweep", "comp", "c2n"]) els[id] = $(id);
+
+  // Scene 2 headline, word by word.
+  built.s2 = [...splitWords(els.s2l1), ...splitWords(els.s2l2)];
+
+  // What the recogniser heard, a word at a time.
+  const h1 = $("h1t");
+  heardA.split(" ").forEach((w, i) => { const s = document.createElement("span"); s.className = "w"; s.textContent = w; if (w === "um") s.style.opacity = ".6"; h1.appendChild(s); built.h1.push(s); });
+  const h2 = $("h2t");
+  heardB.forEach((w) => {
+    let s;
+    if (w === "\u0000") {
+      s = document.createElement("span"); s.className = "w swap";
+      s.innerHTML = '<span class="from miss">walking</span><span class="to">Joaquin</span>';
+      built.swap = s;
+    } else { s = document.createElement("span"); s.className = "w"; s.textContent = w; if (w === "um") s.style.opacity = ".6"; }
+    h2.appendChild(s); built.h2.push(s);
+  });
+
+  built.h1At = heardTimes(heardA.split(" "), HEARD_A);
+  built.h2At = heardTimes(heardB.map((w) => (w === "\u0000" ? "walking" : w)), HEARD_B);
+
+  // Takes landing in the composer.
+  built.c1 = splitWords(els.c1);
+  built.c2 = splitWords(els.c2);
+
+  // Other apps, other takes: the pile.
+  const pile = $("cards");
+  cardData.forEach(([app, color, html], i) => {
+    const c = document.createElement("div");
+    c.className = "a card";
+    c.innerHTML = `<div class="app"><i style="background:${color}"></i>${app}</div><div class="txt">${html}</div>`;
+    pile.appendChild(c); built.cards.push(c);
+  });
+
+  // Chips that carry a name to the tray.
+  const chipLayer = $("chips");
+  for (const text of ["Joaquin", "Luigi's", "Q3 budget"]) {
+    const c = document.createElement("div"); c.className = "a chip"; c.textContent = text;
+    chipLayer.appendChild(c); built.chips.push(c);
+  }
+
+  // Scene 1 glitch: horizontal slices of the word, shifted frame by frame.
+  const g = els.s1glitch;
+  for (let i = 0; i < 7; i++) {
+    const s = document.createElement("div");
+    s.className = "a center hero"; s.style.top = "398px"; s.textContent = "Joaquin";
+    const top = (i / 7) * 100, bottom = 100 - ((i + 1) / 7) * 100;
+    s.style.clipPath = `inset(${top}% 0 ${bottom}% 0)`;
+    s.style.textShadow = "-6px 0 rgba(255,80,110,.7), 6px 0 rgba(90,200,255,.7)";
+    g.appendChild(s); built.slices.push(s);
+  }
+
+  // Grain: a few tiles of noise, cycled.
+  built.grain = [];
+  for (let k = 0; k < 6; k++) {
+    const c = document.createElement("canvas"); c.width = c.height = 256;
+    const ctx = c.getContext("2d"), img = ctx.createImageData(256, 256);
+    for (let i = 0; i < 256 * 256; i++) {
+      const v = Math.floor(rand(i * 7 + k * 99991) * 255);
+      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v; img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0); built.grain.push(c);
+  }
+
+  // Fixed layout measurements (no transforms applied yet).
+  built.swapFrom = built.swap.querySelector(".from");
+  built.swapTo = built.swap.querySelector(".to");
+  built.wFrom = built.swapFrom.getBoundingClientRect().width / viewScale;
+  built.wTo = built.swapTo.getBoundingClientRect().width / viewScale;
+  built.swap.style.height = built.swapFrom.getBoundingClientRect().height / viewScale + "px";
+
+  const wmW = els.wm.offsetWidth, verW = els.ver.offsetWidth;
+  const textW = Math.max(wmW + 34 + verW, els.tag.offsetWidth, els.foot.offsetWidth);
+  const left = Math.round((1920 - (300 + 76 + textW)) / 2);
+  const textX = left + 300 + 76;
+  els.icon.style.left = els.ring.style.left = left + "px";
+  els.iconGlow.style.left = left - 200 + "px";
+  els.wm.style.left = textX + "px";
+  els.ver.style.left = textX + wmW + 34 + "px";
+  els.ver.style.top = 398 + (132 - els.ver.offsetHeight) / 2 + 8 + "px";
+  els.tag.style.left = els.foot.style.left = textX + 4 + "px";
+}
+
+// ---- Timeline -----------------------------------------------------------------
+// Set to the voice-over: voiceover.mjs starts each line at one of these times
+// and prints where each ends. Move a time here and its line there together.
+const S2 = 5.6;    // the promise
+const S3 = 9.0;    // take A: the window comes in
+const TAKE_A = { down: 10.0, up: 13.75, polish: 14.2, done: 14.65, out: 15.45 };
+const SENT = 15.5; // take A leaves the composer for the chat
+const S4 = 17.4;   // other apps
+const S5 = 20.7;   // back in the chat
+const TAKE_B = { down: 21.7, up: 25.05, polish: 25.45, done: 26.1, out: 26.9 };
+const FIX = 25.45; // polish reaches the kept topic, and the name flips
+const S6 = 28.5;   // where it runs
+const S7 = 31.9;   // end card
+// When the recogniser writes each heard word: "um", then the sentence spread
+// over the time it is spoken, a beat behind the voice.
+const HEARD_A = { um: 10.45, from: 11.25, to: 13.72 };
+const HEARD_B = { um: 22.2, from: 23.08, to: 25.0 };
+
+/** "um" on its own, then each word at its share of the sentence by length. */
+function heardTimes(words, h) {
+  const lengths = words.slice(1).map((w) => w.length + 1);
+  const total = lengths.reduce((a, b) => a + b, 0);
+  let before = 0;
+  return [h.um, ...lengths.map((n) => { const at = h.from + (before / total) * (h.to - h.from); before += n; return at; })];
+}
+
+function background(t) {
+  if (GIF) t = 0;
+  put(els.g1, 1, 260 + 140 * Math.sin(t * 0.23), -330 + 90 * Math.cos(t * 0.19));
+  put(els.g2, 1, 1180 + 160 * Math.cos(t * 0.17), 380 + 110 * Math.sin(t * 0.21));
+  put(els.g3, 1, -220 + 120 * Math.sin(t * 0.13 + 1), 560 + 80 * Math.cos(t * 0.15));
+  put(els.sweep, 1, -700 + ((t * 70) % 2600), 0);
+}
+
+function scene1(t) {
+  // "You say Joaquin" while the narrator says it. On "It hears…" the name
+  // breaks up and the label changes; the dots wait out his pause; "walking"
+  // snaps in as he says it.
+  const BREAK = 1.6, WALKING = 3.3, SUB = 4.1, OUT = 5.3;
+  const out = P(t, OUT, OUT + 0.5, E.inCubic);
+  put(els.s1, 1 - out, 0, -50 * out);
+  const drift = 1 + 0.035 * P(t, 0, OUT + 0.5, E.linear);
+  put(els.s1say, 1 - P(t, BREAK, BREAK + 0.25, E.outCubic), 0, 0);
+  const hearIn = P(t, BREAK + 0.2, BREAK + 0.5);
+  put(els.s1hear, hearIn, 0, 12 * (1 - hearIn));
+
+  const breaking = t >= BREAK && t < BREAK + 0.36;
+  put(els.s1a, t < BREAK ? 1 : 0, 0, 0, drift);
+  const f = Math.round(t * 60);
+  built.slices.forEach((sl, i) => {
+    if (!breaking) return put(sl, 0);
+    const k = P(t, BREAK, BREAK + 0.36, E.linear);
+    const dx = (rand(f * 13 + i * 7) - 0.5) * 90 * (0.6 + k);
+    put(sl, (rand(f * 5 + i) > 0.15 ? 1 : 0.4) * (1 - k * k), dx, 0, drift, 6 * k);
+  });
+
+  // Gone by the time "walking" lands, not faded out on top of it.
+  const dots = env(t, BREAK + 0.3, WALKING, 0.2, 0.12);
+  put(els.s1dots, dots, 0, 0);
+  [...els.s1dots.children].forEach((d, i) => {
+    const pulse = 0.35 + 0.65 * Math.max(0, Math.sin((t - BREAK) * 5.2 - i * 0.9));
+    put(d, pulse, 0, -8 * pulse);
+  });
+
+  const w = P(t, WALKING, WALKING + 0.3, E.outCubic);
+  const shake = t >= WALKING && t < WALKING + 0.22 ? (rand(f * 7) - 0.5) * 26 : 0;
+  put(els.s1b, t < WALKING ? 0 : clamp(P(t, WALKING, WALKING + 0.08, E.linear)), shake, 0, drift * lerp(1.14, 1, w), 8 * (1 - w));
+  els.s1b.style.textShadow = t >= WALKING && t < WALKING + 0.25
+    ? "-7px 0 rgba(255,80,110,.7), 7px 0 rgba(90,200,255,.7)" : "none";
+  put(els.s1sub, P(t, SUB, SUB + 0.7), 0, 22 * (1 - P(t, SUB, SUB + 0.7)));
+}
+
+function scene2(t) {
+  const o = env(t, S2 + 0.15, S2 + 3.6, 0.4, 0.45);
+  put(els.s2, o, 0, 0, lerp(1, 0.96, P(t, S2 + 3.2, S2 + 3.6, E.inCubic)));
+  const k = P(t, S2 + 0.2, S2 + 0.8);
+  put(els.s2k, k, 0, 14 * (1 - k));
+  built.s2.forEach((w, i) => {
+    const p = P(t, S2 + 0.4 + i * 0.075, S2 + 1.15 + i * 0.075);
+    put(w, p, 0, 34 * (1 - p), 1, 12 * (1 - p));
+  });
+}
+
+function scene3and5(t) {
+  // The window: in for take A, out for the other apps, back for take B, gone for the outro.
+  const inA = P(t, S3, S3 + 0.85), outA = P(t, S4, S4 + 0.55, E.inCubic);
+  const inB = P(t, S5, S5 + 0.8), outB = P(t, S6, S6 + 0.55, E.inCubic);
+  let o = 0, x = 0, y = 0, s = 1;
+  if (t < S4) { o = inA; y = 140 * (1 - inA); s = lerp(0.94, 1, inA); }
+  else if (t < S5) { o = 1 - outA; x = -260 * outA; s = lerp(1, 0.9, outA); }
+  else { o = inB * (1 - outB); x = -220 * (1 - inB); y = 60 * outB; s = lerp(0.94, 1, inB) * lerp(1, 0.95, outB); }
+  put(els.win, o, x, y, s);
+
+  // Take A in the composer, then sent.
+  const landA = t >= TAKE_A.done - 0.05;
+  const sent = P(t, SENT, SENT + 0.45, E.inOutCubic);
+  built.c1.forEach((w, i) => {
+    const p = P(t, TAKE_A.done + i * 0.035, TAKE_A.done + 0.45 + i * 0.035);
+    put(w, landA ? p : 0, 0, 18 * (1 - p), 1, 8 * (1 - p));
+  });
+  put(els.c1, 1 - sent, 0, -40 * sent);
+  const bubbleIn = P(t, SENT + 0.2, SENT + 0.7);
+  put(els.b1, t < S5 ? bubbleIn : 1, 0, 50 * (1 - bubbleIn), lerp(0.94, 1, bubbleIn));
+  const replyIn = P(t, SENT + 0.65, SENT + 1.15);
+  put(els.r1, t < S5 ? replyIn : 1, 0, 16 * (1 - replyIn));
+
+  // Take B in the composer.
+  const landB = t >= TAKE_B.done - 0.05;
+  built.c2.forEach((w, i) => {
+    const p = P(t, TAKE_B.done + i * 0.035, TAKE_B.done + 0.45 + i * 0.035);
+    put(w, landB ? p : 0, 0, 18 * (1 - p), 1, 8 * (1 - p));
+  });
+  put(els.c2, t < S5 - 0.25 ? 0 : 1);
+  const nameGlow = env(t, TAKE_B.done + 0.3, TAKE_B.done + 1.6, 0.3, 0.5);
+  els.c2n.style.textShadow = nameGlow > 0 ? `0 0 ${18 * nameGlow}px rgba(47,123,240,${0.8 * nameGlow})` : "none";
+  els.c2n.style.color = nameGlow > 0 ? `rgb(${Math.round(lerp(28, 47, nameGlow))},${Math.round(lerp(31, 123, nameGlow))},${Math.round(lerp(38, 240, nameGlow))})` : "";
+
+  // Placeholder and caret.
+  const typingA = t >= TAKE_A.done - 0.05 && t < SENT + 0.05;
+  const typingB = t >= TAKE_B.done - 0.05;
+  put(els.ph, (typingA || typingB) ? 0 : 1);
+  const caretOn = Math.floor(t * 1.9) % 2 === 0;
+  const landed = (words, done) => words.filter((w, i) => t >= done + i * 0.035 + 0.12).pop();
+  const last = typingB ? landed(built.c2, TAKE_B.done) : typingA ? landed(built.c1, TAKE_A.done) : null;
+  const caretX = last ? 30 + last.offsetLeft + last.offsetWidth : 30;
+  els.caret.style.left = caretX + 4 + "px";
+  put(els.caret, (caretOn || typingA || typingB) && !(t > SENT && t < SENT + 0.4) ? 1 : 0);
+}
+
+function keyAndHud(t) {
+  const takes = [TAKE_A, TAKE_B];
+  const k = takes.find((k) => t >= k.down - 0.6 && t <= k.out + 0.5);
+  // The fn key, held for the take.
+  if (!k) { put(els.key, 0); put(els.hud, 0); return; }
+  const keyIn = env(t, k.down - 0.6, k.up + 0.8, 0.35, 0.4);
+  const held = t >= k.down && t < k.up;
+  put(els.key, keyIn, 0, held ? 6 : 0, 1);
+  els.key.style.boxShadow = held
+    ? "inset 0 1px 0 rgba(255,255,255,.18), 0 1px 0 #141B36, 0 6px 14px rgba(0,0,0,.35), 0 0 0 3px rgba(140,184,255,.55), 0 0 34px rgba(77,147,255,.55)"
+    : "";
+
+  // HUD: in on the key, through each phase, out after Done.
+  const hudIn = P(t, k.down - 0.05, k.down + 0.45, E.outBack);
+  const hudOut = P(t, k.out, k.out + 0.35, E.inCubic);
+  const o = clamp(P(t, k.down - 0.05, k.down + 0.25)) * (1 - hudOut);
+  const cx = 190 + 1110 / 2 + 50;
+  put(els.hud, o, cx - els.hud.offsetWidth / 2, 22 * (1 - hudIn), lerp(0.9, 1, hudIn));
+  let phase = "rec";
+  if (t >= k.done) phase = "done"; else if (t >= k.polish) phase = "polish"; else if (t >= k.up) phase = "trans";
+  els.hText.textContent = { rec: "Listening…", trans: "Transcribing…", polish: "Polishing…", done: "Done" }[phase];
+  put(els.hDot, phase === "rec" ? 1 : 0, 0, 0, 1 + 0.08 * Math.sin(t * 9));
+  put(els.hSpin, phase === "trans" || phase === "polish" ? 1 : 0, 0, 0, 1, 0, `rotate(${(t * 423) % 360}deg)`);
+  const checkP = P(t, k.done, k.done + 0.35, E.outBack);
+  put(els.hCheck, phase === "done" ? 1 : 0, 0, 0, lerp(0.4, 1, checkP));
+  put(els.hMeter, phase === "rec" ? 1 : 0);
+  const level = 0.18 + 0.72 * Math.abs(Math.sin(t * 7.3) * Math.sin(t * 3.1 + 0.7) * Math.cos(t * 1.7));
+  els.hLevel.style.width = `${Math.round(clamp(level) * 100)}%`;
+  put(els.hCancel, phase === "done" ? 1 - P(t, k.done, k.done + 0.25) : 1);
+}
+
+function heard(t) {
+  // Take A: the words as the recogniser heard them, as they are said.
+  const oA = env(t, TAKE_A.down + 0.1, TAKE_A.done + 0.25, 0.25, 0.35);
+  put(els.heard1, oA, 0, 0);
+  built.h1.forEach((w, i) => put(w, P(t, built.h1At[i], built.h1At[i] + 0.1), 0, 0));
+
+  // Take B, with the misheard name that context repairs.
+  const oB = env(t, TAKE_B.down + 0.1, TAKE_B.done + 0.35, 0.25, 0.35);
+  put(els.heard2, oB, 0, 0);
+  built.h2.forEach((w, i) => put(w, P(t, built.h2At[i], built.h2At[i] + 0.1), 0, 0));
+  const m = P(t, FIX, FIX + 0.32, E.inOutCubic);
+  built.swap.style.width = lerp(built.wFrom, built.wTo, P(t, FIX, FIX + 0.4, E.inOutCubic)) + "px";
+  put(built.swapFrom, 1 - P(t, FIX, FIX + 0.2, E.linear), 0, -30 * m, 1, 3 * m);
+  put(built.swapTo, P(t, FIX + 0.1, FIX + 0.32, E.linear), 0, 30 * (1 - m), 1, 3 * (1 - m));
+  const glow = env(t, FIX - 0.05, FIX + 1.2, 0.3, 0.6);
+  built.swapTo.style.textShadow = `0 0 ${24 * glow}px rgba(77,147,255,${0.9 * glow})`;
+}
+
+// Names flown to the tray: take A's from the sent message, the others' from their cards.
+const CHIP_A = [SENT + 0.55, SENT + 1.2];
+const CHIP_CARDS = [[S4 + 1.0, S4 + 1.55], [S4 + 2.0, S4 + 2.55]];
+
+function tray(t) {
+  const trayIn = P(t, SENT + 0.35, SENT + 0.85);
+  const trayOut = P(t, S6, S6 + 0.5, E.inCubic);
+  const rows = [
+    { el: els.tr1, at: CHIP_A[1] },
+    { el: els.tr2, at: CHIP_CARDS[0][1] },
+    { el: els.tr3, at: CHIP_CARDS[1][1] },
+  ];
+  const shown = rows.filter((r) => t >= r.at).length;
+  const growTo = (n) => (n === 0 ? 66 : 76 + 70 * n);
+  const h = lerp(growTo(Math.max(0, shown - 1)), growTo(shown), shown ? P(t, rows[shown - 1].at, rows[shown - 1].at + 0.45) : 1);
+  els.tray.style.height = h + "px";
+  put(els.tray, t < SENT + 0.35 ? 0 : trayIn * (1 - trayOut), 60 * (1 - trayIn) + 120 * trayOut, 0);
+  rows.forEach((r, i) => {
+    const p = P(t, r.at, r.at + 0.5, E.outBack);
+    r.el.style.top = 70 + i * 70 + "px";
+    put(r.el, t < r.at ? 0 : clamp(P(t, r.at, r.at + 0.25)), 0, 0, lerp(0.86, 1, p));
+  });
+  // Row 1 lights up when polish reaches for it.
+  const hot = env(t, FIX - 0.45, FIX + 1.3, 0.3, 0.6);
+  els.tr1.style.background = `rgba(77,147,255,${0.08 + 0.3 * hot})`;
+  els.tr1.style.borderColor = `rgba(140,184,255,${0.06 + 0.7 * hot})`;
+  els.tr1.style.boxShadow = hot > 0 ? `0 0 ${40 * hot}px rgba(77,147,255,${0.6 * hot})` : "none";
+}
+
+function flyChip(chip, t, t0, t1, from, to) {
+  if (t < t0 || t > t1 + 0.05) return put(chip, 0);
+  const p = P(t, t0, t1, E.inOutCubic);
+  const cw = chip.offsetWidth, ch = chip.offsetHeight;
+  const x0 = from.x + from.w / 2 - cw / 2, y0 = from.y + from.h / 2 - ch / 2;
+  const x1 = to.x + to.w / 2 - cw / 2, y1 = to.y + to.h / 2 - ch / 2;
+  // An arc, lifting above the straight line.
+  const x = lerp(x0, x1, p), y = lerp(y0, y1, p) - Math.sin(p * Math.PI) * 120;
+  const o = Math.min(P(t, t0, t0 + 0.15, E.linear), 1 - P(t, t1 - 0.12, t1, E.linear));
+  put(chip, o, x, y, lerp(1, 0.9, p));
+}
+
+function chips(t) {
+  if (t >= CHIP_A[0] && t <= CHIP_A[1] + 0.1) {
+    flyChip(built.chips[0], t, CHIP_A[0], CHIP_A[1], box($("b1n1")), box(els.tr1));
+  } else put(built.chips[0], 0);
+  [[built.chips[1], 0, els.tr2], [built.chips[2], 1, els.tr3]].forEach(([chip, idx, row], i) => {
+    const [t0, t1] = CHIP_CARDS[i];
+    if (t >= t0 && t <= t1 + 0.05) {
+      const src = built.cards[idx].querySelector("[data-chip]");
+      flyChip(chip, t, t0, t1, box(src), box(row));
+    } else put(chip, 0);
+  });
+}
+
+function cards(t) {
+  // Two takes to read, then eight more landing fast on the pile.
+  const land = [0.7, 1.75, 2.45, 2.51, 2.57, 2.63, 2.69, 2.75, 2.81, 2.87].map((d) => S4 + d);
+  const exit = P(t, S4 + 3.0, S4 + 3.4, E.inCubic);
+  built.cards.forEach((c, i) => {
+    const t0 = land[i] - (i < 2 ? 0.4 : 0.22);
+    const p = P(t, t0, land[i], E.outExpo);
+    const rot = (rand(i * 31 + 5) - 0.5) * 7;
+    const baseX = 560 + (rand(i * 17 + 3) - 0.5) * 40, baseY = 420 - i * 7;
+    const x = lerp(baseX + 1100, baseX, p) - 900 * exit;
+    const y = lerp(baseY + 60, baseY, p);
+    const onTop = land.filter((l) => l <= t).length - 1;
+    const depth = Math.max(0, onTop - i);
+    // Solid from the first frame: they fly in from off screen, and a card
+    // fading as it flies reads as a grey ghost.
+    const o = t < t0 ? 0 : 1 - exit;
+    put(c, o, x, y, lerp(1.05, 1, p) * (1 - depth * 0.012), 0, `rotate(${rot * p}deg)`);
+    c.style.zIndex = String(i + 1);
+    c.style.boxShadow = depth > 0 ? "0 10px 26px rgba(2,6,24,.4)" : "";
+  });
+  const n = land.filter((l) => l <= t).length;
+  els.cnum.textContent = n <= 1 ? "+1 take" : n < 10 ? `+${n} takes` : "10 takes later";
+  const cIn = P(t, S4 + 0.4, S4 + 0.8), cOut = P(t, S4 + 3.2, S4 + 3.6, E.inCubic);
+  put(els.counter, t < S4 + 0.4 ? 0 : cIn * (1 - cOut), 0, 12 * (1 - cIn));
+  const lIn = P(t, S5 + 0.2, S5 + 0.65), lOut = P(t, S5 + 1.55, S5 + 1.95, E.inCubic);
+  put(els.timeLabel, t < S5 + 0.2 ? 0 : lIn * (1 - lOut), 0, -86 + 12 * (1 - lIn));
+}
+
+function link(t) {
+  // The line from the kept topic to the misheard name, drawn as polish reaches for it.
+  const from = FIX - 0.45;
+  const draw = P(t, from, FIX, E.inOutCubic);
+  const fade = 1 - P(t, FIX + 0.55, FIX + 1.1, E.inCubic);
+  if (t < from || t > FIX + 1.15) { els.linkPath.setAttribute("d", ""); put(els.linkHead, 0); put(els.burst, 0); return; }
+  const a = box(els.tr1), b = box(built.swap);
+  const x0 = a.x + 8, y0 = a.y + a.h / 2;
+  const x1 = b.x + b.w / 2, y1 = b.y - 8;
+  const d = `M ${x0} ${y0} C ${x0 - 40} ${y0 + 520}, ${x1 + 380} ${y1 - 24}, ${x1} ${y1}`;
+  els.linkPath.setAttribute("d", d);
+  const len = els.linkPath.getTotalLength();
+  els.linkPath.style.strokeDasharray = `${len}`;
+  els.linkPath.style.strokeDashoffset = `${len * (1 - draw)}`;
+  els.linkPath.style.opacity = fade.toFixed(3);
+  const head = els.linkPath.getPointAtLength(len * draw);
+  els.linkHead.setAttribute("cx", head.x); els.linkHead.setAttribute("cy", head.y);
+  els.linkHead.style.opacity = (draw < 1 ? 1 : 0) * fade;
+  // A ring where the name changes.
+  const bp = P(t, FIX, FIX + 0.65, E.outCubic);
+  const size = lerp(24, 150, bp);
+  els.burst.style.width = els.burst.style.height = size + "px";
+  put(els.burst, t < FIX ? 0 : (1 - bp) * 0.7, x1 - size / 2, b.y + b.h / 2 - size / 2);
+}
+
+function camera(t) {
+  if (GIF) return;
+  // Slow push through take A, a lean toward the repair in take B.
+  let s = 1, ox = 50, oy = 50;
+  if (t < S4) s = lerp(1, 1.025, P(t, S3, S4, E.inOutCubic));
+  else if (t < S5) s = lerp(1.025, 1, P(t, S4, S4 + 0.8, E.inOutCubic));
+  else {
+    const lean = env(t, FIX - 0.7, FIX + 1.9, 0.7, 0.9);
+    s = lerp(1, 1.035, P(t, S5, S6 + 0.5, E.inOutCubic)) + 0.03 * lean;
+    ox = 45; oy = lerp(50, 72, lean);
+  }
+  els.cam.style.transformOrigin = `${ox}% ${oy}%`;
+  els.cam.style.transform = `scale(${s.toFixed(4)})`;
+}
+
+function captions(t) {
+  const c1 = env(t, SENT + 0.45, SENT + 1.95, 0.5, 0.35);
+  put(els.cap1, c1, 0, 18 * (1 - P(t, SENT + 0.45, SENT + 1.0)));
+  const c2 = env(t, TAKE_B.done + 0.2, S6 + 0.1, 0.5, 0.4);
+  put(els.cap2, c2, 0, 18 * (1 - P(t, TAKE_B.done + 0.2, TAKE_B.done + 0.75)));
+}
+
+function scene6(t) {
+  const o = env(t, S6 + 0.3, S7 + 0.1, 0.5, 0.45);
+  put(els.s6, o, 0, 0, lerp(1, 0.97, P(t, S7 - 0.3, S7 + 0.1, E.inCubic)));
+  const a = P(t, S6 + 0.35, S6 + 1.0);
+  put(els.s6a, a, 0, 30 * (1 - a), 1, 10 * (1 - a));
+  const b = P(t, S6 + 0.9, S6 + 1.5);
+  put(els.s6b, b, 0, 22 * (1 - b));
+}
+
+function scene7(t) {
+  const on = t >= S7 - 0.05;
+  put(els.s7, on ? 1 : 0);
+  if (!on) return;
+  const ip = P(t, S7, S7 + 0.8, E.outBack);
+  put(els.icon, P(t, S7, S7 + 0.3), 0, 0, lerp(0.7, 1, ip));
+  put(els.iconGlow, 0.9 * P(t, S7 + 0.05, S7 + 1.0) * (0.85 + 0.15 * Math.sin(t * 2.2)), 0, 0, lerp(0.6, 1, P(t, S7 + 0.05, S7 + 1.0)));
+  const rp = P(t, S7 + 0.3, S7 + 1.2, E.outCubic);
+  put(els.ring, t < S7 + 0.3 ? 0 : 0.8 * (1 - rp), 0, 0, lerp(1, 1.45, rp));
+  const wp = P(t, S7 + 0.35, S7 + 1.05);
+  put(els.wm, wp, 40 * (1 - wp), 0, 1, 10 * (1 - wp));
+  els.wm.style.backgroundPosition = `${lerp(100, 0, P(t, S7 + 1.3, S7 + 2.5, E.inOutCubic))}% 0`;
+  const vp = P(t, S7 + 0.7, S7 + 1.2, E.outBack);
+  put(els.ver, clamp(P(t, S7 + 0.7, S7 + 0.9)), 0, 0, lerp(0.6, 1, vp));
+  const tg = P(t, S7 + 0.85, S7 + 1.45);
+  put(els.tag, tg, 0, 16 * (1 - tg));
+  const ft = P(t, S7 + 1.2, S7 + 1.8);
+  put(els.foot, ft, 0, 12 * (1 - ft));
+}
+
+function grain(t) {
+  const c = $("grain"), ctx = c.getContext("2d");
+  if (GIF) return ctx.clearRect(0, 0, 1920, 1080);
+  const f = Math.round(t * 60);
+  const tile = built.grain[f % built.grain.length];
+  ctx.clearRect(0, 0, 1920, 1080);
+  ctx.fillStyle = ctx.createPattern(tile, "repeat");
+  const ox = Math.floor(rand(f * 3 + 1) * 256), oy = Math.floor(rand(f * 3 + 2) * 256);
+  ctx.save(); ctx.translate(-ox, -oy); ctx.fillRect(0, 0, 1920 + 256, 1080 + 256); ctx.restore();
+}
+
+function renderAt(t) {
+  t = clamp(t, 0, DURATION);
+  background(t);
+  scene1(t);
+  scene2(t);
+  camera(t);
+  scene3and5(t);
+  keyAndHud(t);
+  heard(t);
+  tray(t);
+  cards(t);
+  chips(t);
+  link(t);
+  captions(t);
+  scene6(t);
+  scene7(t);
+  grain(t);
+  // The whole piece eases out of the last half second rather than cutting.
+  $("stage").style.filter = t > DURATION - 0.5 ? `brightness(${(1 - P(t, DURATION - 0.5, DURATION, E.inCubic) * 0.35).toFixed(3)})` : "none";
+}
+window.renderAt = renderAt;
+
+// ---- Start -------------------------------------------------------------------
+async function start() {
+  const rendering = new URLSearchParams(location.search).has("render");
+  if (!rendering) {
+    document.body.classList.add("preview");
+    const fit = () => {
+      viewScale = Math.min(innerWidth / 1920, (innerHeight - 48) / 1080);
+      $("stage").style.transform = `scale(${viewScale})`;
+      $("stage").style.margin = "0";
+    };
+    fit(); addEventListener("resize", fit);
+  }
+  await document.fonts.ready;
+  await $("icon").decode().catch(() => {});
+  build();
+  renderAt(0);
+  window.__ready = true;
+  if (rendering) return;
+
+  let playing = true, t = 0, last = performance.now();
+  const scrub = $("scrub"), clock = $("clock"), play = $("play");
+  const show = () => { renderAt(t); scrub.value = String(Math.round((t / DURATION) * 1000)); clock.textContent = `${t.toFixed(2)} s`; };
+  play.onclick = () => { playing = !playing; play.textContent = playing ? "Pause" : "Play"; last = performance.now(); };
+  scrub.oninput = () => { t = (scrub.value / 1000) * DURATION; playing = false; play.textContent = "Play"; show(); };
+  addEventListener("keydown", (e) => {
+    if (e.key === " ") { e.preventDefault(); play.onclick(); }
+    if (e.key === "ArrowRight") { t = Math.min(DURATION, t + 1 / 60); playing = false; show(); }
+    if (e.key === "ArrowLeft") { t = Math.max(0, t - 1 / 60); playing = false; show(); }
+  });
+  const loop = (now) => {
+    if (playing) { t = (t + (now - last) / 1000) % DURATION; show(); }
+    last = now; requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+start();
+</script>
+</body>
+</html>

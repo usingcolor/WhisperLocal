@@ -1,0 +1,272 @@
+import AppKit
+import SwiftUI
+
+/// Menu-bar panel, laid out like Apple's own Battery and Wi-Fi menus: a bold title
+/// with the value trailing on the same line, secondary detail lines under it, and
+/// actions grouped by separators.
+///
+/// This needs `.menuBarExtraStyle(.window)`. The classic `.menu` style converts the
+/// content to NSMenuItems — `Text` becomes a disabled grey row and font, colour, and
+/// alignment modifiers are dropped — so none of this hierarchy survives there.
+struct MenuBarView: View {
+    @ObservedObject var controller: DictationController
+    @ObservedObject private var permissions = PermissionManager.shared
+    @ObservedObject private var hotKey = HotKeyManager.shared
+    @ObservedObject private var updater = AppUpdater.shared
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
+    /// Read when the menu opens rather than in the body: asking Core Audio for the
+    /// device list on every redraw would run it while the level meter animates.
+    @State private var inputItems: [InputMenuItem] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            MenuBarHeader(controller: controller)
+            MenuSeparator()
+
+            Group {
+                MenuSectionLabel("Context")
+                MenuDetail(controller.contextSummary)
+                    .padding(.bottom, 2)
+                MenuRow("Edit Context…") { present("Context", "context") }
+                if !controller.contextDraft().entries.isEmpty {
+                    MenuRow("Clear All Context") { controller.clearAllContext() }
+                }
+                MenuSeparator()
+            }
+
+            MenuRow(updater.menuTitle, isEnabled: !(updater.isBusy && !AppIdentity.isDevBuild)) {
+                dismiss()
+                Task { await updater.handleMenuClick() }
+            }
+            MenuSeparator()
+
+            MenuRow("Settings…", shortcut: "⌘,") {
+                present(AppIdentity.settingsWindowTitle, "settings")
+                controller.showSettings = true
+            }
+            MenuRow("Dictation Log…") { present("Dictation Log", "log") }
+            MenuRow("Permissions / Onboarding…") {
+                present("Welcome", "onboarding")
+                controller.showOnboarding = true
+            }
+            MenuSeparator()
+
+            MenuSectionLabel("Microphone")
+            ForEach(inputItems) { item in
+                MenuRow(item.title, shortcut: item.isChecked ? "✓" : nil, isEnabled: item.isEnabled) {
+                    controller.recorder.useInput(uid: item.uid)
+                    refreshInputs()
+                }
+            }
+            MenuSeparator()
+
+            MenuRow("Reload the transcription model") {
+                dismiss()
+                Task {
+                    await controller.transcription.ensureModel(
+                        named: controller.settings.asrModel, force: true
+                    )
+                }
+            }
+            MenuSeparator()
+
+            MenuRow("Quit \(AppIdentity.productName)", shortcut: "⌘Q") {
+                // Straight to terminate so the app delegate can ask about work in
+                // flight. Stopping first made the question unanswerable — it threw
+                // the take away before anything could notice it existed.
+                NSApplication.shared.terminate(nil)
+            }
+        }
+        .padding(.vertical, 6)
+        .frame(width: 292)
+        .onAppear {
+            refreshInputs()
+            controller.start()
+            if controller.showOnboarding {
+                // openOnly: present() dismisses, and dismissing the panel from inside
+                // its own onAppear is not a state change worth making.
+                openOnly("Welcome", "onboarding")
+            }
+        }
+    }
+
+    /// A `.window` style panel does not dismiss itself the way an NSMenu does, so
+    /// every row that leads somewhere has to close it explicitly.
+    private func refreshInputs() {
+        inputItems = InputMenu.items(
+            devices: AudioInputSelection.inputDevices(),
+            chosenUID: controller.settings.preferredInputDeviceUID
+        )
+    }
+
+    private func present(_ title: String, _ id: String) {
+        dismiss()
+        openOnly(title, id)
+    }
+
+    private func openOnly(_ title: String, _ id: String) {
+        AppWindowFocus.present(title: title) { openWindow(id: id) }
+    }
+
+}
+
+/// Name, version, and what the app is doing. Its own view so the SwiftUI panel and
+/// the NSMenu share one copy — the status line carries the secure-input and missing
+/// permission warnings, and those must read the same in both.
+struct MenuBarHeader: View {
+    @ObservedObject var controller: DictationController
+    @ObservedObject private var permissions = PermissionManager.shared
+    @ObservedObject private var hotKey = HotKeyManager.shared
+
+    /// Title and version share a line, the way "Battery" and "80%" do.
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(AppIdentity.productName)
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Text(AppIdentity.versionSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Text(statusLine)
+                .font(.subheadline)
+                .foregroundStyle(statusIsWarning ? Color.orange : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(controller.polishStatusLine)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
+    }
+
+    /// Missing permissions are the one status worth colouring — everything else is
+    /// informational and stays secondary so the title keeps the emphasis.
+    private var statusIsWarning: Bool {
+        AppInstallLocation.current != nil
+            || HotKeyManager.secureInputActive
+            || !permissions.inputMonitoringTrusted
+            || !permissions.accessibilityTrusted
+    }
+
+    private var statusLine: String {
+        // Checked before the permission lines: with secure input on, the hotkey is
+        // dead no matter how the permissions look, and this is the only place the
+        // user can be told — the hotkey cannot fire to show anything itself.
+        // Before everything: a temporary copy cannot keep a login item or hold on
+        // to permissions, and the user has no way to learn that on their own.
+        if let problem = AppInstallLocation.current {
+            return AppInstallLocation.headline(problem, productName: AppIdentity.productName)
+        }
+        if HotKeyManager.secureInputActive {
+            return "A password field is focused — the hotkey won’t fire until you click elsewhere"
+        }
+        if !permissions.inputMonitoringTrusted {
+            return "Input Monitoring missing — hotkey won’t fire in other apps"
+        }
+        if !permissions.accessibilityTrusted {
+            return "Accessibility missing — text won’t paste into other apps"
+        }
+        if controller.transcription.isLoadingModel || !controller.transcription.isReady {
+            return controller.transcription.statusMessage
+        }
+        switch controller.phase {
+        case .idle, .success:
+            return controller.readyStatusLine
+        case .recording, .waitingForMic:
+            return controller.isIntentTake ? "Listening for context…" : controller.phase.label
+        default:
+            return controller.phase.label
+        }
+    }
+}
+
+// MARK: - Pieces
+
+/// A menu item. `.window` style gives no row highlighting for free, so the hover
+/// fill that makes a list read as a menu has to be drawn here.
+private struct MenuRow: View {
+    let title: String
+    var shortcut: String?
+    var isEnabled: Bool = true
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    init(_ title: String, shortcut: String? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
+        self.title = title
+        self.shortcut = shortcut
+        self.isEnabled = isEnabled
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(title)
+                Spacer(minLength: 8)
+                if let shortcut {
+                    Text(shortcut)
+                        .foregroundStyle(hovering ? Color.white.opacity(0.8) : .secondary)
+                }
+            }
+            .font(.system(size: 13))
+            .foregroundStyle(hovering ? Color.white : .primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(hovering ? Color.accentColor : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
+        .padding(.horizontal, 5)
+        .onHover { hovering = isEnabled && $0 }
+    }
+}
+
+/// Group heading, matching the weight Apple gives "Energy Mode".
+private struct MenuSectionLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.top, 2)
+            .padding(.bottom, 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MenuDetail: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MenuSeparator: View {
+    var body: some View {
+        Divider()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+    }
+}

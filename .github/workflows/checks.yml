@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, oss]
+  pull_request:
+
+jobs:
+  polish-tests:
+    name: PolishTests
+    # mlx-swift 0.31.6 needs Swift 6.3 tools; macos-15 / Xcode 16.4 is Swift 6.1.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Test distribution privacy checks
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Run PolishTests
+        run: |
+          xcodebuild test -scheme PolishTests \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build/DerivedData \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+      - name: Build application
+        run: |
+          xcodebuild build -scheme WhisperLocal -configuration Release \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build/DerivedData \
+            -skipPackagePluginValidation -skipMacroValidation \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Build benchmarks
+        run: |
+          for scheme in PolishBench ContextBench; do
+            xcodebuild build -scheme "$scheme" -configuration Release \
+              -destination 'platform=macOS,arch=arm64' \
+              -derivedDataPath build/DerivedData \
+              -skipPackagePluginValidation -skipMacroValidation \
+              ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          done

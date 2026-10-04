@@ -1,0 +1,148 @@
+{
+  "note": "Synthetic replay of the illustrated 0.2.5 demo. Exactly ten intervening takes separate Joaquin from the mistaken walking transcription. This verifies a model/text pipeline, not microphone or ASR accuracy. Kept separate from the ten-session scored benchmark.",
+  "persona": {
+    "personalContext": "Keep the speaker's wording, formality and language. Fix grammar and punctuation. Never translate.",
+    "dictionary": []
+  },
+  "sessions": [
+    {
+      "id": "demo",
+      "summary": "Interview with Joaquin survives ten intervening takes in other apps",
+      "threads": [
+        {
+          "id": "interview",
+          "topic": "Interview with Joaquin",
+          "keywords": [
+            "Joaquin"
+          ]
+        },
+        {
+          "id": "birthday",
+          "topic": "Mom's birthday at Luigi's",
+          "keywords": [
+            "Luigi"
+          ]
+        },
+        {
+          "id": "budget",
+          "topic": "Q3 budget review",
+          "keywords": [
+            "Q3"
+          ]
+        }
+      ],
+      "takes": [
+        {
+          "id": "demo-01",
+          "minute": 0,
+          "app": "Messages",
+          "role": "setup",
+          "raw": "Um, can we set up an interview with Joaquin for Thursday?",
+          "expected": "Can we set up an interview with Joaquin for Thursday?",
+          "thread": "interview"
+        },
+        {
+          "id": "demo-02",
+          "minute": 1,
+          "app": "Notes",
+          "role": "setup",
+          "raw": "Um, let's plan Mom's birthday at Luigi's.",
+          "expected": "Let's plan Mom's birthday at Luigi's.",
+          "thread": "birthday"
+        },
+        {
+          "id": "demo-03",
+          "minute": 2,
+          "app": "Numbers",
+          "role": "setup",
+          "raw": "We should review the Q3 budget today.",
+          "expected": "We should review the Q3 budget today.",
+          "thread": "budget"
+        },
+        {
+          "id": "demo-04",
+          "minute": 3,
+          "app": "Mail",
+          "role": "control",
+          "raw": "Please send the draft today.",
+          "expected": "Please send the draft today."
+        },
+        {
+          "id": "demo-05",
+          "minute": 4,
+          "app": "Messages",
+          "role": "distractor",
+          "raw": "Could you bring the cake on Saturday?",
+          "expected": "Could you bring the cake on Saturday?",
+          "thread": "birthday"
+        },
+        {
+          "id": "demo-06",
+          "minute": 5,
+          "app": "Numbers",
+          "role": "distractor",
+          "raw": "Keep the travel budget the same.",
+          "expected": "Keep the travel budget the same.",
+          "thread": "budget"
+        },
+        {
+          "id": "demo-07",
+          "minute": 6,
+          "app": "Slack",
+          "role": "control",
+          "raw": "The deadline is five oclock.",
+          "expected": "The deadline is five oclock."
+        },
+        {
+          "id": "demo-08",
+          "minute": 7,
+          "app": "Mail",
+          "role": "smalltalk",
+          "raw": "Thanks.",
+          "expected": "Thanks."
+        },
+        {
+          "id": "demo-09",
+          "minute": 8,
+          "app": "Notes",
+          "role": "distractor",
+          "raw": "Book the table for six people.",
+          "expected": "Book the table for six people.",
+          "thread": "birthday"
+        },
+        {
+          "id": "demo-10",
+          "minute": 9,
+          "app": "Numbers",
+          "role": "distractor",
+          "raw": "Cut the marketing budget by ten percent.",
+          "expected": "Cut the marketing budget by ten percent.",
+          "thread": "budget"
+        },
+        {
+          "id": "demo-11",
+          "minute": 10,
+          "app": "Mail",
+          "role": "control",
+          "raw": "Please move the meeting to six.",
+          "expected": "Please move the meeting to six."
+        },
+        {
+          "id": "demo-12",
+          "minute": 11,
+          "app": "Messages",
+          "role": "probe",
+          "raw": "Um, I think walking would be great for the team.",
+          "expected": "I think Joaquin would be great for the team.",
+          "thread": "interview",
+          "required": [
+            "Joaquin"
+          ],
+          "forbidden": [
+            "walking"
+          ]
+        }
+      ]
+    }
+  ]
+}

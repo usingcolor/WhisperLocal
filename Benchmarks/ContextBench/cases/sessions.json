@@ -1,0 +1,1522 @@
+{
+ "note": "Scripted dictation sessions for the context benchmark. Invented people, projects and places; nothing here comes from anyone's real log. Each session interleaves two threads. Probes mishear a name that an earlier take said correctly: a near probe's name was said within the last eight takes, which the recent-dictations examples can carry; a far probe's name was not, so only context can recover it. Controls must come back unchanged in meaning and language.",
+ "persona": {
+  "personalContext": "PERSONAL\nA machine-learning researcher who also builds small apps. Dictates in English, and in Korean when chatting with family. Keep the speaker's wording, formality and language; fix grammar and punctuation. Never translate.\n\nEXCEPTIONS\nApply only the notes that match <target-app>. Ignore the rest.\n- Terminal: if a command was dictated, keep it as a command.\n- Slack / Messages / KakaoTalk: keep casual.",
+  "dictionary": [
+   "PyTorch",
+   "GitHub",
+   "Overleaf",
+   "README.md",
+   "ICLR"
+  ]
+ },
+ "sessions": [
+  {
+   "id": "s01",
+   "summary": "Paper rebuttal in English, lunch plans with family in Korean",
+   "threads": [
+    {
+     "id": "paper",
+     "topic": "Pellucid rebuttal for ICLR",
+     "keywords": [
+      "pellucid",
+      "rebuttal"
+     ]
+    },
+    {
+     "id": "lunch",
+     "topic": "Saturday family lunch at 소담정",
+     "keywords": [
+      "소담정",
+      "lunch",
+      "점심"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s01-01",
+     "minute": 0,
+     "app": "Overleaf",
+     "thread": "paper",
+     "role": "setup",
+     "raw": "okay so I'm writing the Pellucid rebuttal for ICLR, uh, reviewer two wants more on the scanning order",
+     "expected": "Okay, so I'm writing the Pellucid rebuttal for ICLR. Reviewer two wants more on the scanning order."
+    },
+    {
+     "id": "s01-02",
+     "minute": 2,
+     "app": "KakaoTalk",
+     "thread": "lunch",
+     "role": "setup",
+     "raw": "엄마 이번 주 토요일 점심은 소담정에서 먹자",
+     "expected": "엄마, 이번 주 토요일 점심은 소담정에서 먹자.",
+     "language": "ko"
+    },
+    {
+     "id": "s01-03",
+     "minute": 3,
+     "app": "KakaoTalk",
+     "thread": "lunch",
+     "role": "probe",
+     "raw": "소 담장 예약은 내가 할게",
+     "expected": "소담정 예약은 내가 할게.",
+     "required": [
+      "소담정"
+     ],
+     "forbidden": [
+      "소 담장"
+     ],
+     "language": "ko"
+    },
+    {
+     "id": "s01-04",
+     "minute": 5,
+     "app": "ChatGPT",
+     "thread": "paper",
+     "role": "distractor",
+     "raw": "can you list what the reviewers said about the scanning order, just the main points",
+     "expected": "Can you list what the reviewers said about the scanning order? Just the main points."
+    },
+    {
+     "id": "s01-05",
+     "minute": 7,
+     "app": "Overleaf",
+     "thread": "paper",
+     "role": "control",
+     "raw": "move the table to the appendix and, um, shorten the caption",
+     "expected": "Move the table to the appendix and shorten the caption."
+    },
+    {
+     "id": "s01-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "sounds good thanks",
+     "expected": "Sounds good, thanks."
+    },
+    {
+     "id": "s01-07",
+     "minute": 10,
+     "app": "KakaoTalk",
+     "thread": "lunch",
+     "role": "distractor",
+     "raw": "아빠도 같이 오신대 네 명으로 할게",
+     "expected": "아빠도 같이 오신대. 네 명으로 할게.",
+     "language": "ko"
+    },
+    {
+     "id": "s01-08",
+     "minute": 12,
+     "app": "Overleaf",
+     "thread": "paper",
+     "role": "distractor",
+     "raw": "rewrite the first paragraph of the response so it sounds less defensive",
+     "expected": "Rewrite the first paragraph of the response so it sounds less defensive."
+    },
+    {
+     "id": "s01-09",
+     "minute": 14,
+     "app": "KakaoTalk",
+     "thread": "lunch",
+     "role": "control",
+     "raw": "시간은 열두 시 반 괜찮아",
+     "expected": "시간은 열두 시 반 괜찮아.",
+     "language": "ko"
+    },
+    {
+     "id": "s01-10",
+     "minute": 16,
+     "app": "KakaoTalk",
+     "thread": "lunch",
+     "role": "distractor",
+     "raw": "주차는 근처 공영주차장에 하면 돼",
+     "expected": "주차는 근처 공영주차장에 하면 돼.",
+     "language": "ko"
+    },
+    {
+     "id": "s01-11",
+     "minute": 19,
+     "app": "Overleaf",
+     "thread": "paper",
+     "role": "probe",
+     "raw": "add a line saying pale lucid learns the scanning order instead of fixing it",
+     "expected": "Add a line saying Pellucid learns the scanning order instead of fixing it.",
+     "required": [
+      "Pellucid"
+     ],
+     "forbidden": [
+      "pale lucid"
+     ]
+    },
+    {
+     "id": "s01-12",
+     "minute": 21,
+     "app": "KakaoTalk",
+     "thread": "lunch",
+     "role": "probe",
+     "raw": "쏘 담정 메뉴 미리 봐둘게",
+     "expected": "소담정 메뉴 미리 봐둘게.",
+     "required": [
+      "소담정"
+     ],
+     "forbidden": [
+      "쏘 담정"
+     ],
+     "language": "ko"
+    }
+   ]
+  },
+  {
+   "id": "s02",
+   "summary": "Data pipeline migration, hiring a candidate",
+   "threads": [
+    {
+     "id": "pipeline",
+     "topic": "Moving nightly jobs onto Kestrel",
+     "keywords": [
+      "kestrel"
+     ]
+    },
+    {
+     "id": "hiring",
+     "topic": "Interviewing Siobhan Keane",
+     "keywords": [
+      "siobhan",
+      "keane"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s02-01",
+     "minute": 0,
+     "app": "Terminal",
+     "thread": "pipeline",
+     "role": "setup",
+     "raw": "we're moving the nightly jobs onto Kestrel this week, uh, starting with the ingest step",
+     "expected": "We're moving the nightly jobs onto Kestrel this week, starting with the ingest step."
+    },
+    {
+     "id": "s02-02",
+     "minute": 2,
+     "app": "Slack",
+     "thread": "hiring",
+     "role": "setup",
+     "raw": "can we set up an interview with Siobhan Keane for Thursday",
+     "expected": "Can we set up an interview with Siobhan Keane for Thursday?"
+    },
+    {
+     "id": "s02-03",
+     "minute": 3,
+     "app": "Slack",
+     "thread": "hiring",
+     "role": "probe",
+     "raw": "shove on keen already sent her portfolio by the way",
+     "expected": "Siobhan Keane already sent her portfolio, by the way.",
+     "required": [
+      "Siobhan Keane"
+     ],
+     "forbidden": [
+      "shove on"
+     ]
+    },
+    {
+     "id": "s02-04",
+     "minute": 5,
+     "app": "Terminal",
+     "thread": "pipeline",
+     "role": "distractor",
+     "raw": "check why the ingest step keeps timing out after the retry",
+     "expected": "Check why the ingest step keeps timing out after the retry."
+    },
+    {
+     "id": "s02-05",
+     "minute": 7,
+     "app": "ChatGPT",
+     "thread": "pipeline",
+     "role": "control",
+     "raw": "explain the difference between the two configs I pasted",
+     "expected": "Explain the difference between the two configs I pasted."
+    },
+    {
+     "id": "s02-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "one sec",
+     "expected": "One sec."
+    },
+    {
+     "id": "s02-07",
+     "minute": 10,
+     "app": "Mail",
+     "thread": "hiring",
+     "role": "distractor",
+     "raw": "please send the interview questions to the panel by tomorrow morning",
+     "expected": "Please send the interview questions to the panel by tomorrow morning."
+    },
+    {
+     "id": "s02-08",
+     "minute": 12,
+     "app": "Terminal",
+     "thread": "pipeline",
+     "role": "distractor",
+     "raw": "roll back the schema change if the backfill fails again",
+     "expected": "Roll back the schema change if the backfill fails again."
+    },
+    {
+     "id": "s02-09",
+     "minute": 14,
+     "app": "Slack",
+     "thread": "hiring",
+     "role": "control",
+     "raw": "yeah let's do the second slot",
+     "expected": "Yeah, let's do the second slot."
+    },
+    {
+     "id": "s02-10",
+     "minute": 16,
+     "app": "Mail",
+     "thread": "hiring",
+     "role": "distractor",
+     "raw": "I'll share my notes after the interview",
+     "expected": "I'll share my notes after the interview."
+    },
+    {
+     "id": "s02-11",
+     "minute": 19,
+     "app": "Terminal",
+     "thread": "pipeline",
+     "role": "probe",
+     "raw": "document how castrol handles late arriving files",
+     "expected": "Document how Kestrel handles late-arriving files.",
+     "required": [
+      "Kestrel"
+     ],
+     "forbidden": [
+      "castrol"
+     ]
+    },
+    {
+     "id": "s02-12",
+     "minute": 21,
+     "app": "Slack",
+     "thread": "hiring",
+     "role": "probe",
+     "raw": "I think shivan keen would be great on the platform team",
+     "expected": "I think Siobhan Keane would be great on the platform team.",
+     "required": [
+      "Siobhan Keane"
+     ],
+     "forbidden": [
+      "shivan keen"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s03",
+   "summary": "Shipping an app release, rescheduling a dentist appointment",
+   "threads": [
+    {
+     "id": "release",
+     "topic": "Quillmate 2.0 release on Friday",
+     "keywords": [
+      "quillmate"
+     ]
+    },
+    {
+     "id": "dentist",
+     "topic": "Dentist appointment with Dr. Okonkwo",
+     "keywords": [
+      "okonkwo",
+      "dentist"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s03-01",
+     "minute": 0,
+     "app": "Cursor",
+     "thread": "release",
+     "role": "setup",
+     "raw": "okay Quillmate two point oh goes out Friday, I need to finish the release notes",
+     "expected": "Okay, Quillmate 2.0 goes out Friday. I need to finish the release notes."
+    },
+    {
+     "id": "s03-02",
+     "minute": 2,
+     "app": "Messages",
+     "thread": "dentist",
+     "role": "setup",
+     "raw": "hi this is about my appointment with Dr. Okonkwo next Tuesday",
+     "expected": "Hi, this is about my appointment with Dr. Okonkwo next Tuesday."
+    },
+    {
+     "id": "s03-03",
+     "minute": 3,
+     "app": "Messages",
+     "thread": "dentist",
+     "role": "probe",
+     "raw": "could doctor oh con go see me in the afternoon instead",
+     "expected": "Could Dr. Okonkwo see me in the afternoon instead?",
+     "required": [
+      "Okonkwo"
+     ],
+     "forbidden": [
+      "oh con go"
+     ]
+    },
+    {
+     "id": "s03-04",
+     "minute": 5,
+     "app": "Cursor",
+     "thread": "release",
+     "role": "distractor",
+     "raw": "bump the version number and regenerate the changelog",
+     "expected": "Bump the version number and regenerate the changelog."
+    },
+    {
+     "id": "s03-05",
+     "minute": 7,
+     "app": "Cursor",
+     "thread": "release",
+     "role": "control",
+     "raw": "fix the crash in the settings screen",
+     "expected": "Fix the crash in the settings screen."
+    },
+    {
+     "id": "s03-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "okay perfect",
+     "expected": "Okay, perfect."
+    },
+    {
+     "id": "s03-07",
+     "minute": 10,
+     "app": "Messages",
+     "thread": "dentist",
+     "role": "distractor",
+     "raw": "I also need to reschedule the cleaning",
+     "expected": "I also need to reschedule the cleaning."
+    },
+    {
+     "id": "s03-08",
+     "minute": 12,
+     "app": "Cursor",
+     "thread": "release",
+     "role": "distractor",
+     "raw": "write a test for the new export button",
+     "expected": "Write a test for the new export button."
+    },
+    {
+     "id": "s03-09",
+     "minute": 14,
+     "app": "Messages",
+     "thread": "dentist",
+     "role": "control",
+     "raw": "any time after three works for me",
+     "expected": "Any time after three works for me."
+    },
+    {
+     "id": "s03-10",
+     "minute": 16,
+     "app": "Messages",
+     "thread": "dentist",
+     "role": "distractor",
+     "raw": "should I bring my insurance card",
+     "expected": "Should I bring my insurance card?"
+    },
+    {
+     "id": "s03-11",
+     "minute": 19,
+     "app": "Cursor",
+     "thread": "release",
+     "role": "probe",
+     "raw": "add the quill mate logo to the about window",
+     "expected": "Add the Quillmate logo to the About window.",
+     "required": [
+      "Quillmate"
+     ],
+     "forbidden": [
+      "quill mate"
+     ]
+    },
+    {
+     "id": "s03-12",
+     "minute": 21,
+     "app": "Messages",
+     "thread": "dentist",
+     "role": "probe",
+     "raw": "thanks, please tell doctor okon quo I'll be there",
+     "expected": "Thanks, please tell Dr. Okonkwo I'll be there.",
+     "required": [
+      "Okonkwo"
+     ],
+     "forbidden": [
+      "okon quo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s04",
+   "summary": "Grant proposal, moving out of an apartment, one Korean aside",
+   "threads": [
+    {
+     "id": "grant",
+     "topic": "Horizon Kappa grant proposal",
+     "keywords": [
+      "horizon kappa",
+      "kappa"
+     ]
+    },
+    {
+     "id": "move",
+     "topic": "Move-out inspection with Mr. Thibodeaux",
+     "keywords": [
+      "thibodeaux",
+      "move-out",
+      "move out"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s04-01",
+     "minute": 0,
+     "app": "Google Chrome",
+     "thread": "grant",
+     "role": "setup",
+     "raw": "the Horizon Kappa proposal is due on the fifteenth so let's lock the budget today",
+     "expected": "The Horizon Kappa proposal is due on the fifteenth, so let's lock the budget today."
+    },
+    {
+     "id": "s04-02",
+     "minute": 2,
+     "app": "Mail",
+     "thread": "move",
+     "role": "setup",
+     "raw": "hi Mr. Thibodeaux I'm writing about the move out inspection",
+     "expected": "Hi Mr. Thibodeaux, I'm writing about the move-out inspection."
+    },
+    {
+     "id": "s04-03",
+     "minute": 3,
+     "app": "Mail",
+     "thread": "move",
+     "role": "probe",
+     "raw": "mister tibbo dough could we do the inspection on Saturday",
+     "expected": "Mr. Thibodeaux, could we do the inspection on Saturday?",
+     "required": [
+      "Thibodeaux"
+     ],
+     "forbidden": [
+      "tibbo dough"
+     ]
+    },
+    {
+     "id": "s04-04",
+     "minute": 5,
+     "app": "Google Chrome",
+     "thread": "grant",
+     "role": "distractor",
+     "raw": "cut the travel line and move that money to equipment",
+     "expected": "Cut the travel line and move that money to equipment."
+    },
+    {
+     "id": "s04-05",
+     "minute": 7,
+     "app": "Google Chrome",
+     "thread": "grant",
+     "role": "control",
+     "raw": "tighten the summary paragraph",
+     "expected": "Tighten the summary paragraph."
+    },
+    {
+     "id": "s04-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "yep",
+     "expected": "Yep."
+    },
+    {
+     "id": "s04-07",
+     "minute": 10,
+     "app": "Mail",
+     "thread": "move",
+     "role": "distractor",
+     "raw": "I'll leave the keys in the mailbox",
+     "expected": "I'll leave the keys in the mailbox."
+    },
+    {
+     "id": "s04-08",
+     "minute": 12,
+     "app": "Google Chrome",
+     "thread": "grant",
+     "role": "distractor",
+     "raw": "ask the finance office to confirm the overhead rate",
+     "expected": "Ask the finance office to confirm the overhead rate."
+    },
+    {
+     "id": "s04-09",
+     "minute": 14,
+     "app": "KakaoTalk",
+     "thread": null,
+     "role": "control",
+     "raw": "응 지금 짐 싸는 중이야",
+     "expected": "응, 지금 짐 싸는 중이야.",
+     "language": "ko"
+    },
+    {
+     "id": "s04-10",
+     "minute": 16,
+     "app": "Mail",
+     "thread": "move",
+     "role": "distractor",
+     "raw": "is there anything I need to fix before I return the keys",
+     "expected": "Is there anything I need to fix before I return the keys?"
+    },
+    {
+     "id": "s04-11",
+     "minute": 19,
+     "app": "Google Chrome",
+     "thread": "grant",
+     "role": "probe",
+     "raw": "add a sentence on why horizon cap a should fund the second year",
+     "expected": "Add a sentence on why Horizon Kappa should fund the second year.",
+     "required": [
+      "Horizon Kappa"
+     ],
+     "forbidden": [
+      "cap a"
+     ]
+    },
+    {
+     "id": "s04-12",
+     "minute": 21,
+     "app": "Mail",
+     "thread": "move",
+     "role": "probe",
+     "raw": "thank you mister tibido for your help with everything",
+     "expected": "Thank you, Mr. Thibodeaux, for your help with everything.",
+     "required": [
+      "Thibodeaux"
+     ],
+     "forbidden": [
+      "tibido"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s05",
+   "summary": "Booking a conference hotel, reviewing a library pull request",
+   "threads": [
+    {
+     "id": "trip",
+     "topic": "Conference stay at Hotel Ardentia",
+     "keywords": [
+      "ardentia"
+     ]
+    },
+    {
+     "id": "review",
+     "topic": "Reviewing the Tessellate pull request",
+     "keywords": [
+      "tessellate"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s05-01",
+     "minute": 0,
+     "app": "Mail",
+     "thread": "trip",
+     "role": "setup",
+     "raw": "I booked Hotel Ardentia for the conference, checking in on the ninth",
+     "expected": "I booked Hotel Ardentia for the conference, checking in on the ninth."
+    },
+    {
+     "id": "s05-02",
+     "minute": 2,
+     "app": "Google Chrome",
+     "thread": "review",
+     "role": "setup",
+     "raw": "reviewing the Tessellate pull request now, the tiling logic looks off",
+     "expected": "Reviewing the Tessellate pull request now. The tiling logic looks off."
+    },
+    {
+     "id": "s05-03",
+     "minute": 3,
+     "app": "Google Chrome",
+     "thread": "review",
+     "role": "probe",
+     "raw": "tessa late should reuse the existing cache instead of making a new one",
+     "expected": "Tessellate should reuse the existing cache instead of making a new one.",
+     "required": [
+      "Tessellate"
+     ],
+     "forbidden": [
+      "tessa late"
+     ]
+    },
+    {
+     "id": "s05-04",
+     "minute": 5,
+     "app": "Mail",
+     "thread": "trip",
+     "role": "distractor",
+     "raw": "can you add an airport shuttle to the booking",
+     "expected": "Can you add an airport shuttle to the booking?"
+    },
+    {
+     "id": "s05-05",
+     "minute": 7,
+     "app": "Mail",
+     "thread": "trip",
+     "role": "control",
+     "raw": "please send me the invoice",
+     "expected": "Please send me the invoice."
+    },
+    {
+     "id": "s05-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "haha nice",
+     "expected": "Haha, nice."
+    },
+    {
+     "id": "s05-07",
+     "minute": 10,
+     "app": "Google Chrome",
+     "thread": "review",
+     "role": "distractor",
+     "raw": "the tests pass but the benchmark regressed a bit",
+     "expected": "The tests pass, but the benchmark regressed a bit."
+    },
+    {
+     "id": "s05-08",
+     "minute": 12,
+     "app": "Mail",
+     "thread": "trip",
+     "role": "distractor",
+     "raw": "I'll need a late checkout on the last day",
+     "expected": "I'll need a late checkout on the last day."
+    },
+    {
+     "id": "s05-09",
+     "minute": 14,
+     "app": "Google Chrome",
+     "thread": "review",
+     "role": "control",
+     "raw": "leave a comment asking for a smaller diff",
+     "expected": "Leave a comment asking for a smaller diff."
+    },
+    {
+     "id": "s05-10",
+     "minute": 16,
+     "app": "Google Chrome",
+     "thread": "review",
+     "role": "distractor",
+     "raw": "approve it once the tiling fix is in",
+     "expected": "Approve it once the tiling fix is in."
+    },
+    {
+     "id": "s05-11",
+     "minute": 19,
+     "app": "Mail",
+     "thread": "trip",
+     "role": "probe",
+     "raw": "what time is breakfast at hotel are dentia",
+     "expected": "What time is breakfast at Hotel Ardentia?",
+     "required": [
+      "Hotel Ardentia"
+     ],
+     "forbidden": [
+      "are dentia"
+     ]
+    },
+    {
+     "id": "s05-12",
+     "minute": 21,
+     "app": "Google Chrome",
+     "thread": "review",
+     "role": "probe",
+     "raw": "update the tesla late readme with the new cache flag",
+     "expected": "Update the Tessellate README with the new cache flag.",
+     "required": [
+      "Tessellate"
+     ],
+     "forbidden": [
+      "tesla late"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s06",
+   "summary": "Teaching-assistant grading, office hours with a student",
+   "threads": [
+    {
+     "id": "course",
+     "topic": "CS 4820 grading with Professor Adebayo-Lindqvist",
+     "keywords": [
+      "adebayo",
+      "lindqvist",
+      "4820"
+     ]
+    },
+    {
+     "id": "student",
+     "topic": "Office hours with Nnamdi",
+     "keywords": [
+      "nnamdi"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s06-01",
+     "minute": 0,
+     "app": "Google Chrome",
+     "thread": "course",
+     "role": "setup",
+     "raw": "posting the grading rubric Professor Adebayo-Lindqvist approved for problem set three",
+     "expected": "Posting the grading rubric Professor Adebayo-Lindqvist approved for problem set three."
+    },
+    {
+     "id": "s06-02",
+     "minute": 2,
+     "app": "Mail",
+     "thread": "student",
+     "role": "setup",
+     "raw": "hi Nnamdi yes you can come to office hours on Wednesday",
+     "expected": "Hi Nnamdi, yes, you can come to office hours on Wednesday."
+    },
+    {
+     "id": "s06-03",
+     "minute": 3,
+     "app": "Mail",
+     "thread": "student",
+     "role": "probe",
+     "raw": "nam dee please bring your draft proof",
+     "expected": "Nnamdi, please bring your draft proof.",
+     "required": [
+      "Nnamdi"
+     ],
+     "forbidden": [
+      "nam dee"
+     ]
+    },
+    {
+     "id": "s06-04",
+     "minute": 5,
+     "app": "Google Chrome",
+     "thread": "course",
+     "role": "distractor",
+     "raw": "partial credit if they set up the recurrence correctly",
+     "expected": "Partial credit if they set up the recurrence correctly."
+    },
+    {
+     "id": "s06-05",
+     "minute": 7,
+     "app": "Google Chrome",
+     "thread": "course",
+     "role": "control",
+     "raw": "the late penalty is ten percent per day",
+     "expected": "The late penalty is ten percent per day."
+    },
+    {
+     "id": "s06-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "thanks",
+     "expected": "Thanks."
+    },
+    {
+     "id": "s06-07",
+     "minute": 10,
+     "app": "Mail",
+     "thread": "student",
+     "role": "distractor",
+     "raw": "the proof mostly works but step two needs more detail",
+     "expected": "The proof mostly works, but step two needs more detail."
+    },
+    {
+     "id": "s06-08",
+     "minute": 12,
+     "app": "Google Chrome",
+     "thread": "course",
+     "role": "distractor",
+     "raw": "regrade requests close on Friday",
+     "expected": "Regrade requests close on Friday."
+    },
+    {
+     "id": "s06-09",
+     "minute": 14,
+     "app": "Mail",
+     "thread": "student",
+     "role": "control",
+     "raw": "see you then",
+     "expected": "See you then."
+    },
+    {
+     "id": "s06-10",
+     "minute": 16,
+     "app": "Mail",
+     "thread": "student",
+     "role": "distractor",
+     "raw": "you could also try induction on the length",
+     "expected": "You could also try induction on the length."
+    },
+    {
+     "id": "s06-11",
+     "minute": 19,
+     "app": "Google Chrome",
+     "thread": "course",
+     "role": "probe",
+     "raw": "ask professor adobe ayo lindquist about the regrade policy",
+     "expected": "Ask Professor Adebayo-Lindqvist about the regrade policy.",
+     "required": [
+      "Adebayo-Lindqvist"
+     ],
+     "forbidden": [
+      "adobe ayo"
+     ]
+    },
+    {
+     "id": "s06-12",
+     "minute": 21,
+     "app": "Mail",
+     "thread": "student",
+     "role": "probe",
+     "raw": "nom dee said the proof is done",
+     "expected": "Nnamdi said the proof is done.",
+     "required": [
+      "Nnamdi"
+     ],
+     "forbidden": [
+      "nom dee"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s07",
+   "summary": "Startup pitch to investors, a car repair",
+   "threads": [
+    {
+     "id": "pitch",
+     "topic": "Deck for the Larkspur Ventures pitch",
+     "keywords": [
+      "larkspur"
+     ]
+    },
+    {
+     "id": "car",
+     "topic": "Brake repair at Vukovic Auto",
+     "keywords": [
+      "vukovic"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s07-01",
+     "minute": 0,
+     "app": "Keynote",
+     "thread": "pitch",
+     "role": "setup",
+     "raw": "tightening the deck for the Larkspur Ventures pitch on Monday",
+     "expected": "Tightening the deck for the Larkspur Ventures pitch on Monday."
+    },
+    {
+     "id": "s07-02",
+     "minute": 2,
+     "app": "Messages",
+     "thread": "car",
+     "role": "setup",
+     "raw": "hi is this Vukovic Auto, I'm calling about my brakes",
+     "expected": "Hi, is this Vukovic Auto? I'm calling about my brakes."
+    },
+    {
+     "id": "s07-03",
+     "minute": 3,
+     "app": "Messages",
+     "thread": "car",
+     "role": "probe",
+     "raw": "can vuko vic auto give me a quote by tomorrow",
+     "expected": "Can Vukovic Auto give me a quote by tomorrow?",
+     "required": [
+      "Vukovic Auto"
+     ],
+     "forbidden": [
+      "vuko vic"
+     ]
+    },
+    {
+     "id": "s07-04",
+     "minute": 5,
+     "app": "Keynote",
+     "thread": "pitch",
+     "role": "distractor",
+     "raw": "move the traction slide before the team slide",
+     "expected": "Move the traction slide before the team slide."
+    },
+    {
+     "id": "s07-05",
+     "minute": 7,
+     "app": "Keynote",
+     "thread": "pitch",
+     "role": "control",
+     "raw": "make the chart on the market slide simpler",
+     "expected": "Make the chart on the market slide simpler."
+    },
+    {
+     "id": "s07-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "on it",
+     "expected": "On it."
+    },
+    {
+     "id": "s07-07",
+     "minute": 10,
+     "app": "Messages",
+     "thread": "car",
+     "role": "distractor",
+     "raw": "I can drop the car off before work",
+     "expected": "I can drop the car off before work."
+    },
+    {
+     "id": "s07-08",
+     "minute": 12,
+     "app": "Keynote",
+     "thread": "pitch",
+     "role": "distractor",
+     "raw": "cut the second demo video, it's too long",
+     "expected": "Cut the second demo video. It's too long."
+    },
+    {
+     "id": "s07-09",
+     "minute": 14,
+     "app": "Messages",
+     "thread": "car",
+     "role": "control",
+     "raw": "okay that works",
+     "expected": "Okay, that works."
+    },
+    {
+     "id": "s07-10",
+     "minute": 16,
+     "app": "Messages",
+     "thread": "car",
+     "role": "distractor",
+     "raw": "do you have a loaner car",
+     "expected": "Do you have a loaner car?"
+    },
+    {
+     "id": "s07-11",
+     "minute": 19,
+     "app": "Mail",
+     "thread": "pitch",
+     "role": "probe",
+     "raw": "send the follow up email to lark spur ventures with the deck attached",
+     "expected": "Send the follow-up email to Larkspur Ventures with the deck attached.",
+     "required": [
+      "Larkspur Ventures"
+     ],
+     "forbidden": [
+      "lark spur"
+     ]
+    },
+    {
+     "id": "s07-12",
+     "minute": 21,
+     "app": "Messages",
+     "thread": "car",
+     "role": "probe",
+     "raw": "I'll pick it up from vuka vich auto at five",
+     "expected": "I'll pick it up from Vukovic Auto at five.",
+     "required": [
+      "Vukovic Auto"
+     ],
+     "forbidden": [
+      "vuka vich"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s08",
+   "summary": "Maintaining an open-source library, wedding flowers",
+   "threads": [
+    {
+     "id": "repo",
+     "topic": "fastembedx release and issues",
+     "keywords": [
+      "fastembedx"
+     ]
+    },
+    {
+     "id": "wedding",
+     "topic": "Wedding flowers with Marisol",
+     "keywords": [
+      "marisol"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s08-01",
+     "minute": 0,
+     "app": "Terminal",
+     "thread": "repo",
+     "role": "setup",
+     "raw": "tag a new fastembedx release after the CI goes green",
+     "expected": "Tag a new fastembedx release after the CI goes green."
+    },
+    {
+     "id": "s08-02",
+     "minute": 2,
+     "app": "Messages",
+     "thread": "wedding",
+     "role": "setup",
+     "raw": "hi Marisol, we loved the peonies you suggested for the wedding",
+     "expected": "Hi Marisol, we loved the peonies you suggested for the wedding."
+    },
+    {
+     "id": "s08-03",
+     "minute": 3,
+     "app": "Messages",
+     "thread": "wedding",
+     "role": "probe",
+     "raw": "mary sol, can we add more greenery to the arch",
+     "expected": "Marisol, can we add more greenery to the arch?",
+     "required": [
+      "Marisol"
+     ],
+     "forbidden": [
+      "mary sol"
+     ]
+    },
+    {
+     "id": "s08-04",
+     "minute": 5,
+     "app": "Google Chrome",
+     "thread": "repo",
+     "role": "distractor",
+     "raw": "close the duplicate issues about the tokenizer warning",
+     "expected": "Close the duplicate issues about the tokenizer warning."
+    },
+    {
+     "id": "s08-05",
+     "minute": 7,
+     "app": "Terminal",
+     "thread": "repo",
+     "role": "control",
+     "raw": "run the tests again with verbose output",
+     "expected": "Run the tests again with verbose output."
+    },
+    {
+     "id": "s08-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "back in five",
+     "expected": "Back in five."
+    },
+    {
+     "id": "s08-07",
+     "minute": 10,
+     "app": "Messages",
+     "thread": "wedding",
+     "role": "distractor",
+     "raw": "the budget for flowers is still the same",
+     "expected": "The budget for flowers is still the same."
+    },
+    {
+     "id": "s08-08",
+     "minute": 12,
+     "app": "Google Chrome",
+     "thread": "repo",
+     "role": "distractor",
+     "raw": "thank the contributor who fixed the memory leak",
+     "expected": "Thank the contributor who fixed the memory leak."
+    },
+    {
+     "id": "s08-09",
+     "minute": 14,
+     "app": "Messages",
+     "thread": "wedding",
+     "role": "control",
+     "raw": "sounds lovely, thank you",
+     "expected": "Sounds lovely, thank you."
+    },
+    {
+     "id": "s08-10",
+     "minute": 16,
+     "app": "Messages",
+     "thread": "wedding",
+     "role": "distractor",
+     "raw": "can we see a sample bouquet next week",
+     "expected": "Can we see a sample bouquet next week?"
+    },
+    {
+     "id": "s08-11",
+     "minute": 19,
+     "app": "Google Chrome",
+     "thread": "repo",
+     "role": "probe",
+     "raw": "pin the issue about fast embed x on apple silicon",
+     "expected": "Pin the issue about fastembedx on Apple Silicon.",
+     "required": [
+      "fastembedx"
+     ],
+     "forbidden": [
+      "fast embed x"
+     ]
+    },
+    {
+     "id": "s08-12",
+     "minute": 21,
+     "app": "Messages",
+     "thread": "wedding",
+     "role": "probe",
+     "raw": "thank you so much mary saul, see you at the tasting",
+     "expected": "Thank you so much, Marisol. See you at the tasting.",
+     "required": [
+      "Marisol"
+     ],
+     "forbidden": [
+      "mary saul"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s09",
+   "summary": "Running a benchmark evaluation, a family birthday in Korean",
+   "threads": [
+    {
+     "id": "eval",
+     "topic": "OrchardBench evaluation of the new checkpoint",
+     "keywords": [
+      "orchardbench"
+     ]
+    },
+    {
+     "id": "birthday",
+     "topic": "혜린 이모 birthday plans",
+     "keywords": [
+      "혜린",
+      "이모",
+      "birthday",
+      "생일"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s09-01",
+     "minute": 0,
+     "app": "Terminal",
+     "thread": "eval",
+     "role": "setup",
+     "raw": "start the OrchardBench evaluation on the new checkpoint",
+     "expected": "Start the OrchardBench evaluation on the new checkpoint."
+    },
+    {
+     "id": "s09-02",
+     "minute": 2,
+     "app": "KakaoTalk",
+     "thread": "birthday",
+     "role": "setup",
+     "raw": "혜린 이모 생일 선물 뭐 살까",
+     "expected": "혜린 이모 생일 선물 뭐 살까?",
+     "language": "ko"
+    },
+    {
+     "id": "s09-03",
+     "minute": 3,
+     "app": "KakaoTalk",
+     "thread": "birthday",
+     "role": "probe",
+     "raw": "해린 이모는 꽃 좋아하시잖아",
+     "expected": "혜린 이모는 꽃 좋아하시잖아.",
+     "required": [
+      "혜린"
+     ],
+     "forbidden": [
+      "해린"
+     ],
+     "language": "ko"
+    },
+    {
+     "id": "s09-04",
+     "minute": 5,
+     "app": "Terminal",
+     "thread": "eval",
+     "role": "distractor",
+     "raw": "log the per class accuracy this time",
+     "expected": "Log the per-class accuracy this time."
+    },
+    {
+     "id": "s09-05",
+     "minute": 7,
+     "app": "ChatGPT",
+     "thread": "eval",
+     "role": "control",
+     "raw": "why would validation loss go up while accuracy also goes up",
+     "expected": "Why would validation loss go up while accuracy also goes up?"
+    },
+    {
+     "id": "s09-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "ok",
+     "expected": "OK."
+    },
+    {
+     "id": "s09-07",
+     "minute": 10,
+     "app": "KakaoTalk",
+     "thread": "birthday",
+     "role": "distractor",
+     "raw": "케이크는 내가 예약할게",
+     "expected": "케이크는 내가 예약할게.",
+     "language": "ko"
+    },
+    {
+     "id": "s09-08",
+     "minute": 12,
+     "app": "Terminal",
+     "thread": "eval",
+     "role": "distractor",
+     "raw": "compare it against last week's run",
+     "expected": "Compare it against last week's run."
+    },
+    {
+     "id": "s09-09",
+     "minute": 14,
+     "app": "KakaoTalk",
+     "thread": "birthday",
+     "role": "control",
+     "raw": "다음 주 일요일 괜찮아",
+     "expected": "다음 주 일요일 괜찮아.",
+     "language": "ko"
+    },
+    {
+     "id": "s09-10",
+     "minute": 16,
+     "app": "KakaoTalk",
+     "thread": "birthday",
+     "role": "distractor",
+     "raw": "이모부도 오시는지 물어볼게",
+     "expected": "이모부도 오시는지 물어볼게.",
+     "language": "ko"
+    },
+    {
+     "id": "s09-11",
+     "minute": 19,
+     "app": "Terminal",
+     "thread": "eval",
+     "role": "probe",
+     "raw": "push the orchard bench numbers to the shared sheet",
+     "expected": "Push the OrchardBench numbers to the shared sheet.",
+     "required": [
+      "OrchardBench"
+     ],
+     "forbidden": [
+      "orchard bench"
+     ]
+    },
+    {
+     "id": "s09-12",
+     "minute": 21,
+     "app": "KakaoTalk",
+     "thread": "birthday",
+     "role": "probe",
+     "raw": "헤린 이모한테 사진도 보내드려",
+     "expected": "혜린 이모한테 사진도 보내드려.",
+     "required": [
+      "혜린"
+     ],
+     "forbidden": [
+      "헤린"
+     ],
+     "language": "ko"
+    }
+   ]
+  },
+  {
+   "id": "s10",
+   "summary": "Editing a podcast episode, filing taxes",
+   "threads": [
+    {
+     "id": "podcast",
+     "topic": "Podcast episode with Anouk Verhoeven",
+     "keywords": [
+      "anouk",
+      "verhoeven"
+     ]
+    },
+    {
+     "id": "taxes",
+     "topic": "Quarterly taxes with Yardley CPA",
+     "keywords": [
+      "yardley"
+     ]
+    }
+   ],
+   "takes": [
+    {
+     "id": "s10-01",
+     "minute": 0,
+     "app": "Google Chrome",
+     "thread": "podcast",
+     "role": "setup",
+     "raw": "editing the episode with Anouk Verhoeven, cutting the intro down",
+     "expected": "Editing the episode with Anouk Verhoeven, cutting the intro down."
+    },
+    {
+     "id": "s10-02",
+     "minute": 2,
+     "app": "Mail",
+     "thread": "taxes",
+     "role": "setup",
+     "raw": "hi, following up with Yardley CPA about my quarterly estimate",
+     "expected": "Hi, following up with Yardley CPA about my quarterly estimate."
+    },
+    {
+     "id": "s10-03",
+     "minute": 3,
+     "app": "Mail",
+     "thread": "taxes",
+     "role": "probe",
+     "raw": "does yard lee CPA need my receipts before the meeting",
+     "expected": "Does Yardley CPA need my receipts before the meeting?",
+     "required": [
+      "Yardley CPA"
+     ],
+     "forbidden": [
+      "yard lee"
+     ]
+    },
+    {
+     "id": "s10-04",
+     "minute": 5,
+     "app": "Google Chrome",
+     "thread": "podcast",
+     "role": "distractor",
+     "raw": "remove the long pause around the twelve minute mark",
+     "expected": "Remove the long pause around the twelve-minute mark."
+    },
+    {
+     "id": "s10-05",
+     "minute": 7,
+     "app": "Google Chrome",
+     "thread": "podcast",
+     "role": "control",
+     "raw": "make the outro music a bit quieter",
+     "expected": "Make the outro music a bit quieter."
+    },
+    {
+     "id": "s10-06",
+     "minute": 8,
+     "app": "Slack",
+     "thread": null,
+     "role": "smalltalk",
+     "raw": "cool",
+     "expected": "Cool."
+    },
+    {
+     "id": "s10-07",
+     "minute": 10,
+     "app": "Mail",
+     "thread": "taxes",
+     "role": "distractor",
+     "raw": "I also started freelancing this year",
+     "expected": "I also started freelancing this year."
+    },
+    {
+     "id": "s10-08",
+     "minute": 12,
+     "app": "Google Chrome",
+     "thread": "podcast",
+     "role": "distractor",
+     "raw": "add chapter markers for each question",
+     "expected": "Add chapter markers for each question."
+    },
+    {
+     "id": "s10-09",
+     "minute": 14,
+     "app": "Mail",
+     "thread": "taxes",
+     "role": "control",
+     "raw": "let me know what else you need",
+     "expected": "Let me know what else you need."
+    },
+    {
+     "id": "s10-10",
+     "minute": 16,
+     "app": "Mail",
+     "thread": "taxes",
+     "role": "distractor",
+     "raw": "can we meet next Thursday afternoon",
+     "expected": "Can we meet next Thursday afternoon?"
+    },
+    {
+     "id": "s10-11",
+     "minute": 19,
+     "app": "Google Chrome",
+     "thread": "podcast",
+     "role": "probe",
+     "raw": "write the show notes and link a nook very hoven's website",
+     "expected": "Write the show notes and link Anouk Verhoeven's website.",
+     "required": [
+      "Anouk Verhoeven"
+     ],
+     "forbidden": [
+      "a nook"
+     ]
+    },
+    {
+     "id": "s10-12",
+     "minute": 21,
+     "app": "Mail",
+     "thread": "taxes",
+     "role": "probe",
+     "raw": "thanks, I'll send the documents to yardly CPA tonight",
+     "expected": "Thanks, I'll send the documents to Yardley CPA tonight.",
+     "required": [
+      "Yardley CPA"
+     ],
+     "forbidden": [
+      "yardly"
+     ]
+    }
+   ]
+  }
+ ]
+}

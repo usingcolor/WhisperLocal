@@ -1,0 +1,66 @@
+# Xcode
+build/
+dist/
+*.dmg
+DerivedData/
+*.xcuserstate
+*.xcuserdata/
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+
+# SPM
+.swiftpm/
+Packages/
+
+# Python build and test caches
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Models / caches (downloaded at runtime)
+Models/
+*.mlmodelc/
+*.mlpackage/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.p8
+*.p12
+*.pfx
+Secrets.xcconfig
+
+# IDEs
+.idea/
+.vscode/
+.claude/
+*.swp
+*~
+
+# Local UI inspection tools and exports
+scripts/hud-preview-export/
+scripts/ui-preview-export/
+
+# Polish benchmark: outputs, verdicts and downloaded datasets stay local
+Benchmarks/results/
+Benchmarks/data/

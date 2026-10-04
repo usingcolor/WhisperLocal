@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which did you mean?</title>
+<style>
+  :root {
+    --ground: #f6f5f1;
+    --surface: #ffffff;
+    --ink: #1d1e20;
+    --muted: #6a6e75;
+    --rule: #dcdad3;
+    --accent: #2e6a50;
+    --accent-ink: #ffffff;
+    --mark: #f1dfa8;
+    --mark-ink: #3b2f07;
+    --chosen: #e3efe8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #141516;
+      --surface: #1d1f21;
+      --ink: #eceded;
+      --muted: #9a9ea5;
+      --rule: #34373b;
+      --accent: #74c49a;
+      --accent-ink: #0f1a14;
+      --mark: #5a4a1c;
+      --mark-ink: #f6e7b8;
+      --chosen: #203a2d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #141516;
+    --surface: #1d1f21;
+    --ink: #eceded;
+    --muted: #9a9ea5;
+    --rule: #34373b;
+    --accent: #74c49a;
+    --accent-ink: #0f1a14;
+    --mark: #5a4a1c;
+    --mark-ink: #f6e7b8;
+    --chosen: #203a2d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 16px 48px; display: grid; gap: 20px; }
+  header { display: grid; gap: 10px; }
+  h1 { margin: 0; font-size: 22px; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; color: var(--muted); max-width: 64ch; }
+  .progress { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .bar { flex: 1; height: 4px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+  .meta { color: var(--muted); font-size: 13px; letter-spacing: .02em; }
+  .heard { background: transparent; border-left: 3px solid var(--rule); padding: 4px 0 4px 14px; color: var(--muted); }
+  .heard b { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+  .options { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 720px) { .options { grid-template-columns: 1fr 1fr; } }
+  .option {
+    all: unset; cursor: pointer; display: grid; gap: 10px; align-content: start;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .option:hover { border-color: var(--accent); }
+  .option:focus-visible, .actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .option.chosen { background: var(--chosen); border-color: var(--accent); }
+  .key {
+    justify-self: start; font-size: 12px; font-weight: 600; color: var(--muted);
+    border: 1px solid var(--rule); border-radius: 5px; padding: 0 7px; font-variant-numeric: tabular-nums;
+  }
+  mark { background: var(--mark); color: var(--mark-ink); border-radius: 3px; padding: 0 1px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .actions button {
+    font: inherit; font-size: 14px; cursor: pointer; border-radius: 8px; padding: 8px 14px;
+    border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+  }
+  .actions button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .actions button.chosen { border-color: var(--accent); background: var(--chosen); }
+  .hint { color: var(--muted); font-size: 13px; }
+  .summary { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 20px 22px; display: grid; gap: 12px; }
+  .summary h2 { margin: 0; font-size: 18px; font-weight: 600; }
+  .summary table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .summary td, .summary th { text-align: left; padding: 6px 18px 6px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .summary th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { .bar > span { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Which one is what you meant?</h1>
+    <p class="lede">Each pair is one of your takes, cleaned twice. The two sides are shuffled and unlabelled. Pick the one closer to what you meant, or say they are the same. Words that differ are highlighted.</p>
+    <div class="progress"><span id="count"></span><div class="bar"><span id="fill"></span></div></div>
+  </header>
+
+  <section id="pair" aria-live="polite">
+    <div style="display:grid; gap:14px">
+      <div class="meta" id="meta"></div>
+      <div class="heard"><b>What the recogniser heard</b><span id="raw"></span></div>
+      <div class="options">
+        <button class="option" id="left" type="button"><span class="key">1</span><span id="leftText"></span></button>
+        <button class="option" id="right" type="button"><span class="key">2</span><span id="rightText"></span></button>
+      </div>
+      <div class="actions">
+        <button type="button" id="same">Same, or can't tell <span class="key">3</span></button>
+        <button type="button" id="back">Back <span class="key">⌫</span></button>
+        <span class="hint">Choices are kept in this browser as you go.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="summary" id="done" hidden>
+    <h2>Done — thank you.</h2>
+    <table>
+      <thead><tr><th>Pairs</th><th id="headTest"></th><th id="headOther"></th><th>Same</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p class="hint">Context pairs are auto context against plain polish. Noise pairs are plain polish against itself, run twice: how often you prefer one of those is how much a preference can come from chance alone.</p>
+    <div class="actions">
+      <button class="primary" type="button" id="download">Download results</button>
+      <button type="button" id="review">Review choices</button>
+      <button type="button" id="restart">Start over</button>
+    </div>
+  </section>
+</main>
+<script>
+const RUN = "__RUN_ID__";
+const PAIRS = "__PAIRS_JSON__";
+const STORE = "context-bench-blind-" + RUN;
+
+let state = { choices: {} };
+try { state = JSON.parse(localStorage.getItem(STORE)) || state; } catch (_) {}
+function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (_) {} }
+
+const $ = (id) => document.getElementById(id);
+let index = firstOpen();
+
+function firstOpen(from = 0) {
+  for (let i = from; i < PAIRS.length; i++) if (!state.choices[PAIRS[i].id]) return i;
+  for (let i = 0; i < from; i++) if (!state.choices[PAIRS[i].id]) return i;
+  return PAIRS.length;
+}
+
+function words(text) { return text.split(/(\s+)/); }
+function norm(word) { return word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ""); }
+
+// Marks the words of each side that the other side does not have, by a
+// longest common subsequence over words, ignoring case and punctuation.
+function marked(a, b) {
+  const aw = words(a), bw = words(b);
+  const at = aw.map((w, i) => [norm(w), i]).filter(([n]) => n);
+  const bt = bw.map((w, i) => [norm(w), i]).filter(([n]) => n);
+  const table = Array.from({ length: at.length + 1 }, () => new Array(bt.length + 1).fill(0));
+  for (let i = at.length - 1; i >= 0; i--)
+    for (let j = bt.length - 1; j >= 0; j--)
+      table[i][j] = at[i][0] === bt[j][0] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  const keepA = new Set(), keepB = new Set();
+  for (let i = 0, j = 0; i < at.length && j < bt.length;) {
+    if (at[i][0] === bt[j][0]) { keepA.add(at[i][1]); keepB.add(bt[j][1]); i++; j++; }
+    else if (table[i + 1][j] >= table[i][j + 1]) i++; else j++;
+  }
+  return [paint(aw, keepA), paint(bw, keepB)];
+}
+
+function paint(parts, keep) {
+  const fragment = document.createDocumentFragment();
+  parts.forEach((part, i) => {
+    if (!norm(part) || keep.has(i)) fragment.append(document.createTextNode(part));
+    else { const m = document.createElement("mark"); m.textContent = part; fragment.append(m); }
+  });
+  return fragment;
+}
+
+function render() {
+  const answered = Object.keys(state.choices).filter((id) => PAIRS.some((p) => p.id === id)).length;
+  $("count").textContent = `${answered} of ${PAIRS.length}`;
+  $("fill").style.width = `${(answered / Math.max(1, PAIRS.length)) * 100}%`;
+  if (index >= PAIRS.length) return finish();
+  $("pair").hidden = false;
+  $("done").hidden = true;
+  const pair = PAIRS[index];
+  const when = new Date(pair.date);
+  $("meta").textContent = [pair.app, when.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })]
+    .filter(Boolean).join(" · ");
+  $("raw").textContent = pair.raw;
+  const [left, right] = marked(pair.left, pair.right);
+  $("leftText").replaceChildren(left);
+  $("rightText").replaceChildren(right);
+  const choice = state.choices[pair.id];
+  $("left").classList.toggle("chosen", choice === "left");
+  $("right").classList.toggle("chosen", choice === "right");
+  $("same").classList.toggle("chosen", choice === "same");
+  $("back").disabled = index === 0;
+}
+
+function choose(value) {
+  if (index >= PAIRS.length) return;
+  state.choices[PAIRS[index].id] = value;
+  save();
+  index = firstOpen(index + 1);
+  render();
+}
+
+function back() {
+  if (index > 0) { index = Math.min(index, PAIRS.length) - 1; render(); }
+}
+
+function tally(kind) {
+  const judged = PAIRS.filter((p) => p.kind === kind && state.choices[p.id]);
+  const test = judged.filter((p) => state.choices[p.id] === p.testSide).length;
+  const same = judged.filter((p) => state.choices[p.id] === "same").length;
+  return { total: judged.length, test, same, other: judged.length - test - same };
+}
+
+function finish() {
+  $("pair").hidden = true;
+  $("done").hidden = false;
+  $("headTest").textContent = "Auto context / second run better";
+  $("headOther").textContent = "Plain / first run better";
+  const rows = [["Context", tally("context")], ["Noise", tally("noise")]].map(([label, t]) => {
+    const tr = document.createElement("tr");
+    for (const cell of [`${label} (${t.total})`, t.test, t.other, t.same]) {
+      const td = document.createElement("td"); td.textContent = cell; tr.append(td);
+    }
+    return tr;
+  });
+  $("rows").replaceChildren(...rows);
+}
+
+$("left").addEventListener("click", () => choose("left"));
+$("right").addEventListener("click", () => choose("right"));
+$("same").addEventListener("click", () => choose("same"));
+$("back").addEventListener("click", back);
+$("review").addEventListener("click", () => { index = 0; render(); });
+$("restart").addEventListener("click", () => {
+  if (!confirm("Clear every choice and start over?")) return;
+  state = { choices: {} }; save(); index = 0; render();
+});
+$("download").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify({ run: RUN, choices: state.choices }, null, 1)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `blind-${RUN}.json`;
+  link.click();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.key === "1" || event.key === "ArrowLeft") choose("left");
+  else if (event.key === "2" || event.key === "ArrowRight") choose("right");
+  else if (event.key === "3" || event.key === " ") { event.preventDefault(); choose("same"); }
+  else if (event.key === "Backspace") { event.preventDefault(); back(); }
+});
+
+// For reading the choices back without a download.
+window.blindResults = () => ({ run: RUN, choices: state.choices, pairs: PAIRS.length });
+render();
+</script>
+</body>
+</html>

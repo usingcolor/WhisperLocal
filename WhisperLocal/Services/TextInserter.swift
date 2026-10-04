@@ -1,0 +1,683 @@
+import AppKit
+import ApplicationServices
+import Carbon.HIToolbox
+import Foundation
+
+enum InsertionMethod: String {
+    case accessibility
+    /// AXSet returned success but the field could not be confirmed.
+    case accessibilityUnverified = "accessibility-unverified"
+    case clipboard
+    /// ⌘V was posted but the field could not be confirmed. The dictation is left on
+    /// the clipboard so ⌘V recovers it.
+    case clipboardUnverified = "clipboard-unverified"
+    case clipboardChanged = "clipboard-changed"
+    case failed
+}
+
+struct InsertionResult {
+    let success: Bool
+    let method: InsertionMethod
+    let appName: String?
+    /// The text is sitting on the clipboard and Cmd-V will recover it. Set when we
+    /// could not type it, so a failed insert never means the take is simply gone.
+    var textOnClipboard: Bool = false
+}
+
+/// Frontmost app at dictation start. Fed to polish LLMs as formatting context, not as transcript text.
+struct TargetAppContext: Sendable, Equatable {
+    enum Kind: String, Sendable, CaseIterable, Identifiable {
+        case codeEditor = "code editor"
+        case terminal = "terminal"
+        case chat = "chat app"
+        case browser = "browser"
+        case mail = "mail app"
+        case notes = "notes app"
+        case other = "app"
+
+        var id: String { rawValue }
+
+        var menuLabel: String {
+            switch self {
+            case .other: return "Other"
+            default: return rawValue.capitalized
+            }
+        }
+    }
+
+    let name: String
+    let bundleID: String?
+    let kind: Kind
+    /// The process this take was aimed at. Insertion resolves this rather than
+    /// asking for the frontmost app again, which after a Space switch is somebody
+    /// else entirely.
+    var pid: pid_t?
+
+    var promptLine: String {
+        kind == .other ? name : "\(name) — \(kind.rawValue)"
+    }
+
+    static func captureFrontmost() -> TargetAppContext? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        if let id = app.bundleIdentifier, id == Bundle.main.bundleIdentifier {
+            return nil
+        }
+        let name = app.localizedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !name.isEmpty else { return nil }
+        let bundleID = app.bundleIdentifier
+        return TargetAppContext(
+            name: name,
+            bundleID: bundleID,
+            kind: kind(bundleID: bundleID, name: name),
+            pid: app.processIdentifier
+        )
+    }
+
+    static func kind(bundleID: String?, name: String?) -> Kind {
+        let id = (bundleID ?? "").lowercased()
+        let n = (name ?? "").lowercased()
+
+        if matches(id, n, ids: [
+            "com.anysphere.cursor", "com.anysphere.sand", "com.todesktop.230313mzl4w4u92",
+            "com.microsoft.vscode", "com.apple.dt.xcode", "com.panic.nova",
+            "com.sublimetext.4", "com.microsoft.VSCode"
+        ], names: ["cursor", "visual studio code", "vs code", "xcode", "nova", "sublime text"]) {
+            return .codeEditor
+        }
+        if matches(id, n, ids: [
+            "com.apple.terminal", "com.googlecode.iterm2", "net.kovidgoyal.kitty",
+            "io.alacritty", "dev.warp.warp-stable", "dev.warp.warp",
+            "com.mitchellh.ghostty", "com.github.wez.wezterm"
+        ], names: ["terminal", "iterm", "kitty", "alacritty", "warp", "ghostty", "wezterm"]) {
+            return .terminal
+        }
+        if matches(id, n, ids: [
+            "com.tinyspeck.slackmacgap", "com.hnc.discord", "com.openai.chat",
+            "com.anthropic.claudefordesktop", "net.whatsapp.whatsapp",
+            "com.apple.ichat", "com.apple.MobileSMS", "ru.keepcoder.telegram"
+        ], names: ["slack", "discord", "chatgpt", "claude", "messages", "telegram", "whatsapp"]) {
+            return .chat
+        }
+        if matches(id, n, ids: [
+            "com.google.chrome", "com.apple.safari", "company.thebrowser.browser",
+            "com.brave.browser", "com.microsoft.edgemac", "org.mozilla.firefox"
+        ], names: ["chrome", "safari", "arc", "brave", "edge", "firefox"]) {
+            return .browser
+        }
+        if matches(id, n, ids: ["com.apple.mail", "com.readdle.smartemail-mac"], names: ["mail", "spark"]) {
+            return .mail
+        }
+        if matches(id, n, ids: [
+            "com.apple.notes", "md.obsidian", "notion.id", "com.apple.iwork.pages"
+        ], names: ["notes", "obsidian", "notion", "pages"]) {
+            return .notes
+        }
+        if id.contains("anysphere") || n.contains("cursor") { return .codeEditor }
+        if id.contains("terminal") || id.contains("iterm") { return .terminal }
+        if id.contains("chrom") || id.contains("safari") { return .browser }
+        return .other
+    }
+
+    private static func matches(
+        _ id: String,
+        _ name: String,
+        ids: [String],
+        names: [String]
+    ) -> Bool {
+        if ids.contains(where: { id == $0.lowercased() || id.hasPrefix($0.lowercased() + ".") }) {
+            return true
+        }
+        return names.contains { name.contains($0) }
+    }
+}
+
+@MainActor
+final class TextInserter {
+    static let shared = TextInserter()
+
+    /// Bundle IDs where AX selected-text insert is unreliable — use clipboard paste.
+    private let terminalBundleIDs: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "net.kovidgoyal.kitty",
+        "io.alacritty",
+        "dev.warp.Warp-Stable",
+        "dev.warp.Warp",
+        "com.mitchellh.ghostty",
+        "com.github.wez.wezterm",
+        "co.zeit.hyper",
+        "com.termius-dmg.mac"
+    ]
+
+    /// Electron / Chromium apps where AXSet selected-text often returns success and types nothing
+    /// (Cursor, Slack, Chrome, VS Code, …).
+    nonisolated private static let clipboardFirstBundleIDs: Set<String> = [
+        "com.anysphere.sand",              // Cursor (Anysphere)
+        "com.anysphere.cursor",
+        "com.todesktop.230313mzl4w4u92",   // Cursor (older id)
+        "com.microsoft.VSCode",
+        "com.google.Chrome",
+        "com.google.Chrome.canary",
+        "com.google.Chrome.dev",
+        "company.thebrowser.Browser",      // Arc
+        "com.brave.Browser",
+        "com.microsoft.edgemac",
+        "com.tinyspeck.slackmacgap",
+        "com.hnc.Discord",
+        "com.openai.chat",                 // ChatGPT Classic
+        "com.openai.codex",                // ChatGPT (renamed bundle, 2026)
+        "com.anthropic.claudefordesktop",
+        "com.apple.Safari.WebApp"          // PWAs / web-app wrappers
+    ]
+
+    /// Name substrings for the same class of app. Bundle IDs are the precise
+    /// signal but they are not stable — /Applications/ChatGPT.app silently became
+    /// com.openai.codex, which dropped it off the list above and broke insertion.
+    /// A vendor can rename the bundle; they rarely rename the app.
+    nonisolated private static let clipboardFirstNameHints = [
+        "chatgpt", "claude", "slack", "discord", "cursor",
+        "visual studio code", "vs code", "obsidian", "notion"
+    ]
+
+    /// Name substrings for terminals without a known bundle ID.
+    private let terminalNameHints = [
+        "terminal", "iterm", "kitty", "alacritty", "warp", "ghostty",
+        "wezterm", "hyper", "tabby", "termius", "waveterm", "console"
+    ]
+
+    /// Ask at the start of a take rather than at the paste.
+    ///
+    /// Chromium builds the tree asynchronously, so asking as the text goes in
+    /// leaves the first take into a freshly launched app unconfirmable — the
+    /// request went out a few hundred milliseconds before the probe, and lost.
+    /// Asking here hands it the whole recording and transcription instead, which
+    /// is seconds rather than milliseconds. Cheap and idempotent: after the first
+    /// call for a process it does nothing.
+    func prepareForInsertion(into target: TargetAppContext?) {
+        guard let app = Self.resolveTarget(target) ?? NSWorkspace.shared.frontmostApplication,
+              prefersClipboardPaste(app: app, bundleID: app.bundleIdentifier) else { return }
+        enableChromiumAccessibility(for: app)
+    }
+
+    func insert(_ text: String, into target: TargetAppContext? = nil) async -> InsertionResult {
+        guard !Task.isCancelled else { return InsertionResult(success: false, method: .failed, appName: target?.name) }
+        // Prefer the app the take was aimed at. Re-reading the frontmost app here
+        // means a Space switch mid-dictation pastes into whatever happens to be in
+        // front of the new Space.
+        let frontApp = target == nil ? NSWorkspace.shared.frontmostApplication : Self.resolveTarget(target)
+        let appName = frontApp?.localizedName ?? target?.name
+        let bundleID = frontApp?.bundleIdentifier
+
+        // Strip BEL (\u{0007}) and other C0 controls — Terminal rings the bell on these.
+        let sanitized = Self.sanitizeForPaste(text)
+        guard !sanitized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return InsertionResult(success: false, method: .failed, appName: appName)
+        }
+
+        guard let frontApp, !frontApp.isTerminated else {
+            parkOnClipboard(sanitized)
+            return InsertionResult(success: false, method: .failed, appName: appName, textOnClipboard: true)
+        }
+
+        guard AXIsProcessTrusted() else {
+            // Nothing can be typed without Accessibility, but the take must not
+            // evaporate — park it where the user can paste it themselves.
+            parkOnClipboard(sanitized)
+            return InsertionResult(
+                success: false, method: .failed, appName: appName, textOnClipboard: true
+            )
+        }
+
+        let isTerminal = isTerminalApp(bundleID: bundleID, name: appName)
+        let isChromium = prefersClipboardPaste(app: frontApp, bundleID: bundleID)
+        let useClipboardFirst = isTerminal || isChromium
+        // Only the Chromium apps, because only they need it and it is not ours to
+        // switch on in anything else.
+        if isChromium { enableChromiumAccessibility(for: frontApp) }
+
+        guard await focusTargetApp(frontApp), !Task.isCancelled else {
+            if !Task.isCancelled { parkOnClipboard(sanitized) }
+            return InsertionResult(success: false, method: .failed, appName: appName, textOnClipboard: !Task.isCancelled)
+        }
+
+        // Electron/Chromium (Cursor, Slack, Chrome, …): AX insert lies about success.
+        switch await insertViaAccessibility(sanitized, pid: frontApp.processIdentifier, skip: useClipboardFirst) {
+        case .inserted:
+            return InsertionResult(success: true, method: .accessibility, appName: appName)
+        case .unverified:
+            guard !Task.isCancelled else { return InsertionResult(success: false, method: .failed, appName: appName) }
+            // Was reported as a plain success, which is how a dictation into the
+            // renamed ChatGPT bundle vanished: green tick, empty field, text gone.
+            // Park it so ⌘V still recovers it and let the HUD say so.
+            parkOnClipboard(sanitized)
+            return InsertionResult(
+                success: true,
+                method: .accessibilityUnverified,
+                appName: appName,
+                textOnClipboard: true
+            )
+        case .skipped, .failed:
+            break
+        }
+
+        guard !Task.isCancelled else { return InsertionResult(success: false, method: .failed, appName: appName) }
+
+        let method = await insertViaClipboard(
+            sanitized,
+            into: frontApp,
+            preferSlowTiming: useClipboardFirst
+        )
+        if method == .failed && !Task.isCancelled {
+            parkOnClipboard(sanitized)
+        }
+        return InsertionResult(
+            success: method != .failed && method != .clipboardChanged,
+            method: method,
+            appName: appName,
+            // Unverified already leaves the dictation on the clipboard.
+            textOnClipboard: method == .failed || method == .clipboardUnverified
+        )
+    }
+
+    /// Ask a Chromium app to expose its accessibility tree.
+    ///
+    /// Electron and Chromium apps — Claude, Slack, VS Code, Cursor, Discord, the
+    /// browsers — build the accessibility tree for their web contents only once a
+    /// client asks for it, by setting `AXManualAccessibility` on the application
+    /// element. Until something asks, every read of the focused field comes back
+    /// empty. That is not a paste failing: it is a paste that cannot be seen. The
+    /// take landed, the confirmation could not prove it, and the HUD told the user
+    /// to press ⌘V into a field that already had their text — advice that would
+    /// have pasted it twice.
+    ///
+    /// Asked every time rather than remembered. A cache of pids looked like the
+    /// thrifty choice and was a bug: pids are recycled, so a Chromium app that
+    /// happened to inherit the number of one already asked would be skipped and
+    /// never build its tree, and every paste into it would report unverified for
+    /// as long as the app ran. Setting an attribute that is already set costs one
+    /// cheap call, twice a take.
+    ///
+    /// The tree is built asynchronously, so the first take right after enabling can
+    /// still come back unconfirmed; asking at the start of the take, rather than at
+    /// the paste, is what covers that.
+    private func enableChromiumAccessibility(for app: NSRunningApplication?) {
+        guard let app, app.processIdentifier > 0 else { return }
+        AXUIElementSetAttributeValue(
+            AXUIElementCreateApplication(app.processIdentifier),
+            "AXManualAccessibility" as CFString,
+            kCFBooleanTrue
+        )
+    }
+
+    /// Last resort: leave the text somewhere recoverable. A take that got this far
+    /// is real user effort, and silently dropping it is the one outcome with no
+    /// way back. Marked concealed/transient so clipboard managers still skip it.
+    private func parkOnClipboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        pasteboard.writeObjects([item])
+    }
+
+    /// A captured process must still be alive; never retarget a take after it exits.
+    private static func resolveTarget(_ target: TargetAppContext?) -> NSRunningApplication? {
+        guard let target else { return nil }
+        if let pid = target.pid {
+            guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return nil }
+            return app
+        }
+        guard let bundleID = target.bundleID else { return nil }
+        return NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID)
+            .first { !$0.isTerminated }
+    }
+
+    /// Keep newlines/tabs/trailing spaces; drop BEL and other control chars that make Terminal beep.
+    nonisolated static func sanitizeForPaste(_ text: String) -> String {
+        let filtered = text.unicodeScalars.filter { scalar in
+            if scalar == "\n" || scalar == "\t" || scalar == "\r" { return true }
+            return scalar.value >= 0x20 && scalar.value != 0x7F
+        }
+        return String(String.UnicodeScalarView(filtered))
+    }
+
+    private func prefersClipboardPaste(app: NSRunningApplication?, bundleID: String?) -> Bool {
+        if Self.prefersClipboardPaste(bundleID: bundleID, appName: app?.localizedName) {
+            return true
+        }
+        return isElectronApp(app)
+    }
+
+    /// The identity half of the decision, split out so it can be tested. The
+    /// bundle-on-disk half (`isElectronApp`) needs a running application.
+    nonisolated static func prefersClipboardPaste(bundleID: String?, appName: String?) -> Bool {
+        if let bundleID, clipboardFirstBundleIDs.contains(bundleID) {
+            return true
+        }
+        if let bundleID {
+            let lower = bundleID.lowercased()
+            if lower.contains("anysphere") || lower.contains("electron") || lower.contains("chrom") {
+                return true
+            }
+        }
+        if let name = appName?.lowercased(),
+           clipboardFirstNameHints.contains(where: { name.contains($0) }) {
+            return true
+        }
+        return false
+    }
+
+    /// Cursor, VS Code, Slack, etc. ship `Electron Framework.framework`.
+    private func isElectronApp(_ app: NSRunningApplication?) -> Bool {
+        guard let bundleURL = app?.bundleURL else { return false }
+        let electron = bundleURL
+            .appendingPathComponent("Contents")
+            .appendingPathComponent("Frameworks")
+            .appendingPathComponent("Electron Framework.framework")
+        return FileManager.default.fileExists(atPath: electron.path)
+    }
+
+    private func isTerminalApp(bundleID: String?, name: String?) -> Bool {
+        if let bundleID, terminalBundleIDs.contains(bundleID) {
+            return true
+        }
+        if let bundleID {
+            let lower = bundleID.lowercased()
+            if lower.contains("terminal") || lower.contains("iterm") || lower.contains("kitty")
+                || lower.contains("alacritty") || lower.contains("warp") || lower.contains("ghostty") {
+                return true
+            }
+        }
+        guard let name else { return false }
+        let normalized = name.lowercased()
+        return terminalNameHints.contains { normalized.contains($0) }
+    }
+
+    private enum AccessibilityInsert {
+        case inserted
+        /// AXSet succeeded and then the element stopped answering, so neither
+        /// "it landed" nor "it did not" can be shown. The text goes to the
+        /// clipboard rather than being pasted again on top of a write that may
+        /// have worked.
+        case unverified
+        case skipped
+        case failed
+    }
+
+    private func insertViaAccessibility(_ text: String, pid: pid_t, skip: Bool) async -> AccessibilityInsert {
+        if skip || Task.isCancelled { return .skipped }
+
+        let application = AXUIElementCreateApplication(pid)
+        var focusedRef: CFTypeRef?
+        let focusStatus = AXUIElementCopyAttributeValue(
+            application,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        )
+        guard focusStatus == .success, let focusedRef else { return .failed }
+        let element = focusedRef as! AXUIElement
+        var elementPID: pid_t = 0
+        guard AXUIElementGetPid(element, &elementPID) == .success, elementPID == pid else { return .failed }
+
+        var roleRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef) == .success,
+           let role = roleRef as? String {
+            // Chromium/Electron composers are usually AXWebArea / AXGroup — AXSet is a no-op.
+            if role == "AXWebArea" || role == "AXUnknown" {
+                return .failed
+            }
+        }
+
+        // Read the field first. An element that will not say what it holds can
+        // never confirm the write either, and those are exactly the web-view
+        // composers where AXSet reports success and types nothing. Refusing to
+        // trust the write here is what sends them down the clipboard path.
+        let before = axValue(element)
+        guard before != nil, !Task.isCancelled else { return .failed }
+
+        let setStatus = AXUIElementSetAttributeValue(
+            element,
+            kAXSelectedTextAttribute as CFString,
+            text as CFTypeRef
+        )
+        guard setStatus == .success else { return .failed }
+
+        return await confirmAccessibilityWrite(on: element, text: text, before: before)
+    }
+
+    /// Decides whether the write landed, allowing for targets that apply it late.
+    ///
+    /// WebKit serves accessibility from a tree it updates after the edit, so in a
+    /// Safari text field or a Mail compose window a value read straight after the
+    /// set can still be the old one. Reading once and calling that a failure sent
+    /// the text down the clipboard path too, and it arrived twice. So keep reading
+    /// for a moment: any change means it landed; only a field still unchanged at
+    /// the end is treated as having typed nothing. A native field confirms on the
+    /// first read and pays nothing for this.
+    private func confirmAccessibilityWrite(
+        on element: AXUIElement,
+        text: String,
+        before: String?
+    ) async -> AccessibilityInsert {
+        let deadline = Date().addingTimeInterval(Self.accessibilityConfirmWindow)
+        while true {
+            if Task.isCancelled { return .unverified }
+            if accessibilityInsertVisible(on: element, text: text) { return .inserted }
+            // Answered before the write and not now: cannot tell either way, so
+            // park it rather than paste on top of a write that may have worked.
+            guard let after = axValue(element) else { return .unverified }
+            if after != before { return .inserted }
+            if Date() >= deadline { return .failed }
+            try? await Task.sleep(nanoseconds: Self.accessibilityConfirmStep)
+        }
+    }
+
+    /// Long enough for WebKit's accessibility tree to catch up with an edit, short
+    /// enough that a composer which never takes the write (the case this path
+    /// exists to catch) still falls back to the clipboard promptly.
+    private static let accessibilityConfirmWindow: TimeInterval = 0.35
+    private static let accessibilityConfirmStep: UInt64 = 40_000_000
+
+    private func axValue(_ element: AXUIElement) -> String? {
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success
+        else { return nil }
+        return valueRef as? String
+    }
+
+    private func accessibilityInsertVisible(on element: AXUIElement, text: String) -> Bool {
+        var selectedRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selectedRef) == .success,
+           let selected = selectedRef as? String,
+           selected == text {
+            return true
+        }
+        var valueRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+           let value = valueRef as? String,
+           value.contains(text) {
+            return true
+        }
+        return false
+    }
+
+    private func insertViaClipboard(
+        _ text: String,
+        into targetApp: NSRunningApplication?,
+        preferSlowTiming: Bool
+    ) async -> InsertionMethod {
+        let pasteboard = NSPasteboard.general
+        let saved = snapshot(pasteboard)
+
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setString(text, forType: .string)
+        // Well-behaved clipboard managers skip items marked concealed/transient.
+        // Universal Clipboard and history stores that honor nspasteboard.org will not keep dictation.
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        item.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        let wrote = pasteboard.writeObjects([item])
+        guard wrote else { return .failed }
+        let ownedChangeCount = pasteboard.changeCount
+
+        guard await focusTargetApp(targetApp) else {
+            guard pasteboard.changeCount == ownedChangeCount else { return .clipboardChanged }
+            restore(saved, to: pasteboard)
+            return .failed
+        }
+
+        // Brief settle so the target app sees the new clipboard contents.
+        try? await Task.sleep(nanoseconds: preferSlowTiming ? 180_000_000 : 120_000_000)
+
+        guard !Task.isCancelled, pasteboard.changeCount == ownedChangeCount,
+              targetApp?.isActive == true, targetApp?.isTerminated == false else {
+            let stillOwned = pasteboard.changeCount == ownedChangeCount
+            if stillOwned { restore(saved, to: pasteboard) }
+            // A newer copy belongs to the user. Leave it intact even on failure.
+            return stillOwned ? .failed : .clipboardChanged
+        }
+
+        postCommandV(to: targetApp?.processIdentifier)
+
+        // Poll rather than restoring on a fixed timer. The receiver reads the
+        // pasteboard asynchronously and that read scales with payload size, so a
+        // flat 450/700 ms window put the old clipboard back while a long paste was
+        // still being pulled — and the paste landed empty. Short text still returns
+        // at the old floor; only long text waits longer.
+        let confirmed = await waitForPaste(text, pid: targetApp?.processIdentifier, slow: preferSlowTiming)
+        if !confirmed, pasteboard.changeCount != ownedChangeCount { return .clipboardChanged }
+        if confirmed, pasteboard.changeCount == ownedChangeCount {
+            restore(saved, to: pasteboard)
+        }
+        // Unconfirmed: leave the dictation on the clipboard. Restoring here is the
+        // worse failure — the take is destroyed and the clipboard silently changes
+        // under the user, so nothing they press recovers the text. Holding it means
+        // ⌘V still works. The caller says so in the HUD.
+        return confirmed ? .clipboard : .clipboardUnverified
+    }
+
+    /// Waits the previous fixed floor, then keeps polling up to a length-scaled
+    /// deadline. Strictly additive: identical timing for short pastes.
+    private func waitForPaste(_ text: String, pid: pid_t?, slow: Bool) async -> Bool {
+        let floor: TimeInterval = slow ? 0.7 : 0.45
+        let deadline = min(Self.maxPasteWait, floor + Double(text.count) * 0.003)
+
+        try? await Task.sleep(nanoseconds: UInt64(floor * 1_000_000_000))
+        if Task.isCancelled { return false }
+        if clipboardInsertVisible(text, pid: pid) { return true }
+
+        var elapsed = floor
+        while elapsed < deadline {
+            try? await Task.sleep(nanoseconds: Self.pastePollStep)
+            if Task.isCancelled { return false }
+            elapsed += Double(Self.pastePollStep) / 1_000_000_000
+            if clipboardInsertVisible(text, pid: pid) { return true }
+        }
+        return false
+    }
+
+    private static let maxPasteWait: TimeInterval = 3.0
+    private static let pastePollStep: UInt64 = 60_000_000
+    /// Enough of the text to identify it, short enough to survive reflow.
+    private static let pasteProbeLength = 64
+
+    private func clipboardInsertVisible(_ text: String, pid: pid_t?) -> Bool {
+        guard let pid else { return false }
+        let application = AXUIElementCreateApplication(pid)
+        var focusedRef: CFTypeRef?
+        let focusStatus = AXUIElementCopyAttributeValue(
+            application,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        )
+        guard focusStatus == .success, let focusedRef else { return false }
+        let element = focusedRef as! AXUIElement
+        if accessibilityInsertVisible(on: element, text: text) { return true }
+        // A long paste is often reflowed, or AX exposes only part of the field, so
+        // whole-string matching fails for exactly the pastes worth confirming.
+        guard text.count > Self.pasteProbeLength else { return false }
+        return accessibilityValueContains(element, String(text.prefix(Self.pasteProbeLength)))
+    }
+
+    private func accessibilityValueContains(_ element: AXUIElement, _ probe: String) -> Bool {
+        var valueRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+              let value = valueRef as? String else { return false }
+        return value.contains(probe)
+    }
+
+    private func focusTargetApp(_ app: NSRunningApplication?) async -> Bool {
+        guard let app, !app.isTerminated, !Task.isCancelled else { return false }
+        let selfPID = ProcessInfo.processInfo.processIdentifier
+        if app.processIdentifier == selfPID { return app.isActive }
+        if !app.isActive {
+            app.activate(options: [.activateIgnoringOtherApps])
+            try? await Task.sleep(nanoseconds: 80_000_000)
+        }
+        return !Task.isCancelled && !app.isTerminated && app.isActive
+    }
+
+    /// Four-event ⌘V via HID, posted to the target pid when possible.
+    /// Session-tap + flags-on-V-only is ignored by many Electron webviews (Cursor, Slack).
+    private func postCommandV(to pid: pid_t?) {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let cmd: CGKeyCode = CGKeyCode(kVK_Command)
+        let v: CGKeyCode = CGKeyCode(kVK_ANSI_V)
+
+        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: cmd, keyDown: true)
+        let vDown = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: true)
+        let vUp = CGEvent(keyboardEventSource: source, virtualKey: v, keyDown: false)
+        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: cmd, keyDown: false)
+        vDown?.flags = .maskCommand
+        vUp?.flags = .maskCommand
+
+        let events = [cmdDown, vDown, vUp, cmdUp]
+        if let pid {
+            for (index, event) in events.enumerated() {
+                event?.postToPid(pid)
+                usleep(index == 1 ? 12_000 : 8_000)
+            }
+        } else {
+            for (index, event) in events.enumerated() {
+                event?.post(tap: .cghidEventTap)
+                usleep(index == 1 ? 12_000 : 8_000)
+            }
+        }
+        usleep(20_000)
+    }
+
+    private struct PasteboardSnapshot {
+        let items: [[NSPasteboard.PasteboardType: Data]]
+    }
+
+    private func snapshot(_ pasteboard: NSPasteboard) -> PasteboardSnapshot {
+        var items: [[NSPasteboard.PasteboardType: Data]] = []
+        for item in pasteboard.pasteboardItems ?? [] {
+            var map: [NSPasteboard.PasteboardType: Data] = [:]
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    map[type] = data
+                }
+            }
+            items.append(map)
+        }
+        return PasteboardSnapshot(items: items)
+    }
+
+    private func restore(_ snapshot: PasteboardSnapshot, to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        let items: [NSPasteboardItem] = snapshot.items.map { map in
+            let item = NSPasteboardItem()
+            for (type, data) in map {
+                item.setData(data, forType: type)
+            }
+            return item
+        }
+        if !items.isEmpty {
+            pasteboard.writeObjects(items)
+        }
+    }
+}

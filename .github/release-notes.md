@@ -6,6 +6,10 @@ Apple Silicon only (M1 or later). Open the DMG and drag WhisperLocal into Applic
 
 Then grant Microphone and Accessibility. Transcription runs on Apple Speech by default on macOS 26 (Whisper / Parakeet are optional). Gemma 4 polish is optional (~2.7 GB) from Settings.
 
+## 0.2.6
+
+- **Downloaded Whisper models load without an internet connection.** WhisperKit asked Hugging Face for a model's file list before looking at the copy already on disk, so with the network off a downloaded model failed to load: "Model not found … The Internet connection appears to be offline." A Whisper model on disk now loads straight from it, with no request to Hugging Face. A download that was cut short is fetched again rather than loaded half-finished, and if the copy on disk fails to load while you are offline, the error says why instead of blaming the connection. Thanks to [@peter-coulson](https://github.com/peter-coulson) for the fix ([#1](https://github.com/usingcolor/WhisperLocal/pull/1)).
+
 ## 0.2.5
 
 - **Context follows your dictation.** Apple Intelligence or your selected cloud cleanup provider can keep up to three short topics after each paste, helping later dictations resolve names and terminology. Automatic topics fade after 15 unused takes or 45 minutes. Learning can be switched off in Context or Settings → Polish, and context clears when the app quits.

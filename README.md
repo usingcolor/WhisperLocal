@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.5/WhisperLocal-0.2.5-arm64.dmg"><b>⬇&nbsp; Download 0.2.5 for Apple Silicon</b></a>
+  <a href="https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.6/WhisperLocal-0.2.6-arm64.dmg"><b>⬇&nbsp; Download 0.2.6 for Apple Silicon</b></a>
   &nbsp;·&nbsp;
   <a href="#usage">Usage</a>
   &nbsp;·&nbsp;
@@ -44,7 +44,7 @@ You get:   I need to rewrite the parser.
 
 Your audio stays on the Mac. Transcription and cleanup run on-device by default; initial model downloads may need an internet connection. Cloud cleanup is optional and sends text to your selected provider.
 
-> Early preview (`0.2.5`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
+> Early preview (`0.2.6`). It runs every day on one machine — more machines and more edge cases is exactly where help lands. See [Contributing](#contributing).
 
 ## Why not the dictation already built into macOS?
 
@@ -62,7 +62,7 @@ If you want Windows or Linux, streaming transcription, or a large model catalog,
 
 Apple Silicon only. No Xcode and no git clone required.
 
-**[Download WhisperLocal 0.2.5](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.5/WhisperLocal-0.2.5-arm64.dmg)** (`.dmg`) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
+**[Download WhisperLocal 0.2.6](https://github.com/usingcolor/WhisperLocal/releases/download/v0.2.6/WhisperLocal-0.2.6-arm64.dmg)** (`.dmg`) — or browse [all releases](https://github.com/usingcolor/WhisperLocal/releases/latest).
 
 1. Open the disk image and drag **WhisperLocal** into **Applications**.
 2. Open it and grant **Microphone**, **Accessibility**, and **Input Monitoring** when asked. The onboarding window and Settings → Permissions show what is missing.
@@ -178,7 +178,7 @@ Native Swift and AppKit. Transcription uses Apple's `SpeechTranscriber`, [Whispe
 | Clipboard | Paste mode uses the general pasteboard, marked concealed/transient for clipboard managers that honor those markers. Unconfirmed insertion can leave the dictation there for ⌘V. |
 | Dictation log | Local and enabled by default; keeps up to 100 entries, including transcripts, app/model/microphone details and context snapshots, with no audio. Stored at `~/Library/Application Support/WhisperLocal/dictation-log.json`, mode `0600`. Turn it off under Settings → Dictation → History; use the log window to clear existing entries. |
 
-Active context is not restored on launch, but its snapshots can remain in the local log. The public 0.2.5 app does not include volunteer log submissions or window-title capture.
+Active context is not restored on launch, but its snapshots can remain in the local log. The public app does not include volunteer log submissions or window-title capture.
 
 The app is **not sandboxed** — global hotkeys, Accessibility insertion, and synthetic paste all require that.
 

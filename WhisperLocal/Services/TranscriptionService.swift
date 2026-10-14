@@ -242,19 +242,48 @@ final class TranscriptionService: ObservableObject {
         guard let name = model.whisperKitName else {
             throw TranscriptionError.modelNotLoaded
         }
-        let config = WhisperKitConfig(
-            model: name,
-            verbose: false,
-            logLevel: .error,
-            prewarm: true,
-            load: true,
-            download: true
-        )
-        let kit = try await WhisperKit(config)
+        let kit = try await makeWhisperKit(name)
         guard generation == loadGeneration else { return }
         whisperKit = kit
         parakeet = nil
         await AppleSpeechASR.shared.unload()
+    }
+
+    /// Loads from the local cache when the model is there, so a model already on
+    /// disk never needs the network. Only a missing model is downloaded.
+    private func makeWhisperKit(_ name: String) async throws -> WhisperKit {
+        let base = WhisperModelCache.defaultDownloadBase
+        var cacheError: Error?
+        if let base, let folder = WhisperModelCache.folder(for: name, downloadBase: base) {
+            do {
+                return try await WhisperKit(whisperConfig(name, downloadBase: base, modelFolder: folder))
+            } catch {
+                // A damaged cache should not strand the user: online, a fresh
+                // download repairs it.
+                logger.error("Cached \(name, privacy: .public) failed to load, downloading: \(error.localizedDescription, privacy: .public)")
+                cacheError = error
+            }
+        }
+        do {
+            return try await WhisperKit(whisperConfig(name, downloadBase: base, modelFolder: nil))
+        } catch {
+            // Offline, the download fails too; "no internet" would hide why the
+            // model on disk did not load.
+            throw cacheError ?? error
+        }
+    }
+
+    private func whisperConfig(_ name: String, downloadBase: URL?, modelFolder: URL?) -> WhisperKitConfig {
+        WhisperKitConfig(
+            model: name,
+            downloadBase: downloadBase,
+            modelFolder: modelFolder?.path,
+            verbose: false,
+            logLevel: .error,
+            prewarm: true,
+            load: true,
+            download: modelFolder == nil
+        )
     }
 
     private func loadParakeet(_ model: ASRModelOption, generation: Int) async throws {

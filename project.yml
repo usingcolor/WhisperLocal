@@ -130,6 +130,7 @@ targets:
     platform: macOS
     sources:
       - path: WhisperLocalTests
+      - path: WhisperLocal/Services/WhisperModelCache.swift
       - path: WhisperLocal/Services/Polishers/TextPolisher.swift
       - path: WhisperLocal/Services/Polishers/DeadlineExecutor.swift
       - path: WhisperLocal/Services/StreamingTranscriber.swift
